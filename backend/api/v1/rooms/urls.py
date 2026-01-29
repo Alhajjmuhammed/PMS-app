@@ -5,6 +5,7 @@ app_name = 'rooms'
 
 urlpatterns = [
     path('', views.RoomListView.as_view(), name='list'),
+    path('create/', views.RoomCreateView.as_view(), name='create'),
     path('<int:pk>/', views.RoomDetailView.as_view(), name='detail'),
     path('<int:pk>/status/', views.UpdateRoomStatusView.as_view(), name='update_status'),
     path('<int:room_id>/images/', views.RoomImageListView.as_view(), name='image_list'),

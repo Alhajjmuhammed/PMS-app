@@ -89,6 +89,11 @@ class User(AbstractUser):
         verbose_name = _('user')
         verbose_name_plural = _('users')
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['role']),
+            models.Index(fields=['is_active']),
+        ]
     
     def __str__(self):
         return f"{self.get_full_name()} ({self.email})"

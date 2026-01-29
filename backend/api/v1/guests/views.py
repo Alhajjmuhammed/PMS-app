@@ -7,11 +7,12 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
 from apps.guests.models import Guest, GuestDocument
+from api.permissions import IsFrontDeskOrAbove
 from .serializers import GuestSerializer, GuestCreateSerializer, GuestDocumentSerializer
 
 
 class GuestListView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestSerializer
     queryset = Guest.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -37,18 +38,24 @@ class GuestListView(generics.ListCreateAPIView):
 
 
 class GuestDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestSerializer
-    queryset = Guest.objects.all()
+    
+    def get_queryset(self):
+        return Guest.objects.prefetch_related(
+            'reservations',
+            'documents',
+            'preferences'
+        )
 
 
 class GuestCreateView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestCreateSerializer
 
 
 class GuestSearchView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         query = request.query_params.get('q', '')
@@ -70,7 +77,7 @@ class GuestSearchView(APIView):
 
 class GuestDocumentListView(generics.ListCreateAPIView):
     """List and upload guest documents."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestDocumentSerializer
     
     def get_queryset(self):
@@ -85,7 +92,7 @@ class GuestDocumentListView(generics.ListCreateAPIView):
 
 class GuestDocumentDetailView(generics.RetrieveDestroyAPIView):
     """Retrieve or delete a specific guest document."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestDocumentSerializer
     queryset = GuestDocument.objects.all()
     lookup_url_kwarg = 'document_id'

@@ -4,6 +4,7 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from apps.billing.models import Folio, FolioCharge, Payment, ChargeCode
+from api.permissions import IsAccountantOrAbove
 from .serializers import (
     FolioSerializer, ChargeCodeSerializer,
     AddChargeSerializer, AddPaymentSerializer
@@ -11,13 +12,13 @@ from .serializers import (
 
 
 class FolioDetailView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = FolioSerializer
     queryset = Folio.objects.all()
 
 
 class ChargeCodeListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = ChargeCodeSerializer
     
     def get_queryset(self):
@@ -31,7 +32,7 @@ class ChargeCodeListView(generics.ListAPIView):
 
 
 class AddChargeView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
         try:
@@ -64,7 +65,7 @@ class AddChargeView(APIView):
 
 
 class AddPaymentView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
         try:
@@ -93,7 +94,7 @@ class AddPaymentView(APIView):
 
 class CloseFolioView(APIView):
     """Close a folio (only when balance is zero)."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
         from django.utils import timezone
@@ -118,29 +119,134 @@ class CloseFolioView(APIView):
 
 class FolioExportView(APIView):
     """Export folio as PDF."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def get(self, request, pk):
         from django.http import HttpResponse
+        from io import BytesIO
         
-        folio = get_object_or_404(Folio, pk=pk)
+        folio = get_object_or_404(Folio.objects.select_related(
+            'reservation__guest',
+            'reservation__hotel'
+        ).prefetch_related(
+            'charges__charge_code',
+            'payments'
+        ), pk=pk)
         
-        # TODO: Implement actual PDF generation (e.g., using reportlab)
-        # For now, return JSON representation
-        response = HttpResponse(content_type='application/json')
-        response['Content-Disposition'] = f'attachment; filename="folio_{folio.folio_number}.json"'
-        
-        import json
-        data = FolioSerializer(folio).data
-        response.write(json.dumps(data, indent=2))
-        
-        return response
+        # Generate PDF
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter, A4
+            from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
+            from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+            from reportlab.lib.units import inch
+            from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+            
+            buffer = BytesIO()
+            doc = SimpleDocTemplate(buffer, pagesize=letter)
+            elements = []
+            styles = getSampleStyleSheet()
+            
+            # Title
+            title_style = ParagraphStyle(
+                'CustomTitle',
+                parent=styles['Heading1'],
+                fontSize=24,
+                textColor=colors.HexColor('#1a1a1a'),
+                spaceAfter=30,
+                alignment=TA_CENTER
+            )
+            elements.append(Paragraph(f"Invoice - {folio.folio_number}", title_style))
+            elements.append(Spacer(1, 0.3*inch))
+            
+            # Guest Info
+            guest_data = [
+                ['Guest:', f"{folio.reservation.guest.first_name} {folio.reservation.guest.last_name}"],
+                ['Email:', folio.reservation.guest.email or 'N/A'],
+                ['Check-in:', folio.reservation.check_in_date.strftime('%Y-%m-%d')],
+                ['Check-out:', folio.reservation.check_out_date.strftime('%Y-%m-%d')],
+            ]
+            guest_table = Table(guest_data, colWidths=[1.5*inch, 4*inch])
+            guest_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('FONTNAME', (0, 0), (0, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+            ]))
+            elements.append(guest_table)
+            elements.append(Spacer(1, 0.3*inch))
+            
+            # Charges Table
+            charge_data = [['Date', 'Description', 'Quantity', 'Amount']]
+            for charge in folio.charges.all():
+                charge_data.append([
+                    charge.date.strftime('%Y-%m-%d'),
+                    charge.description,
+                    str(charge.quantity),
+                    f"${charge.amount:.2f}"
+                ])
+            
+            charge_table = Table(charge_data, colWidths=[1*inch, 3*inch, 1*inch, 1.5*inch])
+            charge_table.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, 0), colors.grey),
+                ('TEXTCOLOR', (0, 0), (-1, 0), colors.whitesmoke),
+                ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
+                ('ALIGN', (2, 0), (-1, -1), 'RIGHT'),
+                ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 9),
+                ('BOTTOMPADDING', (0, 0), (-1, 0), 12),
+                ('GRID', (0, 0), (-1, -1), 1, colors.black),
+            ]))
+            elements.append(charge_table)
+            elements.append(Spacer(1, 0.2*inch))
+            
+            # Totals
+            totals_data = [
+                ['Subtotal:', f"${folio.total_charges:.2f}"],
+                ['Taxes:', f"${folio.total_tax:.2f}"],
+                ['Total:', f"${folio.total_amount:.2f}"],
+                ['Paid:', f"${folio.paid_amount:.2f}"],
+                ['Balance:', f"${folio.balance:.2f}"]
+            ]
+            totals_table = Table(totals_data, colWidths=[4.5*inch, 1.5*inch])
+            totals_table.setStyle(TableStyle([
+                ('ALIGN', (0, 0), (-1, -1), 'RIGHT'),
+                ('FONTNAME', (0, -1), (-1, -1), 'Helvetica-Bold'),
+                ('FONTSIZE', (0, 0), (-1, -1), 10),
+                ('LINEABOVE', (0, -1), (-1, -1), 2, colors.black),
+                ('TOPPADDING', (0, -1), (-1, -1), 10),
+            ]))
+            elements.append(totals_table)
+            
+            # Build PDF
+            doc.build(elements)
+            buffer.seek(0)
+            
+            response = HttpResponse(buffer.getvalue(), content_type='application/pdf')
+            response['Content-Disposition'] = f'attachment; filename="folio_{folio.folio_number}.pdf"'
+            return response
+            
+        except ImportError:
+            # Fallback if reportlab not installed
+            response = HttpResponse(content_type='application/json')
+            response['Content-Disposition'] = f'attachment; filename="folio_{folio.folio_number}.json"'
+            import json
+            data = FolioSerializer(folio).data
+            response.write(json.dumps(data, indent=2))
+            return response
 
 
 class InvoiceDetailView(generics.RetrieveAPIView):
     """Get invoice detail."""
-    permission_classes = [IsAuthenticated]
-    queryset = None
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    serializer_class = None
+    
+    def get_queryset(self):
+        from apps.billing.models import Invoice
+        # Return empty queryset for swagger schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return Invoice.objects.none()
+        return Invoice.objects.all()
     
     def get(self, request, pk):
         from apps.billing.models import Invoice
@@ -156,7 +262,7 @@ class InvoiceDetailView(generics.RetrieveAPIView):
 
 class InvoicePayView(APIView):
     """Process invoice payment."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
         from apps.billing.models import Invoice
@@ -196,7 +302,7 @@ class InvoicePayView(APIView):
 
 class PaymentDetailView(generics.RetrieveAPIView):
     """Get payment detail."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     queryset = Payment.objects.all()
     
     def get(self, request, pk):
@@ -212,7 +318,7 @@ class PaymentDetailView(generics.RetrieveAPIView):
 
 class InvoiceListView(generics.ListCreateAPIView):
     """List all invoices and create new ones."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def get(self, request):
         from apps.billing.models import Invoice

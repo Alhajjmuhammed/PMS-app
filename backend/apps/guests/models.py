@@ -97,6 +97,11 @@ class Guest(models.Model):
         verbose_name = _('guest')
         verbose_name_plural = _('guests')
         ordering = ['last_name', 'first_name']
+        indexes = [
+            models.Index(fields=['email']),
+            models.Index(fields=['phone']),
+            models.Index(fields=['last_name', 'first_name']),
+        ]
     
     def __str__(self):
         return f"{self.first_name} {self.last_name}"

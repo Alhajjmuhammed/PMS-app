@@ -6,6 +6,10 @@ from django.db import models
 from django.utils.translation import gettext_lazy as _
 
 
+# Import SystemSetting model
+from .settings_models import SystemSetting
+
+
 class Property(models.Model):
     """Hotel/Property model."""
     

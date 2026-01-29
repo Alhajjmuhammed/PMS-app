@@ -11,11 +11,12 @@ from apps.reservations.services import AvailabilityService
 from apps.rates.services import PricingService
 from apps.guests.models import Guest
 from apps.rooms.models import RoomType
+from api.permissions import IsFrontDeskOrAbove
 from .serializers import ReservationSerializer, ReservationCreateSerializer
 
 
 class ReservationListView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = ReservationSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'source', 'check_in_date', 'check_out_date']
@@ -48,13 +49,20 @@ class ReservationListView(generics.ListCreateAPIView):
 
 
 class ReservationDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = ReservationSerializer
-    queryset = Reservation.objects.all()
+    
+    def get_queryset(self):
+        return Reservation.objects.select_related(
+            'guest', 'hotel', 'created_by'
+        ).prefetch_related(
+            'rooms__room__room_type',
+            'rooms__rate_plan'
+        )
 
 
 class ReservationCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         serializer = ReservationCreateSerializer(data=request.data)
@@ -111,7 +119,7 @@ class ReservationCreateView(APIView):
 
 
 class CancelReservationView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
         try:
@@ -135,7 +143,7 @@ class CancelReservationView(APIView):
 
 
 class ArrivalsView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = ReservationSerializer
     
     def get_queryset(self):
@@ -150,7 +158,7 @@ class ArrivalsView(generics.ListAPIView):
 
 
 class DeparturesView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = ReservationSerializer
     
     def get_queryset(self):
@@ -166,7 +174,7 @@ class DeparturesView(generics.ListAPIView):
 
 class CheckAvailabilityView(APIView):
     """Check room availability for given dates."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         try:
@@ -209,7 +217,7 @@ class CheckAvailabilityView(APIView):
 
 class AvailabilityCalendarView(APIView):
     """Get availability calendar for a date range."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         try:
@@ -237,7 +245,7 @@ class AvailabilityCalendarView(APIView):
 
 class CalculatePriceView(APIView):
     """Calculate pricing for a reservation."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         try:
@@ -266,7 +274,7 @@ class CalculatePriceView(APIView):
 
 class CompareRatesView(APIView):
     """Compare rates across all rate plans."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         try:

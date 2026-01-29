@@ -194,6 +194,11 @@ class Room(models.Model):
         verbose_name_plural = _('rooms')
         unique_together = ['hotel', 'room_number']
         ordering = ['hotel', 'room_number']
+        indexes = [
+            models.Index(fields=['status']),
+            models.Index(fields=['room_number']),
+            models.Index(fields=['hotel', 'status']),
+        ]
     
     def __str__(self):
         return f"{self.hotel.name} - Room {self.room_number}"

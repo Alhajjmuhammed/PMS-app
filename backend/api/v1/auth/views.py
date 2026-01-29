@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import Group, Permission
+from api.permissions import CanManageUsers
 from .serializers import (
     LoginSerializer, UserSerializer, ChangePasswordSerializer,
     UserManagementSerializer, PermissionSerializer, RoleSerializer
@@ -81,7 +82,7 @@ class ChangePasswordView(APIView):
 
 class UserListCreateView(generics.ListCreateAPIView):
     """List and create users (admin only)."""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, CanManageUsers]
     serializer_class = UserManagementSerializer
     
     def get_queryset(self):
@@ -102,7 +103,7 @@ class UserListCreateView(generics.ListCreateAPIView):
 
 class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update, or delete a user (admin only)."""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, CanManageUsers]
     serializer_class = UserManagementSerializer
     queryset = User.objects.all()
 

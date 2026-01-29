@@ -1,11 +1,12 @@
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
 from apps.rates.models import RatePlan, Season, RoomRate
+from api.permissions import IsAdminOrManager
 from .serializers import RatePlanSerializer, SeasonSerializer, RoomRateSerializer
 
 
-class RatePlanListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+class RatePlanListView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RatePlanSerializer
     
     def get_queryset(self):
@@ -13,16 +14,22 @@ class RatePlanListView(generics.ListAPIView):
         if self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
+    
+    def perform_create(self, serializer):
+        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
+            serializer.save(property=self.request.user.assigned_property)
+        else:
+            serializer.save()
 
 
-class RatePlanDetailView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+class RatePlanDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RatePlanSerializer
     queryset = RatePlan.objects.all()
 
 
-class SeasonListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+class SeasonListView(generics.ListCreateAPIView):
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = SeasonSerializer
     
     def get_queryset(self):
@@ -30,10 +37,16 @@ class SeasonListView(generics.ListAPIView):
         if self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset.order_by('start_date')
+    
+    def perform_create(self, serializer):
+        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
+            serializer.save(property=self.request.user.assigned_property)
+        else:
+            serializer.save()
 
 
 class RoomRateListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomRateSerializer
     
     def get_queryset(self):
@@ -47,3 +60,9 @@ class RoomRateListView(generics.ListAPIView):
             queryset = queryset.filter(room_type_id=room_type_id)
             
         return queryset
+
+
+class SeasonDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = SeasonSerializer
+    queryset = Season.objects.all()

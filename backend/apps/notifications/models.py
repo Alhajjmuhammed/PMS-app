@@ -177,3 +177,29 @@ class SMSLog(models.Model):
     
     def __str__(self):
         return f"{self.to_number} - {self.status}"
+
+
+class PushDeviceToken(models.Model):
+    """Push notification device token."""
+    
+    class Platform(models.TextChoices):
+        IOS = 'IOS', _('iOS')
+        ANDROID = 'ANDROID', _('Android')
+        WEB = 'WEB', _('Web')
+    
+    user = models.ForeignKey('accounts.User', on_delete=models.CASCADE, related_name='push_devices')
+    token = models.CharField(_('device token'), max_length=255, unique=True)
+    platform = models.CharField(_('platform'), max_length=20, choices=Platform.choices)
+    device_name = models.CharField(_('device name'), max_length=100, blank=True)
+    
+    is_active = models.BooleanField(_('active'), default=True)
+    last_used = models.DateTimeField(_('last used'), auto_now=True)
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    
+    class Meta:
+        verbose_name = _('push device token')
+        verbose_name_plural = _('push device tokens')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.user.email} - {self.get_platform_display()} - {self.token[:20]}..."

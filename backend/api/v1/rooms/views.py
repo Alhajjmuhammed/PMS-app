@@ -9,11 +9,12 @@ from django.shortcuts import get_object_or_404
 from datetime import date, timedelta
 from apps.rooms.models import Room, RoomType, RoomStatusLog, RoomImage
 from apps.reservations.models import Reservation
+from api.permissions import IsHousekeepingStaff, IsAdminOrManager, IsFrontDeskOrAbove
 from .serializers import RoomSerializer, RoomTypeSerializer, RoomStatusUpdateSerializer, RoomImageSerializer
 
 
 class RoomListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'room_type', 'floor']
@@ -36,14 +37,28 @@ class RoomListView(generics.ListAPIView):
         return qs.order_by('room_number')
 
 
-class RoomDetailView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+class RoomDetailView(generics.RetrieveUpdateDestroyAPIView):
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomSerializer
     queryset = Room.objects.all()
 
 
+class RoomCreateView(generics.CreateAPIView):
+    """Create a new room."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = RoomSerializer
+    queryset = Room.objects.all()
+    
+    def perform_create(self, serializer):
+        # Auto-assign property if user has one
+        if self.request.user.assigned_property and 'hotel' not in serializer.validated_data:
+            serializer.save(hotel=self.request.user.assigned_property)
+        else:
+            serializer.save()
+
+
 class UpdateRoomStatusView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def post(self, request, pk):
         try:
@@ -78,7 +93,7 @@ class UpdateRoomStatusView(APIView):
 
 
 class RoomTypeListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeSerializer
     
     def get_queryset(self):
@@ -89,7 +104,7 @@ class RoomTypeListView(generics.ListAPIView):
 
 
 class AvailabilityView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         check_in = request.query_params.get('check_in', date.today().isoformat())
@@ -135,7 +150,7 @@ class AvailabilityView(APIView):
 
 class RoomImageListView(generics.ListCreateAPIView):
     """List and upload room images."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomImageSerializer
     
     def get_queryset(self):
@@ -150,7 +165,7 @@ class RoomImageListView(generics.ListCreateAPIView):
 
 class RoomImageDetailView(generics.RetrieveDestroyAPIView):
     """Retrieve or delete a specific room image."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomImageSerializer
     queryset = RoomImage.objects.all()
     lookup_url_kwarg = 'image_id'
@@ -158,7 +173,7 @@ class RoomImageDetailView(generics.RetrieveDestroyAPIView):
 
 class AvailableRoomsView(generics.ListAPIView):
     """Get available rooms for booking."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomSerializer
     
     def get_queryset(self):
@@ -190,6 +205,6 @@ class AvailableRoomsView(generics.ListAPIView):
 
 class RoomTypeDetailView(generics.RetrieveAPIView):
     """Get room type details."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeSerializer
     queryset = RoomType.objects.all()

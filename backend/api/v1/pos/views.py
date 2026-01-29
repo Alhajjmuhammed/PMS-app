@@ -7,6 +7,7 @@ from django.utils import timezone
 from apps.pos.models import Outlet, MenuCategory, MenuItem, POSOrder, POSOrderItem
 from apps.billing.models import Folio, FolioCharge, ChargeCode
 from apps.frontdesk.models import CheckIn
+from api.permissions import IsPOSStaff
 from .serializers import (
     OutletSerializer, MenuCategorySerializer, MenuItemSerializer,
     POSOrderSerializer, OrderCreateSerializer, AddOrderItemSerializer
@@ -14,7 +15,7 @@ from .serializers import (
 
 
 class OutletListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = OutletSerializer
     
     def get_queryset(self):
@@ -26,13 +27,13 @@ class OutletListView(generics.ListAPIView):
 
 class OutletDetailView(generics.RetrieveAPIView):
     """Get POS outlet details."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = OutletSerializer
     queryset = Outlet.objects.filter(is_active=True)
 
 
 class MenuView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def get(self, request, pk):
         try:
@@ -52,7 +53,7 @@ class MenuView(APIView):
 
 
 class OrderListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = POSOrderSerializer
     
     def get_queryset(self):
@@ -73,13 +74,13 @@ class OrderListView(generics.ListAPIView):
 
 
 class OrderDetailView(generics.RetrieveAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = POSOrderSerializer
     queryset = POSOrder.objects.all()
 
 
 class OrderCreateView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def post(self, request):
         serializer = OrderCreateSerializer(data=request.data)
@@ -104,7 +105,7 @@ class OrderCreateView(APIView):
 
 
 class AddItemView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def post(self, request, pk):
         try:
@@ -143,7 +144,7 @@ class AddItemView(APIView):
 
 
 class PostToRoomView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def post(self, request, pk):
         try:
@@ -202,7 +203,7 @@ class PostToRoomView(APIView):
 
 class MenuCategoryListView(generics.ListCreateAPIView):
     """List and create menu categories."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuCategorySerializer
     
     def get_queryset(self):
@@ -217,14 +218,14 @@ class MenuCategoryListView(generics.ListCreateAPIView):
 
 class MenuCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a menu category."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuCategorySerializer
     queryset = MenuCategory.objects.all()
 
 
 class MenuItemListView(generics.ListCreateAPIView):
     """List and create menu items."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuItemSerializer
     
     def get_queryset(self):
@@ -245,6 +246,6 @@ class MenuItemListView(generics.ListCreateAPIView):
 
 class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a menu item."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuItemSerializer
     queryset = MenuItem.objects.all()

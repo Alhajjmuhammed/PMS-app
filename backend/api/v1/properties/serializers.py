@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.properties.models import Property, Building, Floor
+from apps.properties.models import Property, Building, Floor, SystemSetting
 
 
 class FloorSerializer(serializers.ModelSerializer):
@@ -28,3 +28,17 @@ class PropertySerializer(serializers.ModelSerializer):
             'website', 'check_in_time', 'check_out_time', 'currency',
             'timezone', 'is_active', 'buildings', 'total_rooms'
         ]
+
+
+class SystemSettingSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = SystemSetting
+        fields = [
+            'id', 'property', 'language', 'timezone', 'currency',
+            'date_format', 'time_format', 'theme',
+            'email_notifications', 'push_notifications', 'sms_notifications',
+            'tax_rate', 'service_charge_rate',
+            'check_in_time', 'check_out_time',
+            'extra_settings', 'updated_at'
+        ]
+        read_only_fields = ['id', 'updated_at']

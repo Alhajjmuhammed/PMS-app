@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Property, Building, Floor, Department, PropertyAmenity, TaxConfiguration
+from .models import Property, Building, Floor, Department, PropertyAmenity, TaxConfiguration, SystemSetting
 
 
 class BuildingInline(admin.TabularInline):
@@ -89,3 +89,30 @@ class TaxConfigurationAdmin(admin.ModelAdmin):
     list_display = ('name', 'code', 'property', 'rate', 'is_active')
     list_filter = ('property', 'is_active')
     search_fields = ('name', 'code')
+
+
+@admin.register(SystemSetting)
+class SystemSettingAdmin(admin.ModelAdmin):
+    list_display = ('property', 'language', 'timezone', 'currency', 'theme', 'updated_at')
+    list_filter = ('theme', 'language', 'timezone')
+    search_fields = ('property__name',)
+    fieldsets = (
+        ('Property', {
+            'fields': ('property',)
+        }),
+        ('Regional Settings', {
+            'fields': ('language', 'timezone', 'currency', 'date_format', 'time_format')
+        }),
+        ('Appearance', {
+            'fields': ('theme',)
+        }),
+        ('Notifications', {
+            'fields': ('email_notifications', 'push_notifications', 'sms_notifications')
+        }),
+        ('Business Settings', {
+            'fields': ('tax_rate', 'service_charge_rate', 'check_in_time', 'check_out_time')
+        }),
+        ('Extra Settings', {
+            'fields': ('extra_settings',)
+        }),
+    )

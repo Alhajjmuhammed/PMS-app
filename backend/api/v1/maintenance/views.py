@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from apps.maintenance.models import MaintenanceRequest, MaintenanceLog
 from apps.rooms.models import Room
+from api.permissions import IsMaintenanceStaff
 from .serializers import (
     MaintenanceRequestSerializer, MaintenanceRequestCreateSerializer,
     MaintenanceLogSerializer, RequestUpdateSerializer
@@ -12,7 +13,7 @@ from .serializers import (
 
 
 class RequestListView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     
     def get_serializer_class(self):
@@ -42,7 +43,7 @@ class RequestListView(generics.ListCreateAPIView):
 
 
 class RequestDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     queryset = MaintenanceRequest.objects.all()
     
@@ -62,7 +63,7 @@ class RequestDetailView(generics.RetrieveUpdateAPIView):
 
 
 class RequestCreateView(generics.CreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestCreateSerializer
     
     def perform_create(self, serializer):
@@ -73,7 +74,7 @@ class RequestCreateView(generics.CreateAPIView):
 
 
 class MyRequestsView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     
     def get_queryset(self):
@@ -84,7 +85,7 @@ class MyRequestsView(generics.ListAPIView):
 
 
 class AssignRequestView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
         try:
@@ -119,7 +120,7 @@ class AssignRequestView(APIView):
 
 
 class StartRequestView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
         try:
@@ -147,7 +148,7 @@ class StartRequestView(APIView):
 
 
 class CompleteRequestView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
         try:
@@ -184,14 +185,14 @@ class CompleteRequestView(APIView):
 
 class RequestDetailViewAPI(generics.RetrieveAPIView):
     """Maintenance request detail view for /maintenance/{id}/ endpoint."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     queryset = MaintenanceRequest.objects.all()
 
 
 class ResolveRequestView(APIView):
     """Resolve/close maintenance request."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
         try:

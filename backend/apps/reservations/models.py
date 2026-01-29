@@ -153,6 +153,12 @@ class Reservation(models.Model):
         verbose_name = _('reservation')
         verbose_name_plural = _('reservations')
         ordering = ['-created_at']
+        indexes = [
+            models.Index(fields=['check_in_date']),
+            models.Index(fields=['check_out_date']),
+            models.Index(fields=['status']),
+            models.Index(fields=['check_in_date', 'check_out_date']),
+        ]
     
     def __str__(self):
         return f"{self.confirmation_number} - {self.guest}"

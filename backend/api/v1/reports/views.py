@@ -7,10 +7,11 @@ from apps.reports.models import DailyStatistics
 from apps.reservations.models import Reservation
 from apps.rooms.models import Room
 from apps.billing.models import Payment
+from api.permissions import IsAdminOrManager
 
 
 class DashboardStatsView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         today = date.today()
@@ -68,7 +69,7 @@ class DashboardStatsView(APIView):
 
 
 class OccupancyReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         start = request.query_params.get('start', (date.today() - timedelta(days=30)).isoformat())
@@ -115,7 +116,7 @@ class OccupancyReportView(APIView):
 
 
 class RevenueReportView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         start = request.query_params.get('start', (date.today() - timedelta(days=30)).isoformat())
@@ -164,7 +165,7 @@ class RevenueReportView(APIView):
 
 class AdvancedAnalyticsView(APIView):
     """Advanced analytics with date range and metric filters."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         from datetime import datetime
@@ -245,7 +246,7 @@ class AdvancedAnalyticsView(APIView):
 
 class RevenueForecastView(APIView):
     """Revenue forecast for predictive analytics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         property_obj = request.user.assigned_property
@@ -289,7 +290,7 @@ class RevenueForecastView(APIView):
 
 class DailyReportView(APIView):
     """Get daily statistics report."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         from datetime import datetime

@@ -5,7 +5,7 @@ from apps.billing.models import Folio, FolioCharge, Payment, ChargeCode
 class ChargeCodeSerializer(serializers.ModelSerializer):
     class Meta:
         model = ChargeCode
-        fields = ['id', 'code', 'name', 'category', 'default_amount', 'tax_rate']
+        fields = ['id', 'code', 'name', 'category', 'default_amount']
 
 
 class FolioChargeSerializer(serializers.ModelSerializer):

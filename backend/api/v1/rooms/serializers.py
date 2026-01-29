@@ -28,11 +28,12 @@ class RoomSerializer(serializers.ModelSerializer):
     class Meta:
         model = Room
         fields = [
-            'id', 'room_number', 'room_type', 'room_type_name',
-            'floor', 'floor_name', 'building_name',
+            'id', 'hotel', 'room_number', 'room_type', 'room_type_name',
+            'floor', 'floor_name', 'building', 'building_name',
             'status', 'fo_status', 'is_smoking', 'is_accessible',
-            'is_active', 'notes'
+            'is_active', 'notes', 'name', 'description'
         ]
+        read_only_fields = ['room_type_name', 'floor_name', 'building_name']
 
 
 class RoomStatusUpdateSerializer(serializers.Serializer):

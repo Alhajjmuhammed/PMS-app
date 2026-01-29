@@ -8,6 +8,7 @@ from datetime import date
 from apps.reservations.models import Reservation
 from apps.rooms.models import Room
 from apps.frontdesk.models import CheckIn, CheckOut, RoomMove
+from api.permissions import IsFrontDeskOrAbove
 from .serializers import (
     CheckInSerializer, CheckOutSerializer, 
     CheckInRequestSerializer, CheckOutRequestSerializer, RoomMoveSerializer
@@ -16,7 +17,7 @@ from api.v1.reservations.serializers import ReservationSerializer
 
 
 class DashboardView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         today = date.today()
@@ -64,7 +65,7 @@ class DashboardView(APIView):
 
 
 class CheckInView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         serializer = CheckInRequestSerializer(data=request.data)
@@ -106,7 +107,7 @@ class CheckInView(APIView):
 
 
 class CheckOutView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         serializer = CheckOutRequestSerializer(data=request.data)
@@ -140,7 +141,7 @@ class CheckOutView(APIView):
 
 
 class RoomMoveView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         serializer = RoomMoveSerializer(data=request.data)
@@ -182,7 +183,7 @@ class RoomMoveView(APIView):
 
 class CheckInWithIDView(APIView):
     """Check-in view with reservation ID in URL."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
         try:
@@ -214,7 +215,7 @@ class CheckInWithIDView(APIView):
 
 class CheckOutWithIDView(APIView):
     """Check-out view with reservation ID in URL."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
         try:
@@ -248,7 +249,7 @@ class CheckOutWithIDView(APIView):
 
 class ArrivalsView(APIView):
     """Get today's expected arrivals."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         date_param = request.query_params.get('date')
@@ -268,7 +269,7 @@ class ArrivalsView(APIView):
 
 class DeparturesView(APIView):
     """Get today's expected departures."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         date_param = request.query_params.get('date')
@@ -288,7 +289,7 @@ class DeparturesView(APIView):
 
 class InHouseView(APIView):
     """Get currently checked-in guests."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         property_obj = request.user.assigned_property

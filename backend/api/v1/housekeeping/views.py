@@ -6,11 +6,12 @@ from django.utils import timezone
 from datetime import date
 from apps.housekeeping.models import HousekeepingTask, RoomInspection
 from apps.rooms.models import Room
+from api.permissions import IsHousekeepingStaff
 from .serializers import HousekeepingTaskSerializer, TaskUpdateSerializer
 
 
 class TaskListView(generics.ListCreateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     serializer_class = HousekeepingTaskSerializer
     
     def get_queryset(self):
@@ -38,7 +39,7 @@ class TaskListView(generics.ListCreateAPIView):
 
 
 class TaskDetailView(generics.RetrieveUpdateAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     serializer_class = HousekeepingTaskSerializer
     queryset = HousekeepingTask.objects.all()
     
@@ -49,7 +50,7 @@ class TaskDetailView(generics.RetrieveUpdateAPIView):
 
 
 class MyTasksView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     serializer_class = HousekeepingTaskSerializer
     
     def get_queryset(self):
@@ -61,7 +62,7 @@ class MyTasksView(generics.ListAPIView):
 
 
 class StartTaskView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def post(self, request, pk):
         try:
@@ -84,7 +85,7 @@ class StartTaskView(APIView):
 
 
 class CompleteTaskView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def post(self, request, pk):
         try:
@@ -115,7 +116,7 @@ class CompleteTaskView(APIView):
 
 
 class RoomStatusView(APIView):
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def get(self, request):
         rooms = Room.objects.filter(is_active=True)
@@ -152,7 +153,7 @@ class RoomStatusView(APIView):
 
 class UpdateRoomStatusView(APIView):
     """Update room housekeeping status."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def post(self, request, pk):
         try:

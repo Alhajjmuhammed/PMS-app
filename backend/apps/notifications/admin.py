@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import NotificationTemplate, Notification, EmailLog, Alert, SMSLog
+from .models import NotificationTemplate, Notification, EmailLog, Alert, SMSLog, PushDeviceToken
 
 
 @admin.register(NotificationTemplate)
@@ -31,3 +31,10 @@ class AlertAdmin(admin.ModelAdmin):
 class SMSLogAdmin(admin.ModelAdmin):
     list_display = ('to_number', 'status', 'sent_at', 'created_at')
     list_filter = ('status',)
+
+
+@admin.register(PushDeviceToken)
+class PushDeviceTokenAdmin(admin.ModelAdmin):
+    list_display = ('user', 'platform', 'device_name', 'is_active', 'last_used', 'created_at')
+    list_filter = ('platform', 'is_active')
+    search_fields = ('user__email', 'device_name', 'token')

@@ -34,26 +34,10 @@ urlpatterns = [
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
     
-    # Dashboard redirect
-    path('', RedirectView.as_view(url='/dashboard/', permanent=False)),
+    # Root redirect to API docs
+    path('', RedirectView.as_view(url='/swagger/', permanent=False)),
     
-    # App URLs
-    path('accounts/', include('apps.accounts.urls')),
-    path('dashboard/', include('apps.frontdesk.urls')),
-    path('properties/', include('apps.properties.urls')),
-    path('rooms/', include('apps.rooms.urls')),
-    path('reservations/', include('apps.reservations.urls')),
-    path('guests/', include('apps.guests.urls')),
-    path('housekeeping/', include('apps.housekeeping.urls')),
-    path('maintenance/', include('apps.maintenance.urls')),
-    path('billing/', include('apps.billing.urls')),
-    path('pos/', include('apps.pos.urls')),
-    path('rates/', include('apps.rates.urls')),
-    path('channels/', include('apps.channels.urls')),
-    path('reports/', include('apps.reports.urls')),
-    path('notifications/', include('apps.notifications.urls')),
-    
-    # API URLs
+    # API URLs (Primary interface for mobile and web apps)
     path('api/v1/', include('api.v1.urls')),
 ]
 

@@ -7,12 +7,42 @@ export const propertiesApi = {
   create: (data: any) => api.post('/properties/', data),
   update: (id: number, data: any) => api.patch(`/properties/${id}/`, data),
   delete: (id: number) => api.delete(`/properties/${id}/`),
+  
+  // Companies
+  companies: {
+    list: () => api.get('/properties/companies/'),
+    get: (id: number) => api.get(`/properties/companies/${id}/`),
+    create: (data: any) => api.post('/properties/companies/', data),
+    update: (id: number, data: any) => api.patch(`/properties/companies/${id}/`, data),
+    delete: (id: number) => api.delete(`/properties/companies/${id}/`),
+  },
+  
+  // Buildings
+  buildings: {
+    list: (params?: any) => api.get('/properties/buildings/', { params }),
+    get: (id: number) => api.get(`/properties/buildings/${id}/`),
+    create: (data: any) => api.post('/properties/buildings/', data),
+    update: (id: number, data: any) => api.patch(`/properties/buildings/${id}/`, data),
+    delete: (id: number) => api.delete(`/properties/buildings/${id}/`),
+  },
+  
+  // Floors
+  floors: {
+    list: (params?: any) => api.get('/properties/floors/', { params }),
+    get: (id: number) => api.get(`/properties/floors/${id}/`),
+    create: (data: any) => api.post('/properties/floors/', data),
+    update: (id: number, data: any) => api.patch(`/properties/floors/${id}/`, data),
+    delete: (id: number) => api.delete(`/properties/floors/${id}/`),
+  },
 };
 
 // Rooms API
 export const roomsApi = {
   list: (params?: any) => api.get('/rooms/', { params }),
   get: (id: number) => api.get(`/rooms/${id}/`),
+  create: (data: any) => api.post('/rooms/', data),
+  update: (id: number, data: any) => api.patch(`/rooms/${id}/`, data),
+  delete: (id: number) => api.delete(`/rooms/${id}/`),
   getAvailable: (params: any) => api.get('/rooms/available/', { params }),
   updateStatus: (id: number, status: string) => api.post(`/rooms/${id}/status/`, { status }),
   
@@ -20,6 +50,18 @@ export const roomsApi = {
   types: {
     list: () => api.get('/rooms/types/'),
     get: (id: number) => api.get(`/rooms/types/${id}/`),
+    create: (data: any) => api.post('/rooms/types/', data),
+    update: (id: number, data: any) => api.patch(`/rooms/types/${id}/`, data),
+    delete: (id: number) => api.delete(`/rooms/types/${id}/`),
+  },
+  
+  // Room Amenities
+  amenities: {
+    list: () => api.get('/rooms/amenities/'),
+    get: (id: number) => api.get(`/rooms/amenities/${id}/`),
+    create: (data: any) => api.post('/rooms/amenities/', data),
+    update: (id: number, data: any) => api.patch(`/rooms/amenities/${id}/`, data),
+    delete: (id: number) => api.delete(`/rooms/amenities/${id}/`),
   },
 };
 
@@ -46,10 +88,11 @@ export const guestsApi = {
 
 // Front Desk API
 export const frontdeskApi = {
-  checkIn: (reservationId: number, data: any) => 
-    api.post(`/frontdesk/check-in/${reservationId}/`, data),
-  checkOut: (reservationId: number, data: any) => 
-    api.post(`/frontdesk/check-out/${reservationId}/`, data),
+  dashboard: () => api.get('/frontdesk/dashboard/'),
+  
+  checkIn: (data: any) => api.post('/frontdesk/check-in/', data),
+  checkOut: (data: any) => api.post('/frontdesk/check-out/', data),
+  
   arrivals: (date?: string) => 
     api.get('/frontdesk/arrivals/', { params: { date } }),
   departures: (date?: string) => 
@@ -97,17 +140,29 @@ export const billingApi = {
   payments: {
     list: (params?: any) => api.get('/billing/payments/', { params }),
     get: (id: number) => api.get(`/billing/payments/${id}/`),
+    create: (data: any) => api.post('/billing/payments/', data),
   },
   
   folios: {
-    get: (reservationId: number) => api.get(`/billing/folios/${reservationId}/`),
-    addCharge: (reservationId: number, data: any) => 
-      api.post(`/billing/folios/${reservationId}/charges/`, data),
+    list: (params?: any) => api.get('/billing/folios/', { params }),
+    get: (id: number) => api.get(`/billing/folios/${id}/`),
+    create: (data: any) => api.post('/billing/folios/', data),
+    close: (id: number) => api.post(`/billing/folios/${id}/close/`),
+    addCharge: (folioId: number, data: any) => 
+      api.post(`/billing/folios/${folioId}/charges/`, data),
+  },
+  
+  chargeCodes: {
+    list: (params?: any) => api.get('/billing/charge-codes/', { params }),
+    get: (id: number) => api.get(`/billing/charge-codes/${id}/`),
+    create: (data: any) => api.post('/billing/charge-codes/', data),
+    update: (id: number, data: any) => api.patch(`/billing/charge-codes/${id}/`, data),
+    delete: (id: number) => api.delete(`/billing/charge-codes/${id}/`),
   },
   
   // Additional methods for new screens
   getInvoiceDetail: (id: number) => api.get(`/billing/invoices/${id}/`),
-  recordPayment: (id: number, data: any) => api.post(`/billing/invoices/${id}/pay/`, data),
+  recordPayment: (invoiceId: number, data: any) => api.post(`/billing/invoices/${invoiceId}/pay/`, data),
 };
 
 // POS API
@@ -139,14 +194,33 @@ export const ratesApi = {
   plans: {
     list: () => api.get('/rates/plans/'),
     get: (id: number) => api.get(`/rates/plans/${id}/`),
+    create: (data: any) => api.post('/rates/plans/', data),
+    update: (id: number, data: any) => api.patch(`/rates/plans/${id}/`, data),
+    delete: (id: number) => api.delete(`/rates/plans/${id}/`),
   },
   
   seasons: {
     list: () => api.get('/rates/seasons/'),
+    get: (id: number) => api.get(`/rates/seasons/${id}/`),
+    create: (data: any) => api.post('/rates/seasons/', data),
+    update: (id: number, data: any) => api.patch(`/rates/seasons/${id}/`, data),
+    delete: (id: number) => api.delete(`/rates/seasons/${id}/`),
   },
   
   roomRates: {
     list: (params?: any) => api.get('/rates/room-rates/', { params }),
+    get: (id: number) => api.get(`/rates/room-rates/${id}/`),
+    create: (data: any) => api.post('/rates/room-rates/', data),
+    update: (id: number, data: any) => api.patch(`/rates/room-rates/${id}/`, data),
+    delete: (id: number) => api.delete(`/rates/room-rates/${id}/`),
+  },
+  
+  dateRates: {
+    list: (params?: any) => api.get('/rates/date-rates/', { params }),
+    get: (id: number) => api.get(`/rates/date-rates/${id}/`),
+    create: (data: any) => api.post('/rates/date-rates/', data),
+    update: (id: number, data: any) => api.patch(`/rates/date-rates/${id}/`, data),
+    delete: (id: number) => api.delete(`/rates/date-rates/${id}/`),
   },
 };
 

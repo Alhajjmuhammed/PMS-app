@@ -6,9 +6,12 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q
 from django.shortcuts import get_object_or_404
-from apps.guests.models import Guest, GuestDocument
+from apps.guests.models import Guest, GuestDocument, Company
 from api.permissions import IsFrontDeskOrAbove
-from .serializers import GuestSerializer, GuestCreateSerializer, GuestDocumentSerializer
+from .serializers import (
+    GuestSerializer, GuestCreateSerializer, GuestDocumentSerializer,
+    CompanySerializer, CompanyListSerializer
+)
 
 
 class GuestListView(generics.ListCreateAPIView):
@@ -96,3 +99,27 @@ class GuestDocumentDetailView(generics.RetrieveDestroyAPIView):
     serializer_class = GuestDocumentSerializer
     queryset = GuestDocument.objects.all()
     lookup_url_kwarg = 'document_id'
+
+
+class CompanyListCreateView(generics.ListCreateAPIView):
+    """List all companies or create a new company."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    queryset = Company.objects.all()
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['company_type', 'is_active']
+    search_fields = ['name', 'code', 'contact_person', 'email']
+    ordering_fields = ['name', 'created_at', 'credit_limit']
+    ordering = ['name']
+    
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return CompanyListSerializer
+        return CompanySerializer
+
+
+class CompanyDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a company."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    serializer_class = CompanySerializer
+    queryset = Company.objects.all()
+    lookup_url_kwarg = 'pk'

@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from datetime import date
 import re
-from apps.guests.models import Guest, GuestPreference, GuestDocument
+from apps.guests.models import Guest, GuestPreference, GuestDocument, Company
 
 
 class GuestPreferenceSerializer(serializers.ModelSerializer):
@@ -116,3 +116,88 @@ class GuestDocumentSerializer(serializers.ModelSerializer):
         if obj.document_file:
             return obj.document_file.size
         return None
+
+
+class CompanySerializer(serializers.ModelSerializer):
+    """Serializer for Company model with all fields."""
+    
+    class Meta:
+        model = Company
+        fields = [
+            'id', 'name', 'code', 'company_type', 'contact_person',
+            'email', 'phone', 'fax', 'website', 'address', 'city', 'country',
+            'tax_id', 'credit_limit', 'payment_terms', 'discount_percentage',
+            'contract_start', 'contract_end', 'is_active', 'notes',
+            'created_at', 'updated_at'
+        ]
+        read_only_fields = ['created_at', 'updated_at']
+    
+    def validate_code(self, value):
+        """Validate company code uniqueness and format."""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Company code must be at least 2 characters.")
+        
+        value = value.strip().upper()
+        
+        # Check uniqueness
+        instance = self.instance
+        if instance:
+            # Update case - exclude current instance
+            if Company.objects.exclude(pk=instance.pk).filter(code=value).exists():
+                raise serializers.ValidationError("A company with this code already exists.")
+        else:
+            # Create case
+            if Company.objects.filter(code=value).exists():
+                raise serializers.ValidationError("A company with this code already exists.")
+        
+        return value
+    
+    def validate_name(self, value):
+        """Validate company name."""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Company name must be at least 2 characters.")
+        if len(value) > 200:
+            raise serializers.ValidationError("Company name is too long.")
+        return value.strip()
+    
+    def validate_credit_limit(self, value):
+        """Validate credit limit is non-negative."""
+        if value < 0:
+            raise serializers.ValidationError("Credit limit cannot be negative.")
+        return value
+    
+    def validate_discount_percentage(self, value):
+        """Validate discount percentage is between 0 and 100."""
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Discount percentage must be between 0 and 100.")
+        return value
+    
+    def validate_payment_terms(self, value):
+        """Validate payment terms are reasonable."""
+        if value < 0 or value > 365:
+            raise serializers.ValidationError("Payment terms must be between 0 and 365 days.")
+        return value
+    
+    def validate(self, data):
+        """Cross-field validation."""
+        contract_start = data.get('contract_start')
+        contract_end = data.get('contract_end')
+        
+        if contract_start and contract_end:
+            if contract_end < contract_start:
+                raise serializers.ValidationError({
+                    'contract_end': "Contract end date must be after start date."
+                })
+        
+        return data
+
+
+class CompanyListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for company list view."""
+    
+    class Meta:
+        model = Company
+        fields = [
+            'id', 'name', 'code', 'company_type', 'contact_person',
+            'email', 'phone', 'is_active', 'credit_limit', 'discount_percentage'
+        ]

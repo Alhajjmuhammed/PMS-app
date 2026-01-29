@@ -7,10 +7,14 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
 from datetime import date, timedelta
-from apps.rooms.models import Room, RoomType, RoomStatusLog, RoomImage
+from apps.rooms.models import Room, RoomType, RoomStatusLog, RoomImage, RoomAmenity, RoomTypeAmenity
 from apps.reservations.models import Reservation
 from api.permissions import IsHousekeepingStaff, IsAdminOrManager, IsFrontDeskOrAbove
-from .serializers import RoomSerializer, RoomTypeSerializer, RoomStatusUpdateSerializer, RoomImageSerializer
+from .serializers import (
+    RoomSerializer, RoomTypeSerializer, RoomStatusUpdateSerializer, 
+    RoomImageSerializer, RoomAmenitySerializer, RoomAmenityListSerializer,
+    RoomTypeAmenitySerializer
+)
 
 
 class RoomListView(generics.ListAPIView):
@@ -92,12 +96,36 @@ class UpdateRoomStatusView(APIView):
         return Response(RoomSerializer(room).data)
 
 
-class RoomTypeListView(generics.ListAPIView):
+class RoomTypeListView(generics.ListCreateAPIView):
+    """List all room types or create a new one."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    serializer_class = RoomTypeSerializer
+    filter_backends = [SearchFilter, OrderingFilter]
+    search_fields = ['name', 'code']
+    ordering_fields = ['name', 'base_rate']
+    ordering = ['name']
+    
+    def get_queryset(self):
+        qs = RoomType.objects.prefetch_related('amenities__amenity').filter(is_active=True)
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs
+    
+    def perform_create(self, serializer):
+        """Auto-assign property if user has one."""
+        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
+            serializer.save(property=self.request.user.assigned_property)
+        else:
+            serializer.save()
+
+
+class RoomTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a room type."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeSerializer
     
     def get_queryset(self):
-        qs = RoomType.objects.filter(is_active=True)
+        qs = RoomType.objects.prefetch_related('amenities__amenity')
         if self.request.user.assigned_property:
             qs = qs.filter(property=self.request.user.assigned_property)
         return qs
@@ -182,29 +210,45 @@ class AvailableRoomsView(generics.ListAPIView):
         
         qs = Room.objects.filter(is_active=True, status__in=['CLEAN', 'INSPECTED'])
         
-        if self.request.user.assigned_property:
-            qs = qs.filter(property=self.request.user.assigned_property)
-        
-        # Filter out rooms with conflicting reservations
-        if check_in and check_out:
-            from datetime import datetime
-            check_in_date = datetime.fromisoformat(check_in).date()
-            check_out_date = datetime.fromisoformat(check_out).date()
-            
-            # Get rooms that are booked during the requested period
-            booked_rooms = Reservation.objects.filter(
-                check_in_date__lt=check_out_date,
-                check_out_date__gt=check_in_date,
-                status__in=['CONFIRMED', 'CHECKED_IN']
-            ).values_list('rooms__room_id', flat=True)
-            
-            qs = qs.exclude(id__in=booked_rooms)
-        
         return qs
 
 
-class RoomTypeDetailView(generics.RetrieveAPIView):
-    """Get room type details."""
+class RoomAmenityListCreateView(generics.ListCreateAPIView):
+    """List all room amenities or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    queryset = RoomAmenity.objects.all()
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category']
+    search_fields = ['name', 'code']
+    ordering_fields = ['name', 'category']
+    ordering = ['category', 'name']
+    
+    def get_serializer_class(self):
+        if self.request.method == 'GET':
+            return RoomAmenityListSerializer
+        return RoomAmenitySerializer
+
+
+class RoomAmenityDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a room amenity."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = RoomAmenitySerializer
+    queryset = RoomAmenity.objects.all()
+
+
+class RoomTypeAmenityListCreateView(generics.ListCreateAPIView):
+    """List or assign amenities to a room type."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
-    serializer_class = RoomTypeSerializer
-    queryset = RoomType.objects.all()
+    serializer_class = RoomTypeAmenitySerializer
+    
+    def get_queryset(self):
+        room_type_id = self.kwargs.get('room_type_id')
+        return RoomTypeAmenity.objects.filter(room_type_id=room_type_id).select_related('amenity')
+
+
+class RoomTypeAmenityDetailView(generics.DestroyAPIView):
+    """Remove an amenity from a room type."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    serializer_class = RoomTypeAmenitySerializer
+    queryset = RoomTypeAmenity.objects.all()
+    lookup_url_kwarg = 'amenity_assignment_id'

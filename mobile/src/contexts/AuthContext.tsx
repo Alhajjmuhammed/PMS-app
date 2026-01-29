@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { authApi } from '../services/api';
+import { TOKEN_KEY } from '../config/env';
 
 interface User {
   id: number;
@@ -33,7 +34,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const loadStoredAuth = async () => {
     try {
-      const storedToken = await SecureStore.getItemAsync('authToken');
+      const storedToken = await SecureStore.getItemAsync(TOKEN_KEY);
       if (storedToken) {
         setToken(storedToken);
         const response = await authApi.getProfile();
@@ -41,19 +42,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
     } catch (error) {
       console.error('Error loading auth:', error);
-      await SecureStore.deleteItemAsync('authToken');
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
     } finally {
       setIsLoading(false);
     }
   };
 
   const login = async (email: string, password: string) => {
+    console.log('Login attempt:', email);
     const response = await authApi.login(email, password);
+    console.log('Login response:', response.data);
     const { token: newToken, user: userData } = response.data;
 
-    await SecureStore.setItemAsync('authToken', newToken);
+    console.log('Storing token:', newToken);
+    await SecureStore.setItemAsync(TOKEN_KEY, newToken);
     setToken(newToken);
     setUser(userData);
+    console.log('Login successful');
   };
 
   const logout = async () => {
@@ -62,7 +67,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      await SecureStore.deleteItemAsync('authToken');
+      await SecureStore.deleteItemAsync(TOKEN_KEY);
       setToken(null);
       setUser(null);
     }

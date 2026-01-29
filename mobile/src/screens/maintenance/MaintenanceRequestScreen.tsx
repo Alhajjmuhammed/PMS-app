@@ -4,6 +4,7 @@ import { Card, Text, Button, Chip, Divider, TextInput } from 'react-native-paper
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { maintenanceApi } from '../../services/api';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import ImagePicker from '../../components/ImagePicker';
 
 export default function MaintenanceRequestScreen() {
   const navigation = useNavigation();
@@ -13,6 +14,7 @@ export default function MaintenanceRequestScreen() {
 
   const [notes, setNotes] = React.useState('');
   const [cost, setCost] = React.useState('');
+  const [photos, setPhotos] = React.useState<string[]>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['maintenanceRequest', requestId],
@@ -32,6 +34,7 @@ export default function MaintenanceRequestScreen() {
       maintenanceApi.completeRequest(requestId, {
         notes,
         actual_cost: cost ? parseFloat(cost) : undefined,
+        photos,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['maintenanceRequest', requestId] });
@@ -179,6 +182,12 @@ export default function MaintenanceRequestScreen() {
               value={cost}
               onChangeText={setCost}
               style={styles.input}
+            />
+            
+            <ImagePicker
+              onImagesSelected={setPhotos}
+              maxImages={5}
+              existingImages={photos}
             />
           </Card.Content>
         </Card>

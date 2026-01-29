@@ -4,6 +4,7 @@ import { Card, Text, Button, Chip, Divider, TextInput } from 'react-native-paper
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { housekeepingApi } from '../../services/api';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import ImagePicker from '../../components/ImagePicker';
 
 export default function HousekeepingTaskScreen() {
   const navigation = useNavigation();
@@ -12,6 +13,7 @@ export default function HousekeepingTaskScreen() {
   const { taskId } = route.params;
 
   const [notes, setNotes] = React.useState('');
+  const [photos, setPhotos] = React.useState<string[]>([]);
 
   const { data, isLoading } = useQuery({
     queryKey: ['housekeepingTask', taskId],
@@ -27,7 +29,7 @@ export default function HousekeepingTaskScreen() {
   });
 
   const completeMutation = useMutation({
-    mutationFn: () => housekeepingApi.completeTask(taskId, notes),
+    mutationFn: () => housekeepingApi.completeTask(taskId, { notes, photos }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['housekeepingTask', taskId] });
       queryClient.invalidateQueries({ queryKey: ['housekeepingTasks'] });
@@ -128,6 +130,12 @@ export default function HousekeepingTaskScreen() {
               value={notes}
               onChangeText={setNotes}
               style={styles.notesInput}
+            />
+            
+            <ImagePicker
+              onImagesSelected={setPhotos}
+              maxImages={5}
+              existingImages={photos}
             />
           </Card.Content>
         </Card>

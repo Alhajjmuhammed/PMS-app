@@ -104,6 +104,10 @@ export const billingApi = {
     addCharge: (reservationId: number, data: any) => 
       api.post(`/billing/folios/${reservationId}/charges/`, data),
   },
+  
+  // Additional methods for new screens
+  getInvoiceDetail: (id: number) => api.get(`/billing/invoices/${id}/`),
+  recordPayment: (id: number, data: any) => api.post(`/billing/invoices/${id}/pay/`, data),
 };
 
 // POS API
@@ -124,6 +128,10 @@ export const posApi = {
     addItem: (id: number, data: any) => api.post(`/pos/orders/${id}/add-item/`, data),
     postToRoom: (id: number, data: any) => api.post(`/pos/orders/${id}/post-to-room/`, data),
   },
+  
+  // Additional methods for new screens
+  listOrders: (params?: any) => api.get('/pos/orders/', { params }),
+  getOrderDetail: (id: number) => api.get(`/pos/orders/${id}/`),
 };
 
 // Rates API

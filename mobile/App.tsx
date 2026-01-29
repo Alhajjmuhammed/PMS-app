@@ -6,6 +6,7 @@ import { NavigationContainer } from '@react-navigation/native';
 import RootNavigator from './src/navigation/RootNavigator';
 import { AuthProvider } from './src/contexts/AuthContext';
 import { ErrorBoundary } from './src/components';
+import { NotificationProvider } from './src/components/NotificationProvider';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -33,10 +34,12 @@ export default function App() {
         <PaperProvider theme={theme}>
           <SafeAreaProvider>
             <AuthProvider>
-              <NavigationContainer>
-                <RootNavigator />
-                <StatusBar style="auto" />
-              </NavigationContainer>
+              <NotificationProvider>
+                <NavigationContainer>
+                  <RootNavigator />
+                  <StatusBar style="auto" />
+                </NavigationContainer>
+              </NotificationProvider>
             </AuthProvider>
           </SafeAreaProvider>
         </PaperProvider>

@@ -1,8 +1,8 @@
 // Environment configuration
 export const ENV = {
   development: {
-    API_URL: 'http://localhost:8000/api/v1',
-    API_BASE_URL: 'http://localhost:8000',
+    API_URL: 'http://192.168.0.136:8000/api/v1',
+    API_BASE_URL: 'http://192.168.0.136:8000',
   },
   production: {
     API_URL: 'https://your-domain.com/api/v1',
@@ -26,6 +26,6 @@ export const API_BASE_URL = config.API_BASE_URL;
 // Timeout settings
 export const REQUEST_TIMEOUT = 30000; // 30 seconds
 
-// Token storage key
-export const TOKEN_KEY = '@pms_token';
+// Token storage key (SecureStore only allows alphanumeric, dots, dashes, underscores)
+export const TOKEN_KEY = 'pms_token';
 export const USER_KEY = '@pms_user';

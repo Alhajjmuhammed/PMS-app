@@ -20,9 +20,17 @@ export default function LoginScreen() {
     setError('');
 
     try {
+      console.log('Attempting login with:', email);
       await login(email, password);
+      console.log('Login successful!');
     } catch (err: any) {
-      setError(err.response?.data?.error || 'Login failed');
+      console.error('Login error:', err);
+      console.error('Error response:', err.response);
+      const errorMsg = err.response?.data?.error 
+        || err.response?.data?.detail 
+        || err.message 
+        || 'Login failed. Please check your credentials.';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }

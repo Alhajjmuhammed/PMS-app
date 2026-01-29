@@ -93,7 +93,7 @@ export default function DashboardScreen() {
               myTasks.data.slice(0, 5).map((task: any) => (
                 <View key={task.id} style={styles.taskItem}>
                   <Text variant="bodyLarge">Room {task.room_number}</Text>
-                  <Chip size={24} compact>
+                  <Chip compact>
                     {task.status}
                   </Chip>
                 </View>
@@ -116,7 +116,7 @@ export default function DashboardScreen() {
                     <Text variant="bodyLarge">{request.title}</Text>
                     <Text variant="bodySmall">{request.location || `Room ${request.room_number}`}</Text>
                   </View>
-                  <Chip size={24} compact mode={request.priority === 'HIGH' ? 'flat' : 'outlined'}>
+                  <Chip compact mode={request.priority === 'HIGH' ? 'flat' : 'outlined'}>
                     {request.priority}
                   </Chip>
                 </View>

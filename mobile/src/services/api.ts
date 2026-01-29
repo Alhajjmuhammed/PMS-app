@@ -64,8 +64,8 @@ export const housekeepingApi = {
   getMyTasks: () => api.get('/housekeeping/my-tasks/'),
   getTaskDetail: (id: number) => api.get(`/housekeeping/tasks/${id}/`),
   startTask: (id: number) => api.post(`/housekeeping/tasks/${id}/start/`),
-  completeTask: (id: number, notes?: string) =>
-    api.post(`/housekeeping/tasks/${id}/complete/`, { notes }),
+  completeTask: (id: number, data?: { notes?: string; photos?: string[] }) =>
+    api.post(`/housekeeping/tasks/${id}/complete/`, data),
   getRoomStatus: (floor?: number) =>
     api.get('/housekeeping/rooms/', { params: { floor } }),
 };

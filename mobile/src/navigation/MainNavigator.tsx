@@ -1,8 +1,18 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../contexts/AuthContext';
+import {
+  isSuperuser,
+  isAdminOrManager,
+  isFrontDeskOrAbove,
+  isHousekeepingStaff,
+  isMaintenanceStaff,
+  isAccountantOrAbove,
+  isPOSStaff,
+  type User,
+} from '../utils/permissions';
 
 // Dashboard
 import DashboardScreen from '../screens/dashboard/DashboardScreen';
@@ -38,6 +48,14 @@ import MaintenanceListScreen from '../screens/maintenance/MaintenanceListScreen'
 import MaintenanceRequestScreen from '../screens/maintenance/MaintenanceRequestScreen';
 import CreateMaintenanceScreen from '../screens/maintenance/CreateMaintenanceScreen';
 
+// Billing
+import InvoiceDetailScreen from '../screens/billing/InvoiceDetailScreen';
+import PaymentScreen from '../screens/billing/PaymentScreen';
+
+// POS
+import OrderHistoryScreen from '../screens/pos/OrderHistoryScreen';
+import OrderDetailScreen from '../screens/pos/OrderDetailScreen';
+
 // Reports
 import ReportsScreen from '../screens/reports/ReportsScreen';
 
@@ -58,6 +76,8 @@ const FrontDeskStack = createNativeStackNavigator();
 const RoomsStack = createNativeStackNavigator();
 const HousekeepingStack = createNativeStackNavigator();
 const MaintenanceStack = createNativeStackNavigator();
+const BillingStack = createNativeStackNavigator();
+const POSStack = createNativeStackNavigator();
 const NotificationsStack = createNativeStackNavigator();
 const PropertiesStack = createNativeStackNavigator();
 
@@ -198,6 +218,40 @@ function MaintenanceNavigator() {
   );
 }
 
+function BillingNavigator() {
+  return (
+    <BillingStack.Navigator>
+      <BillingStack.Screen
+        name="InvoiceDetail"
+        component={InvoiceDetailScreen}
+        options={{ title: 'Invoice Details' }}
+      />
+      <BillingStack.Screen
+        name="PaymentScreen"
+        component={PaymentScreen}
+        options={{ title: 'Record Payment' }}
+      />
+    </BillingStack.Navigator>
+  );
+}
+
+function POSNavigator() {
+  return (
+    <POSStack.Navigator>
+      <POSStack.Screen
+        name="OrderHistory"
+        component={OrderHistoryScreen}
+        options={{ title: 'POS Orders' }}
+      />
+      <POSStack.Screen
+        name="OrderDetailScreen"
+        component={OrderDetailScreen}
+        options={{ title: 'Order Details' }}
+      />
+    </POSStack.Navigator>
+  );
+}
+
 function NotificationsNavigator() {
   return (
     <NotificationsStack.Navigator>
@@ -229,9 +283,26 @@ function PropertiesNavigator() {
 
 export default function MainNavigator() {
   const { user } = useAuth();
-  const isHousekeeping = user?.role === 'HOUSEKEEPING';
-  const isMaintenance = user?.role === 'MAINTENANCE';
-  const isFrontDesk = user?.role === 'FRONTDESK' || user?.role === 'MANAGER' || user?.role === 'ADMIN';
+
+  // Define which screens should be visible based on permissions
+  const visibleScreens = useMemo(() => {
+    const screens = {
+      dashboard: isFrontDeskOrAbove(user as User) || isAdminOrManager(user as User),
+      properties: isSuperuser(user as User) || isAdminOrManager(user as User),
+      reservations: isFrontDeskOrAbove(user as User),
+      guests: isFrontDeskOrAbove(user as User),
+      frontDesk: isFrontDeskOrAbove(user as User),
+      rooms: true, // All users
+      housekeeping: isHousekeepingStaff(user as User),
+      maintenance: isMaintenanceStaff(user as User),
+      billing: isAccountantOrAbove(user as User),
+      pos: isPOSStaff(user as User),
+      reports: isAdminOrManager(user as User),
+      notifications: true, // All users
+      profile: true, // All users
+    };
+    return screens;
+  }, [user]);
 
   return (
     <Tab.Navigator
@@ -253,6 +324,10 @@ export default function MainNavigator() {
             iconName = focused ? 'bed' : 'bed-outline';
           } else if (route.name === 'Maintenance') {
             iconName = focused ? 'construct' : 'construct-outline';
+          } else if (route.name === 'Billing') {
+            iconName = focused ? 'card' : 'card-outline';
+          } else if (route.name === 'POS') {
+            iconName = focused ? 'restaurant' : 'restaurant-outline';
           } else if (route.name === 'Reports') {
             iconName = focused ? 'bar-chart' : 'bar-chart-outline';
           } else if (route.name === 'Notifications') {
@@ -269,71 +344,97 @@ export default function MainNavigator() {
         tabBarInactiveTintColor: 'gray',
       })}
     >
-      <Tab.Screen
-        name="Dashboard"
-        component={DashboardScreen}
-        options={{ title: 'Dashboard' }}
-      />
-      {(isFrontDesk || !isHousekeeping && !isMaintenance) && (
-        <>
-          <Tab.Screen
-            name="Reservations"
-            component={ReservationsNavigator}
-            options={{ headerShown: false }}
-          />
-          <Tab.Screen
-            name="Guests"
-            component={GuestsNavigator}
-            options={{ headerShown: false }}
-          />
-          <Tab.Screen
-            name="FrontDesk"
-            component={FrontDeskNavigator}
-            options={{ headerShown: false, title: 'Front Desk' }}
-          />
-          <Tab.Screen
-            name="Rooms"
-            component={RoomsNavigator}
-            options={{ headerShown: false }}
-          />
-        </>
-      )}
-      {(isHousekeeping || !isHousekeeping && !isMaintenance) && (
+      {visibleScreens.dashboard && (
         <Tab.Screen
-          name="Housekeeping"
-          component={HousekeepingNavigator}
-          options={{ headerShown: false }}
+          name="Dashboard"
+          component={DashboardScreen}
+          options={{ title: 'Dashboard' }}
         />
       )}
-      {(isMaintenance || !isHousekeeping && !isMaintenance) && (
-        <Tab.Screen
-          name="Maintenance"
-          component={MaintenanceNavigator}
-          options={{ headerShown: false }}
-        />
-      )}
-      <Tab.Screen
-        name="Reports"
-        component={ReportsScreen}
-        options={{ title: 'Reports' }}
-      />
-      <Tab.Screen
-        name="Notifications"
-        component={NotificationsNavigator}
-        options={{ headerShown: false }}
-      />
-      {(isFrontDesk || !isHousekeeping && !isMaintenance) && (
+      {visibleScreens.properties && (
         <Tab.Screen
           name="Properties"
           component={PropertiesNavigator}
           options={{ headerShown: false }}
         />
       )}
-      <Tab.Screen
-        name="Profile"
-        component={ProfileScreen}
-        options={{ title: 'Profile' }}
-      />
+      {visibleScreens.reservations && (
+        <Tab.Screen
+          name="Reservations"
+          component={ReservationsNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.guests && (
+        <Tab.Screen
+          name="Guests"
+          component={GuestsNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.frontDesk && (
+        <Tab.Screen
+          name="FrontDesk"
+          component={FrontDeskNavigator}
+          options={{ headerShown: false, title: 'Front Desk' }}
+        />
+      )}
+      {visibleScreens.rooms && (
+        <Tab.Screen
+          name="Rooms"
+          component={RoomsNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.housekeeping && (
+        <Tab.Screen
+          name="Housekeeping"
+          component={HousekeepingNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.maintenance && (
+        <Tab.Screen
+          name="Maintenance"
+          component={MaintenanceNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.billing && (
+        <Tab.Screen
+          name="Billing"
+          component={BillingNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.pos && (
+        <Tab.Screen
+          name="POS"
+          component={POSNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.reports && (
+        <Tab.Screen
+          name="Reports"
+          component={ReportsScreen}
+          options={{ title: 'Reports' }}
+        />
+      )}
+      {visibleScreens.notifications && (
+        <Tab.Screen
+          name="Notifications"
+          component={NotificationsNavigator}
+          options={{ headerShown: false }}
+        />
+      )}
+      {visibleScreens.profile && (
+        <Tab.Screen
+          name="Profile"
+          component={ProfileScreen}
+          options={{ title: 'Profile' }}
+        />
+      )}
     </Tab.Navigator>
   );
 }

@@ -2,33 +2,105 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
+from django.utils import timezone
 from apps.billing.models import Folio, FolioCharge, Payment, ChargeCode
 from api.permissions import IsAccountantOrAbove
 from .serializers import (
-    FolioSerializer, ChargeCodeSerializer,
+    FolioSerializer, FolioListSerializer, FolioCreateSerializer,
+    ChargeCodeSerializer, ChargeCodeCreateSerializer,
     AddChargeSerializer, AddPaymentSerializer
 )
 
 
-class FolioDetailView(generics.RetrieveAPIView):
+class FolioListCreateView(generics.ListCreateAPIView):
+    """List all folios or create a new folio."""
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
-    serializer_class = FolioSerializer
-    queryset = Folio.objects.all()
-
-
-class ChargeCodeListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
-    serializer_class = ChargeCodeSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['status', 'folio_type', 'guest']
+    search_fields = ['folio_number', 'guest__first_name', 'guest__last_name']
+    ordering_fields = ['open_date', 'folio_number', 'total_charges', 'balance']
+    ordering = ['-open_date']
     
     def get_queryset(self):
-        qs = ChargeCode.objects.filter(is_active=True)
+        return Folio.objects.select_related('guest', 'reservation', 'company').all()
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return FolioCreateSerializer
+        return FolioListSerializer
+
+
+class FolioDetailView(generics.RetrieveUpdateAPIView):
+    """Retrieve or update a folio."""
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    serializer_class = FolioSerializer
+    
+    def get_queryset(self):
+        return Folio.objects.select_related('guest', 'reservation', 'company') \
+                           .prefetch_related('charges', 'payments')
+
+
+class CloseFolioView(APIView):
+    """Close/settle a folio."""
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    
+    def post(self, request, pk):
+        try:
+            folio = Folio.objects.get(pk=pk)
+        except Folio.DoesNotExist:
+            return Response({'error': 'Folio not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        category = self.request.query_params.get('category')
-        if category:
-            qs = qs.filter(category=category)
+        if folio.status != Folio.Status.OPEN:
+            return Response(
+                {'error': 'Can only close open folios'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if folio is paid
+        if folio.balance > 0:
+            return Response(
+                {'error': f'Folio has outstanding balance of {folio.balance}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        folio.status = Folio.Status.SETTLED
+        folio.close_date = timezone.now().date()
+        folio.save()
+        
+        return Response(FolioSerializer(folio).data)
+
+
+class ChargeCodeListCreateView(generics.ListCreateAPIView):
+    """List all charge codes or create a new one."""
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    filter_backends = [DjangoFilterBackend, SearchFilter]
+    filterset_fields = ['category', 'is_active']
+    search_fields = ['code', 'name']
+    
+    def get_queryset(self):
+        qs = ChargeCode.objects.all()
+        
+        # Filter active only by default
+        show_all = self.request.query_params.get('show_all')
+        if not show_all:
+            qs = qs.filter(is_active=True)
         
         return qs.order_by('category', 'name')
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return ChargeCodeCreateSerializer
+        return ChargeCodeSerializer
+
+
+class ChargeCodeDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a charge code."""
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    serializer_class = ChargeCodeCreateSerializer
+    queryset = ChargeCode.objects.all()
 
 
 class AddChargeView(APIView):

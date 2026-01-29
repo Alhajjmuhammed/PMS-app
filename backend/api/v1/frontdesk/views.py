@@ -5,10 +5,13 @@ from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
 from django.db.models import Count
 from datetime import date
+from decimal import Decimal
 from apps.reservations.models import Reservation
 from apps.rooms.models import Room
 from apps.frontdesk.models import CheckIn, CheckOut, RoomMove
+from apps.billing.models import Folio
 from api.permissions import IsFrontDeskOrAbove
+from api.v1.billing.serializers import FolioCreateSerializer
 from .serializers import (
     CheckInSerializer, CheckOutSerializer, 
     CheckInRequestSerializer, CheckOutRequestSerializer, RoomMoveSerializer
@@ -85,6 +88,33 @@ class CheckInView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
+        # Validate reservation hasn't already been checked in
+        if CheckIn.objects.filter(reservation=reservation).exists():
+            return Response(
+                {'error': 'Reservation has already been checked in'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Auto-create folio if it doesn't exist
+        folio = Folio.objects.filter(reservation=reservation, status='OPEN').first()
+        if not folio:
+            folio_data = {
+                'reservation': reservation.id,
+                'guest': reservation.guest.id,
+                'folio_type': 'STANDARD',
+                'property': reservation.property.id,
+                'currency': 'USD',
+                'balance': Decimal('0.00')
+            }
+            folio_serializer = FolioCreateSerializer(data=folio_data, context={'request': request})
+            if folio_serializer.is_valid():
+                folio = folio_serializer.save()
+            else:
+                return Response(
+                    {'error': 'Failed to create folio', 'details': folio_serializer.errors},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
         # Create check-in
         check_in = CheckIn.objects.create(
             reservation=reservation,
@@ -103,7 +133,11 @@ class CheckInView(APIView):
         room.fo_status = 'OCCUPIED'
         room.save()
         
-        return Response(CheckInSerializer(check_in).data, status=status.HTTP_201_CREATED)
+        response_data = CheckInSerializer(check_in).data
+        response_data['folio_id'] = folio.id
+        response_data['folio_number'] = folio.folio_number
+        
+        return Response(response_data, status=status.HTTP_201_CREATED)
 
 
 class CheckOutView(APIView):

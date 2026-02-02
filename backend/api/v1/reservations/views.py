@@ -4,15 +4,19 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import date, datetime
-from apps.reservations.models import Reservation, ReservationRoom
+from apps.reservations.models import Reservation, ReservationRoom, GroupBooking
 from apps.reservations.services import AvailabilityService
 from apps.rates.services import PricingService
 from apps.guests.models import Guest
 from apps.rooms.models import RoomType
 from api.permissions import IsFrontDeskOrAbove
-from .serializers import ReservationSerializer, ReservationCreateSerializer
+from .serializers import (
+    ReservationSerializer, ReservationCreateSerializer,
+    GroupBookingSerializer, GroupBookingCreateSerializer, GroupBookingUpdateSerializer
+)
 
 
 class ReservationListView(generics.ListCreateAPIView):
@@ -299,3 +303,169 @@ class CompareRatesView(APIView):
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
             )
+
+
+# ============= Group Booking Views =============
+
+class GroupBookingListCreateView(generics.ListCreateAPIView):
+    """List all group bookings or create a new one."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['hotel', 'status', 'check_in_date', 'check_out_date']
+    search_fields = ['name', 'code', 'contact_name', 'contact_email']
+    ordering_fields = ['check_in_date', 'created_at', 'rooms_blocked']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        queryset = GroupBooking.objects.select_related(
+            'hotel', 'company', 'created_by'
+        )
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return GroupBookingCreateSerializer
+        return GroupBookingSerializer
+    
+    def perform_create(self, serializer):
+        # Auto-assign property if user has one and hotel not specified
+        if self.request.user.assigned_property and 'hotel' not in serializer.validated_data:
+            serializer.save(created_by=self.request.user, hotel=self.request.user.assigned_property)
+        else:
+            serializer.save(created_by=self.request.user)
+
+
+class GroupBookingDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a group booking."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def get_queryset(self):
+        queryset = GroupBooking.objects.select_related(
+            'hotel', 'company', 'created_by'
+        )
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return GroupBookingUpdateSerializer
+        return GroupBookingSerializer
+
+
+class GroupBookingRoomPickupView(APIView):
+    """Update room pickup for a group booking."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def post(self, request, pk):
+        group_booking = get_object_or_404(GroupBooking, pk=pk)
+        
+        # Check access
+        if request.user.assigned_property:
+            if group_booking.hotel != request.user.assigned_property:
+                return Response(
+                    {'error': 'You do not have access to this resource'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Get pickup count from request
+        pickup_count = request.data.get('rooms_picked_up')
+        if pickup_count is None:
+            return Response(
+                {'error': 'rooms_picked_up is required'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            pickup_count = int(pickup_count)
+        except (ValueError, TypeError):
+            return Response(
+                {'error': 'rooms_picked_up must be a number'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Validate pickup count
+        if pickup_count < 0:
+            return Response(
+                {'error': 'rooms_picked_up cannot be negative'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        if pickup_count > group_booking.rooms_blocked:
+            return Response(
+                {'error': 'rooms_picked_up cannot exceed rooms_blocked'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Update pickup
+        group_booking.rooms_picked_up = pickup_count
+        group_booking.save()
+        
+        return Response(GroupBookingSerializer(group_booking).data)
+
+
+class GroupBookingConfirmView(APIView):
+    """Confirm a tentative group booking."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def post(self, request, pk):
+        group_booking = get_object_or_404(GroupBooking, pk=pk)
+        
+        # Check access
+        if request.user.assigned_property:
+            if group_booking.hotel != request.user.assigned_property:
+                return Response(
+                    {'error': 'You do not have access to this resource'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check if already confirmed
+        if group_booking.status == GroupBooking.Status.CONFIRMED:
+            return Response(
+                {'error': 'Group booking is already confirmed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Check if cancelled
+        if group_booking.status == GroupBooking.Status.CANCELLED:
+            return Response(
+                {'error': 'Cannot confirm cancelled group booking'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Confirm the booking
+        group_booking.status = GroupBooking.Status.CONFIRMED
+        group_booking.save()
+        
+        return Response(GroupBookingSerializer(group_booking).data)
+
+
+class GroupBookingCancelView(APIView):
+    """Cancel a group booking."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def post(self, request, pk):
+        group_booking = get_object_or_404(GroupBooking, pk=pk)
+        
+        # Check access
+        if request.user.assigned_property:
+            if group_booking.hotel != request.user.assigned_property:
+                return Response(
+                    {'error': 'You do not have access to this resource'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check if already cancelled
+        if group_booking.status == GroupBooking.Status.CANCELLED:
+            return Response(
+                {'error': 'Group booking is already cancelled'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Cancel the booking
+        group_booking.status = GroupBooking.Status.CANCELLED
+        group_booking.save()
+        
+        return Response(GroupBookingSerializer(group_booking).data)

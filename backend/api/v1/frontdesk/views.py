@@ -1,20 +1,25 @@
-from rest_framework import status
+from rest_framework import status, generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
+from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Count
 from datetime import date
 from decimal import Decimal
 from apps.reservations.models import Reservation
 from apps.rooms.models import Room
-from apps.frontdesk.models import CheckIn, CheckOut, RoomMove
+from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
 from apps.billing.models import Folio
+from apps.guests.models import Guest
 from api.permissions import IsFrontDeskOrAbove
 from api.v1.billing.serializers import FolioCreateSerializer
 from .serializers import (
     CheckInSerializer, CheckOutSerializer, 
-    CheckInRequestSerializer, CheckOutRequestSerializer, RoomMoveSerializer
+    CheckInRequestSerializer, CheckOutRequestSerializer, RoomMoveSerializer,
+    WalkInSerializer, WalkInCreateSerializer, WalkInUpdateSerializer
 )
 from api.v1.reservations.serializers import ReservationSerializer
 
@@ -335,3 +340,140 @@ class InHouseView(APIView):
             reservations = reservations.filter(hotel=property_obj)
         
         return Response(ReservationSerializer(reservations, many=True).data)
+
+
+# ============= Walk-In Views =============
+
+class WalkInListCreateView(generics.ListCreateAPIView):
+    """List all walk-ins or create a new one."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['property', 'room_type', 'is_converted', 'check_in_date']
+    search_fields = ['first_name', 'last_name', 'email', 'phone']
+    ordering_fields = ['check_in_date', 'created_at']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        queryset = WalkIn.objects.select_related(
+            'property', 'room_type', 'reservation', 'created_by'
+        )
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return WalkInCreateSerializer
+        return WalkInSerializer
+    
+    def perform_create(self, serializer):
+        # Auto-assign property if user has one and property not specified
+        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
+            serializer.save(created_by=self.request.user, property=self.request.user.assigned_property)
+        else:
+            serializer.save(created_by=self.request.user)
+
+
+class WalkInDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a walk-in."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def get_queryset(self):
+        queryset = WalkIn.objects.select_related(
+            'property', 'room_type', 'reservation', 'created_by'
+        )
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return WalkInUpdateSerializer
+        return WalkInSerializer
+    
+    def perform_destroy(self, instance):
+        # Prevent deletion if already converted
+        if instance.is_converted:
+            from rest_framework.exceptions import ValidationError
+            raise ValidationError("Cannot delete walk-in that has been converted to reservation")
+        instance.delete()
+
+
+class ConvertWalkInView(APIView):
+    """Convert a walk-in to a full reservation."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def post(self, request, pk):
+        walk_in = get_object_or_404(WalkIn, pk=pk)
+        
+        # Check access
+        if request.user.assigned_property:
+            if walk_in.property != request.user.assigned_property:
+                return Response(
+                    {'error': 'You do not have access to this resource'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check if already converted
+        if walk_in.is_converted:
+            return Response(
+                {'error': 'Walk-in has already been converted to reservation'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Create or find guest
+            guest, created = Guest.objects.get_or_create(
+                email=walk_in.email if walk_in.email else f"walkin_{walk_in.id}@temp.com",
+                defaults={
+                    'first_name': walk_in.first_name,
+                    'last_name': walk_in.last_name,
+                    'phone': walk_in.phone,
+                }
+            )
+            
+            # If guest exists, update info
+            if not created:
+                guest.first_name = walk_in.first_name
+                guest.last_name = walk_in.last_name
+                guest.phone = walk_in.phone
+                guest.save()
+            
+            # Calculate total nights and amount
+            nights = (walk_in.check_out_date - walk_in.check_in_date).days
+            total_amount = walk_in.rate_per_night * nights
+            
+            # Create reservation
+            import uuid
+            confirmation_number = f"WI{uuid.uuid4().hex[:8].upper()}"
+            
+            reservation = Reservation.objects.create(
+                confirmation_number=confirmation_number,
+                hotel=walk_in.property,
+                guest=guest,
+                check_in_date=walk_in.check_in_date,
+                check_out_date=walk_in.check_out_date,
+                adults=walk_in.adults,
+                children=walk_in.children,
+                status=Reservation.Status.CONFIRMED,
+                source=Reservation.Source.WALK_IN,
+                total_amount=total_amount,
+                special_requests=walk_in.notes
+            )
+            
+            # Link walk-in to reservation
+            walk_in.is_converted = True
+            walk_in.reservation = reservation
+            walk_in.save()
+            
+            return Response({
+                'message': 'Walk-in successfully converted to reservation',
+                'reservation': ReservationSerializer(reservation).data,
+                'walk_in': WalkInSerializer(walk_in).data
+            })
+            
+        except Exception as e:
+            return Response(
+                {'error': f'Failed to convert walk-in: {str(e)}'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )

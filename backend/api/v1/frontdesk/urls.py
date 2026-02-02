@@ -13,4 +13,9 @@ urlpatterns = [
     path('departures/', views.DeparturesView.as_view(), name='departures'),
     path('in-house/', views.InHouseView.as_view(), name='in_house'),
     path('room-move/', views.RoomMoveView.as_view(), name='room_move'),
+    
+    # Walk-Ins
+    path('walk-ins/', views.WalkInListCreateView.as_view(), name='walk_in_list'),
+    path('walk-ins/<int:pk>/', views.WalkInDetailView.as_view(), name='walk_in_detail'),
+    path('walk-ins/<int:pk>/convert/', views.ConvertWalkInView.as_view(), name='walk_in_convert'),
 ]

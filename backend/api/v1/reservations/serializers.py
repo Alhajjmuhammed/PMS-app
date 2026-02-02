@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from django.utils import timezone
 from datetime import date, timedelta
-from apps.reservations.models import Reservation, ReservationRoom
+from apps.reservations.models import Reservation, ReservationRoom, GroupBooking
 from apps.reservations.services import AvailabilityService
 from apps.guests.models import Guest
 
@@ -135,6 +135,130 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
         if adults + children > 15:
             raise serializers.ValidationError(
                 "Total occupancy exceeds maximum (15 persons)."
+            )
+        
+        return data
+
+
+# ============= Group Booking Serializers =============
+
+class GroupBookingSerializer(serializers.ModelSerializer):
+    """Serializer for group bookings."""
+    
+    hotel_name = serializers.CharField(source='hotel.name', read_only=True)
+    company_name = serializers.CharField(source='company.name', read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    nights = serializers.SerializerMethodField()
+    pickup_percentage = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = GroupBooking
+        fields = [
+            'id', 'hotel', 'hotel_name', 'name', 'code', 'contact_name',
+            'contact_email', 'contact_phone', 'company', 'company_name',
+            'check_in_date', 'check_out_date', 'cutoff_date', 'nights',
+            'rooms_blocked', 'rooms_picked_up', 'pickup_percentage',
+            'status', 'group_rate', 'deposit_required', 'notes',
+            'created_by', 'created_by_name', 'created_at', 'updated_at'
+        ]
+        read_only_fields = ['id', 'code', 'created_at', 'updated_at']
+    
+    def get_nights(self, obj):
+        """Calculate number of nights."""
+        if obj.check_in_date and obj.check_out_date:
+            delta = obj.check_out_date - obj.check_in_date
+            return delta.days
+        return 0
+    
+    def get_pickup_percentage(self, obj):
+        """Calculate pickup percentage."""
+        if obj.rooms_blocked > 0:
+            return round((obj.rooms_picked_up / obj.rooms_blocked) * 100, 2)
+        return 0
+
+
+class GroupBookingCreateSerializer(serializers.ModelSerializer):
+    """Create serializer for group bookings."""
+    
+    class Meta:
+        model = GroupBooking
+        fields = [
+            'hotel', 'name', 'contact_name', 'contact_email', 'contact_phone',
+            'company', 'check_in_date', 'check_out_date', 'cutoff_date',
+            'rooms_blocked', 'status', 'group_rate', 'deposit_required', 'notes'
+        ]
+    
+    def validate(self, data):
+        # Validate dates
+        if data['check_out_date'] <= data['check_in_date']:
+            raise serializers.ValidationError(
+                "Check-out date must be after check-in date"
+            )
+        
+        # Validate cutoff date
+        if data.get('cutoff_date'):
+            if data['cutoff_date'] > data['check_in_date']:
+                raise serializers.ValidationError(
+                    "Cutoff date must be before check-in date"
+                )
+        
+        # Validate rooms blocked
+        if data.get('rooms_blocked', 0) < 1:
+            raise serializers.ValidationError(
+                "Must block at least 1 room for group booking"
+            )
+        
+        return data
+    
+    def create(self, validated_data):
+        # Generate unique group code
+        import random
+        import string
+        hotel = validated_data['hotel']
+        prefix = hotel.code if hasattr(hotel, 'code') else 'GRP'
+        suffix = ''.join(random.choices(string.digits, k=6))
+        validated_data['code'] = f"{prefix}{suffix}"
+        
+        return super().create(validated_data)
+
+
+class GroupBookingUpdateSerializer(serializers.ModelSerializer):
+    """Update serializer for group bookings."""
+    
+    class Meta:
+        model = GroupBooking
+        fields = [
+            'name', 'contact_name', 'contact_email', 'contact_phone',
+            'company', 'check_in_date', 'check_out_date', 'cutoff_date',
+            'rooms_blocked', 'rooms_picked_up', 'status', 'group_rate',
+            'deposit_required', 'notes'
+        ]
+    
+    def validate(self, data):
+        # Validate dates if provided
+        instance = self.instance
+        check_in = data.get('check_in_date', instance.check_in_date)
+        check_out = data.get('check_out_date', instance.check_out_date)
+        
+        if check_out <= check_in:
+            raise serializers.ValidationError(
+                "Check-out date must be after check-in date"
+            )
+        
+        # Validate cutoff date
+        cutoff = data.get('cutoff_date')
+        if cutoff and cutoff > check_in:
+            raise serializers.ValidationError(
+                "Cutoff date must be before check-in date"
+            )
+        
+        # Validate picked up rooms
+        rooms_picked_up = data.get('rooms_picked_up', instance.rooms_picked_up)
+        rooms_blocked = data.get('rooms_blocked', instance.rooms_blocked)
+        
+        if rooms_picked_up > rooms_blocked:
+            raise serializers.ValidationError(
+                "Rooms picked up cannot exceed rooms blocked"
             )
         
         return data

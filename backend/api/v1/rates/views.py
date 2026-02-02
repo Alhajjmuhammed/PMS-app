@@ -1,10 +1,15 @@
 from rest_framework import generics
 from rest_framework.permissions import IsAuthenticated
-from apps.rates.models import RatePlan, Season, RoomRate, DateRate
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django_filters.rest_framework import DjangoFilterBackend
+from apps.rates.models import RatePlan, Season, RoomRate, DateRate, Package, Discount, YieldRule
 from api.permissions import IsAdminOrManager
 from .serializers import (
     RatePlanSerializer, SeasonSerializer, 
-    RoomRateSerializer, DateRateSerializer
+    RoomRateSerializer, DateRateSerializer,
+    PackageSerializer, PackageCreateSerializer,
+    DiscountSerializer, DiscountCreateSerializer,
+    YieldRuleSerializer, YieldRuleCreateSerializer
 )
 
 
@@ -112,3 +117,113 @@ class SeasonDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = SeasonSerializer
     queryset = Season.objects.all()
+
+
+# ============= Revenue Management Views =============
+
+class PackageListCreateView(generics.ListCreateAPIView):
+    """List all packages or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['property', 'rate_plan', 'is_active']
+    search_fields = ['name', 'code', 'description']
+    ordering = ['-valid_from']
+    
+    def get_queryset(self):
+        queryset = Package.objects.select_related('property', 'rate_plan')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return PackageCreateSerializer
+        return PackageSerializer
+
+
+class PackageDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a package."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def get_queryset(self):
+        queryset = Package.objects.select_related('property', 'rate_plan')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return PackageCreateSerializer
+        return PackageSerializer
+
+
+class DiscountListCreateView(generics.ListCreateAPIView):
+    """List all discounts or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['property', 'discount_type', 'is_active']
+    search_fields = ['name', 'code']
+    ordering = ['-valid_from']
+    
+    def get_queryset(self):
+        queryset = Discount.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return DiscountCreateSerializer
+        return DiscountSerializer
+
+
+class DiscountDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a discount."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def get_queryset(self):
+        queryset = Discount.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return DiscountCreateSerializer
+        return DiscountSerializer
+
+
+class YieldRuleListCreateView(generics.ListCreateAPIView):
+    """List all yield rules or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['property', 'trigger_type', 'is_active']
+    search_fields = ['name']
+    ordering = ['-priority']
+    
+    def get_queryset(self):
+        queryset = YieldRule.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return YieldRuleCreateSerializer
+        return YieldRuleSerializer
+
+
+class YieldRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a yield rule."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def get_queryset(self):
+        queryset = YieldRule.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return YieldRuleCreateSerializer
+        return YieldRuleSerializer

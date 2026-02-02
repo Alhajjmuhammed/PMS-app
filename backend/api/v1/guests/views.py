@@ -4,13 +4,16 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Q
+from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
-from apps.guests.models import Guest, GuestDocument, Company
+from apps.guests.models import Guest, GuestDocument, Company, LoyaltyProgram, LoyaltyTier, LoyaltyTransaction
 from api.permissions import IsFrontDeskOrAbove
 from .serializers import (
     GuestSerializer, GuestCreateSerializer, GuestDocumentSerializer,
-    CompanySerializer, CompanyListSerializer
+    CompanySerializer, CompanyListSerializer,
+    LoyaltyProgramSerializer, LoyaltyProgramCreateSerializer,
+    LoyaltyTierSerializer, LoyaltyTransactionSerializer,
+    LoyaltyTransactionCreateSerializer
 )
 
 
@@ -123,3 +126,141 @@ class CompanyDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CompanySerializer
     queryset = Company.objects.all()
     lookup_url_kwarg = 'pk'
+
+
+# ============= Loyalty Program Views =============
+
+class LoyaltyProgramListCreateView(generics.ListCreateAPIView):
+    """List all loyalty programs or create a new one."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['property', 'is_active']
+    search_fields = ['name']
+    ordering = ['-id']
+    
+    def get_queryset(self):
+        queryset = LoyaltyProgram.objects.select_related('property').prefetch_related('tiers')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return LoyaltyProgramCreateSerializer
+        return LoyaltyProgramSerializer
+
+
+class LoyaltyProgramDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a loyalty program."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def get_queryset(self):
+        queryset = LoyaltyProgram.objects.select_related('property').prefetch_related('tiers')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return LoyaltyProgramCreateSerializer
+        return LoyaltyProgramSerializer
+
+
+class LoyaltyTierListCreateView(generics.ListCreateAPIView):
+    """List all loyalty tiers or create a new one."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    serializer_class = LoyaltyTierSerializer
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['program']
+    ordering = ['min_points']
+    
+    def get_queryset(self):
+        queryset = LoyaltyTier.objects.select_related('program')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(program__property=self.request.user.assigned_property)
+        return queryset
+
+
+class LoyaltyTierDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a loyalty tier."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    serializer_class = LoyaltyTierSerializer
+    
+    def get_queryset(self):
+        queryset = LoyaltyTier.objects.select_related('program')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(program__property=self.request.user.assigned_property)
+        return queryset
+
+
+class LoyaltyTransactionListCreateView(generics.ListCreateAPIView):
+    """List all loyalty transactions or create a new one."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['guest', 'transaction_type']
+    search_fields = ['guest__first_name', 'guest__last_name', 'description', 'reference']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        return LoyaltyTransaction.objects.select_related('guest')
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return LoyaltyTransactionCreateSerializer
+        return LoyaltyTransactionSerializer
+
+
+class LoyaltyTransactionDetailView(generics.RetrieveAPIView):
+    """Retrieve a loyalty transaction."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    serializer_class = LoyaltyTransactionSerializer
+    queryset = LoyaltyTransaction.objects.select_related('guest')
+
+
+class GuestLoyaltyBalanceView(APIView):
+    """Get guest's loyalty points balance."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    
+    def get(self, request, guest_id):
+        guest = get_object_or_404(Guest, pk=guest_id)
+        
+        # Get last transaction for current balance
+        last_transaction = LoyaltyTransaction.objects.filter(
+            guest=guest
+        ).order_by('-created_at').first()
+        
+        balance = last_transaction.balance_after if last_transaction else 0
+        
+        # Get total earned and redeemed
+        stats = LoyaltyTransaction.objects.filter(guest=guest).aggregate(
+            total_earned=Sum('points', filter=Q(transaction_type='EARN')),
+            total_redeemed=Sum('points', filter=Q(transaction_type='REDEEM'))
+        )
+        
+        # Determine tier
+        tier = None
+        if balance > 0:
+            tier_obj = LoyaltyTier.objects.filter(
+                min_points__lte=balance
+            ).order_by('-min_points').first()
+            
+            if tier_obj:
+                tier = {
+                    'name': tier_obj.name,
+                    'min_points': tier_obj.min_points,
+                    'discount_percentage': float(tier_obj.discount_percentage),
+                    'benefits': tier_obj.benefits
+                }
+        
+        return Response({
+            'guest_id': guest.id,
+            'guest_name': guest.full_name,
+            'current_balance': balance,
+            'total_earned': stats['total_earned'] or 0,
+            'total_redeemed': abs(stats['total_redeemed'] or 0),
+            'current_tier': tier,
+            'recent_transactions': LoyaltyTransactionSerializer(
+                LoyaltyTransaction.objects.filter(guest=guest)[:10],
+                many=True
+            ).data
+        })

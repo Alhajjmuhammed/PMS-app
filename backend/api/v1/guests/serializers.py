@@ -1,7 +1,7 @@
 from rest_framework import serializers
 from datetime import date
 import re
-from apps.guests.models import Guest, GuestPreference, GuestDocument, Company
+from apps.guests.models import Guest, GuestPreference, GuestDocument, Company, LoyaltyProgram, LoyaltyTier, LoyaltyTransaction
 
 
 class GuestPreferenceSerializer(serializers.ModelSerializer):
@@ -201,3 +201,114 @@ class CompanyListSerializer(serializers.ModelSerializer):
             'id', 'name', 'code', 'company_type', 'contact_person',
             'email', 'phone', 'is_active', 'credit_limit', 'discount_percentage'
         ]
+
+
+# ============= Loyalty Program Serializers =============
+
+class LoyaltyTierSerializer(serializers.ModelSerializer):
+    """Serializer for loyalty tiers."""
+    
+    class Meta:
+        model = LoyaltyTier
+        fields = [
+            'id', 'program', 'name', 'min_points', 'benefits',
+            'discount_percentage'
+        ]
+        read_only_fields = ['id']
+
+
+class LoyaltyProgramSerializer(serializers.ModelSerializer):
+    """Serializer for loyalty programs."""
+    
+    property_name = serializers.CharField(source='property.name', read_only=True)
+    tiers = LoyaltyTierSerializer(many=True, read_only=True)
+    tier_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = LoyaltyProgram
+        fields = [
+            'id', 'property', 'property_name', 'name', 'description',
+            'points_per_currency', 'is_active', 'tiers', 'tier_count'
+        ]
+        read_only_fields = ['id']
+    
+    def get_tier_count(self, obj):
+        """Get number of tiers."""
+        return obj.tiers.count()
+
+
+class LoyaltyProgramCreateSerializer(serializers.ModelSerializer):
+    """Create serializer for loyalty programs."""
+    
+    class Meta:
+        model = LoyaltyProgram
+        fields = ['property', 'name', 'description', 'points_per_currency', 'is_active']
+    
+    def validate_points_per_currency(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "Points per currency must be greater than zero"
+            )
+        return value
+
+
+class LoyaltyTransactionSerializer(serializers.ModelSerializer):
+    """Serializer for loyalty transactions."""
+    
+    guest_name = serializers.CharField(source='guest.full_name', read_only=True)
+    guest_email = serializers.CharField(source='guest.email', read_only=True)
+    
+    class Meta:
+        model = LoyaltyTransaction
+        fields = [
+            'id', 'guest', 'guest_name', 'guest_email', 'transaction_type',
+            'points', 'description', 'reference', 'balance_after', 'created_at'
+        ]
+        read_only_fields = ['id', 'created_at']
+
+
+class LoyaltyTransactionCreateSerializer(serializers.ModelSerializer):
+    """Create serializer for loyalty transactions."""
+    
+    class Meta:
+        model = LoyaltyTransaction
+        fields = [
+            'guest', 'transaction_type', 'points', 'description', 'reference'
+        ]
+    
+    def validate_points(self, value):
+        transaction_type = self.initial_data.get('transaction_type')
+        
+        if transaction_type == 'REDEEM' and value > 0:
+            raise serializers.ValidationError(
+                "Redeem transactions must have negative points"
+            )
+        
+        if transaction_type == 'EARN' and value < 0:
+            raise serializers.ValidationError(
+                "Earn transactions must have positive points"
+            )
+        
+        return value
+    
+    def create(self, validated_data):
+        guest = validated_data['guest']
+        points = validated_data['points']
+        
+        # Calculate new balance
+        last_transaction = LoyaltyTransaction.objects.filter(
+            guest=guest
+        ).order_by('-created_at').first()
+        
+        current_balance = last_transaction.balance_after if last_transaction else 0
+        new_balance = current_balance + points
+        
+        # Prevent negative balance for redeems
+        if new_balance < 0:
+            raise serializers.ValidationError(
+                f"Insufficient points. Current balance: {current_balance}"
+            )
+        
+        validated_data['balance_after'] = new_balance
+        
+        return super().create(validated_data)

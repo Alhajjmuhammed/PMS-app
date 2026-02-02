@@ -43,36 +43,6 @@ class FolioDetailView(generics.RetrieveUpdateAPIView):
                            .prefetch_related('charges', 'payments')
 
 
-class CloseFolioView(APIView):
-    """Close/settle a folio."""
-    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
-    
-    def post(self, request, pk):
-        try:
-            folio = Folio.objects.get(pk=pk)
-        except Folio.DoesNotExist:
-            return Response({'error': 'Folio not found'}, status=status.HTTP_404_NOT_FOUND)
-        
-        if folio.status != Folio.Status.OPEN:
-            return Response(
-                {'error': 'Can only close open folios'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Check if folio is paid
-        if folio.balance > 0:
-            return Response(
-                {'error': f'Folio has outstanding balance of {folio.balance}'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        folio.status = Folio.Status.SETTLED
-        folio.close_date = timezone.now().date()
-        folio.save()
-        
-        return Response(FolioSerializer(folio).data)
-
-
 class ChargeCodeListCreateView(generics.ListCreateAPIView):
     """List all charge codes or create a new one."""
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]

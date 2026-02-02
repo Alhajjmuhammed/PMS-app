@@ -1,13 +1,23 @@
 from rest_framework.views import APIView
+from rest_framework import generics, status
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
+from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Avg, Count
+from django.utils import timezone
 from datetime import date, timedelta
-from apps.reports.models import DailyStatistics
+from apps.reports.models import DailyStatistics, MonthlyStatistics, NightAudit, AuditLog
 from apps.reservations.models import Reservation
 from apps.rooms.models import Room
-from apps.billing.models import Payment
+from apps.billing.models import Payment, Folio
 from api.permissions import IsAdminOrManager
+from .serializers import (
+    MonthlyStatisticsSerializer, MonthlyStatisticsCreateSerializer,
+    NightAuditSerializer, NightAuditCreateSerializer, NightAuditUpdateSerializer,
+    StartNightAuditSerializer, AuditLogSerializer
+)
 
 
 class DashboardStatsView(APIView):
@@ -334,3 +344,350 @@ class DailyReportView(APIView):
                 'date': target_date,
                 'error': str(e)
             }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============= Monthly Statistics Views =============
+
+class MonthlyStatisticsListCreateView(generics.ListCreateAPIView):
+    """List all monthly statistics or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    filter_backends = [DjangoFilterBackend, OrderingFilter]
+    filterset_fields = ['property', 'year', 'month']
+    ordering_fields = ['year', 'month', 'total_revenue']
+    ordering = ['-year', '-month']
+    
+    def get_queryset(self):
+        queryset = MonthlyStatistics.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return MonthlyStatisticsCreateSerializer
+        return MonthlyStatisticsSerializer
+
+
+class MonthlyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete monthly statistics."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def get_queryset(self):
+        queryset = MonthlyStatistics.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return MonthlyStatisticsCreateSerializer
+        return MonthlyStatisticsSerializer
+
+
+# ============= Night Audit Views =============
+
+class NightAuditListCreateView(generics.ListCreateAPIView):
+    """List all night audits or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['property', 'status', 'business_date']
+    search_fields = ['business_date', 'notes']
+    ordering_fields = ['business_date', 'completed_at']
+    ordering = ['-business_date']
+    
+    def get_queryset(self):
+        queryset = NightAudit.objects.select_related(
+            'property', 'completed_by'
+        ).prefetch_related('logs')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return NightAuditCreateSerializer
+        return NightAuditSerializer
+    
+    def perform_create(self, serializer):
+        # If no property specified and user has assigned property, use it
+        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
+            serializer.save(property=self.request.user.assigned_property)
+        else:
+            serializer.save()
+
+
+class NightAuditDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a night audit."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def get_queryset(self):
+        queryset = NightAudit.objects.select_related(
+            'property', 'completed_by'
+        ).prefetch_related('logs')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return NightAuditUpdateSerializer
+        return NightAuditSerializer
+
+
+class StartNightAuditView(APIView):
+    """Start the night audit process."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def post(self, request, pk):
+        night_audit = get_object_or_404(NightAudit, pk=pk)
+        
+        # Check if user has access
+        if request.user.assigned_property:
+            if night_audit.property != request.user.assigned_property:
+                return Response(
+                    {'error': 'You do not have access to this resource'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check if already started
+        if night_audit.status != NightAudit.Status.PENDING:
+            return Response(
+                {'error': f'Audit is already {night_audit.status.lower()}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        serializer = StartNightAuditSerializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        
+        # Start the audit
+        night_audit.status = NightAudit.Status.IN_PROGRESS
+        night_audit.started_at = timezone.now()
+        night_audit.save()
+        
+        # Create initial log
+        AuditLog.objects.create(
+            night_audit=night_audit,
+            step='START',
+            message=f'Night audit started by {request.user.get_full_name()}'
+        )
+        
+        # If auto_process is True, run the audit steps
+        if serializer.validated_data.get('auto_process', True):
+            self._run_audit_steps(night_audit, request.user)
+        
+        return Response(NightAuditSerializer(night_audit).data)
+    
+    def _run_audit_steps(self, night_audit, user):
+        """Run automatic audit steps."""
+        property_obj = night_audit.property
+        business_date = night_audit.business_date
+        
+        try:
+            # Step 1: Process no-shows
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='NO_SHOWS',
+                message='Processing no-show reservations'
+            )
+            # TODO: Implement no-show processing logic
+            night_audit.no_shows_processed = True
+            night_audit.save()
+            
+            # Step 2: Post room rates
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='ROOM_RATES',
+                message='Posting room rates for in-house guests'
+            )
+            # TODO: Implement room rate posting logic
+            night_audit.room_rates_posted = True
+            night_audit.save()
+            
+            # Step 3: Check departures
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='DEPARTURES',
+                message='Checking departure folios'
+            )
+            # TODO: Implement departure checking logic
+            night_audit.departures_checked = True
+            night_audit.save()
+            
+            # Step 4: Verify settled folios
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='FOLIOS',
+                message='Verifying all folios are settled'
+            )
+            # TODO: Implement folio verification logic
+            night_audit.folios_settled = True
+            night_audit.save()
+            
+            # Step 5: Calculate totals
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='TOTALS',
+                message='Calculating revenue totals'
+            )
+            
+            # Get payments for the business date
+            payments = Payment.objects.filter(
+                folio__property=property_obj,
+                payment_date__date=business_date
+            ).aggregate(total=Sum('amount'))
+            
+            # Get folios for revenue calculation
+            folios = Folio.objects.filter(
+                property=property_obj,
+                created_at__date=business_date
+            )
+            
+            room_revenue = folios.aggregate(total=Sum('room_charges'))['total'] or 0
+            fb_revenue = folios.aggregate(total=Sum('fb_charges'))['total'] or 0
+            other_revenue = folios.aggregate(total=Sum('other_charges'))['total'] or 0
+            
+            night_audit.room_revenue = room_revenue
+            night_audit.fb_revenue = fb_revenue
+            night_audit.other_revenue = other_revenue
+            night_audit.total_revenue = room_revenue + fb_revenue + other_revenue
+            night_audit.payments_collected = payments['total'] or 0
+            
+            # Get room counts
+            reservations = Reservation.objects.filter(
+                property=property_obj,
+                check_in_date__lte=business_date,
+                check_out_date__gt=business_date
+            )
+            night_audit.rooms_sold = reservations.count()
+            night_audit.arrivals_count = reservations.filter(check_in_date=business_date).count()
+            
+            # Tomorrow's departures
+            next_date = business_date + timedelta(days=1)
+            night_audit.departures_count = Reservation.objects.filter(
+                property=property_obj,
+                check_out_date=next_date
+            ).count()
+            
+            night_audit.save()
+            
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='COMPLETE',
+                message='Night audit completed successfully'
+            )
+            
+        except Exception as e:
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='ERROR',
+                message=f'Error during audit: {str(e)}',
+                is_error=True
+            )
+
+
+class CompleteNightAuditView(APIView):
+    """Complete the night audit and roll to next business date."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def post(self, request, pk):
+        night_audit = get_object_or_404(NightAudit, pk=pk)
+        
+        # Check if user has access
+        if request.user.assigned_property:
+            if night_audit.property != request.user.assigned_property:
+                return Response(
+                    {'error': 'You do not have access to this resource'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check if audit is in progress
+        if night_audit.status != NightAudit.Status.IN_PROGRESS:
+            return Response(
+                {'error': 'Audit must be in progress to complete'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Verify all checks are done
+        if not all([
+            night_audit.no_shows_processed,
+            night_audit.room_rates_posted,
+            night_audit.folios_settled,
+            night_audit.departures_checked
+        ]):
+            return Response(
+                {'error': 'All audit checks must be completed before finishing'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Complete the audit
+        night_audit.status = NightAudit.Status.COMPLETED
+        night_audit.completed_at = timezone.now()
+        night_audit.completed_by = request.user
+        night_audit.save()
+        
+        AuditLog.objects.create(
+            night_audit=night_audit,
+            step='FINALIZED',
+            message=f'Night audit finalized by {request.user.get_full_name()}'
+        )
+        
+        # TODO: Roll business date forward
+        # TODO: Create daily statistics record
+        
+        return Response(NightAuditSerializer(night_audit).data)
+
+
+class RollbackNightAuditView(APIView):
+    """Rollback a completed night audit."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def post(self, request, pk):
+        night_audit = get_object_or_404(NightAudit, pk=pk)
+        
+        # Check if user has access
+        if request.user.assigned_property:
+            if night_audit.property != request.user.assigned_property:
+                return Response(
+                    {'error': 'You do not have access to this resource'},
+                    status=status.HTTP_403_FORBIDDEN
+                )
+        
+        # Check if audit is completed
+        if night_audit.status != NightAudit.Status.COMPLETED:
+            return Response(
+                {'error': 'Only completed audits can be rolled back'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        # Rollback the audit
+        night_audit.status = NightAudit.Status.ROLLED_BACK
+        night_audit.save()
+        
+        AuditLog.objects.create(
+            night_audit=night_audit,
+            step='ROLLBACK',
+            message=f'Night audit rolled back by {request.user.get_full_name()}'
+        )
+        
+        # TODO: Reverse any business date changes
+        # TODO: Mark daily statistics as invalid
+        
+        return Response(NightAuditSerializer(night_audit).data)
+
+
+class AuditLogListView(generics.ListAPIView):
+    """List audit logs for a night audit."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = AuditLogSerializer
+    
+    def get_queryset(self):
+        night_audit_id = self.kwargs['night_audit_id']
+        queryset = AuditLog.objects.filter(night_audit_id=night_audit_id)
+        
+        # Check property access
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(
+                night_audit__property=self.request.user.assigned_property
+            )
+        
+        return queryset

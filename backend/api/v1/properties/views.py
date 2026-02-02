@@ -5,11 +5,12 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from apps.properties.models import Property, SystemSetting, Building, Floor
-from api.permissions import CanManageProperties
+from apps.properties.models import Property, SystemSetting, Building, Floor, Department, PropertyAmenity, TaxConfiguration
+from api.permissions import CanManageProperties, IsAdminOrManager
 from .serializers import (
     PropertySerializer, SystemSettingSerializer,
-    BuildingSerializer, BuildingListSerializer, FloorSerializer
+    BuildingSerializer, BuildingListSerializer, FloorSerializer,
+    DepartmentSerializer, PropertyAmenitySerializer, TaxConfigurationSerializer
 )
 
 
@@ -136,3 +137,142 @@ class FloorDetailView(generics.RetrieveUpdateDestroyAPIView):
             queryset = queryset.filter(building__property=self.request.user.assigned_property)
         
         return queryset
+
+
+class DepartmentListCreateView(generics.ListCreateAPIView):
+    """List all departments or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = DepartmentSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_active']
+    search_fields = ['name', 'code', 'description']
+    ordering_fields = ['name', 'code']
+    ordering = ['name']
+    
+    def get_queryset(self):
+        queryset = Department.objects.select_related('property', 'manager')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def perform_create(self, serializer):
+        # Auto-set property from user if not provided
+        if 'property' not in serializer.validated_data and self.request.user.assigned_property:
+            serializer.save(property=self.request.user.assigned_property)
+        else:
+            serializer.save()
+
+
+class DepartmentDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a department."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = DepartmentSerializer
+    
+    def get_queryset(self):
+        queryset = Department.objects.select_related('property', 'manager')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+
+
+class DepartmentStaffView(generics.ListAPIView):
+    """Get all staff in a department."""
+    permission_classes = [IsAuthenticated]
+    
+    def get(self, request, pk):
+        from django.contrib.auth import get_user_model
+        from api.v1.auth.serializers import UserSerializer
+        
+        User = get_user_model()
+        staff = User.objects.filter(
+            department_id=pk,
+            assigned_property=request.user.assigned_property
+        ).select_related('assigned_property', 'department')
+        
+        serializer = UserSerializer(staff, many=True)
+        return Response(serializer.data)
+
+
+class PropertyAmenityListCreateView(generics.ListCreateAPIView):
+    """List all property amenities or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = PropertyAmenitySerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['category', 'is_chargeable']
+    search_fields = ['name', 'description']
+    ordering_fields = ['name', 'category', 'price']
+    ordering = ['category', 'name']
+    
+    def get_queryset(self):
+        queryset = PropertyAmenity.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def perform_create(self, serializer):
+        # Auto-set property from user if not provided
+        if 'property' not in serializer.validated_data and self.request.user.assigned_property:
+            serializer.save(property=self.request.user.assigned_property)
+        else:
+            serializer.save()
+
+
+class PropertyAmenityDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a property amenity."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = PropertyAmenitySerializer
+    
+    def get_queryset(self):
+        queryset = PropertyAmenity.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+
+
+class TaxConfigurationListCreateView(generics.ListCreateAPIView):
+    """List all tax configurations or create a new one."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = TaxConfigurationSerializer
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['is_active', 'applies_to_room', 'applies_to_services']
+    search_fields = ['name', 'code']
+    ordering_fields = ['name', 'code', 'rate']
+    ordering = ['name']
+    
+    def get_queryset(self):
+        queryset = TaxConfiguration.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def perform_create(self, serializer):
+        # Auto-set property from user if not provided
+        if 'property' not in serializer.validated_data and self.request.user.assigned_property:
+            serializer.save(property=self.request.user.assigned_property)
+        else:
+            serializer.save()
+
+
+class TaxConfigurationDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a tax configuration."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    serializer_class = TaxConfigurationSerializer
+    
+    def get_queryset(self):
+        queryset = TaxConfiguration.objects.select_related('property')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+
+
+class ActiveTaxesView(generics.ListAPIView):
+    """Get all active tax configurations for the property."""
+    permission_classes = [IsAuthenticated]
+    serializer_class = TaxConfigurationSerializer
+    
+    def get_queryset(self):
+        return TaxConfiguration.objects.filter(
+            property=self.request.user.assigned_property,
+            is_active=True
+        )
+

@@ -7,8 +7,9 @@ from django.urls import path, include
 app_name = 'api_v1'
 
 urlpatterns = [
-    # Authentication
+    # Authentication & Accounts
     path('auth/', include('api.v1.auth.urls')),
+    path('accounts/', include('api.v1.accounts.urls')),
     
     # Core modules
     path('properties/', include('api.v1.properties.urls')),

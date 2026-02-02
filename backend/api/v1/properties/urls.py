@@ -16,4 +16,19 @@ urlpatterns = [
     # Floor endpoints
     path('floors/', views.FloorListCreateView.as_view(), name='floor_list'),
     path('floors/<int:pk>/', views.FloorDetailView.as_view(), name='floor_detail'),
+    
+    # Department endpoints
+    path('departments/', views.DepartmentListCreateView.as_view(), name='department_list'),
+    path('departments/<int:pk>/', views.DepartmentDetailView.as_view(), name='department_detail'),
+    path('departments/<int:pk>/staff/', views.DepartmentStaffView.as_view(), name='department_staff'),
+    
+    # Property Amenity endpoints
+    path('amenities/', views.PropertyAmenityListCreateView.as_view(), name='amenity_list'),
+    path('amenities/<int:pk>/', views.PropertyAmenityDetailView.as_view(), name='amenity_detail'),
+    
+    # Tax Configuration endpoints
+    path('taxes/', views.TaxConfigurationListCreateView.as_view(), name='tax_list'),
+    path('taxes/<int:pk>/', views.TaxConfigurationDetailView.as_view(), name='tax_detail'),
+    path('taxes/active/', views.ActiveTaxesView.as_view(), name='tax_active'),
 ]
+

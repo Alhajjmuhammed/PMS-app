@@ -1,5 +1,6 @@
 from django.urls import path
 from . import views
+from . import cashier_shift_views
 
 app_name = 'billing'
 
@@ -24,4 +25,14 @@ urlpatterns = [
     # Payment endpoints
     path('payments/', views.PaymentListView.as_view(), name='payment_list'),
     path('payments/<int:pk>/', views.PaymentDetailView.as_view(), name='payment_detail'),
+    
+    # Cashier Shift endpoints
+    path('cashier-shifts/', cashier_shift_views.CashierShiftListView.as_view(), name='shift_list'),
+    path('cashier-shifts/<int:pk>/', cashier_shift_views.CashierShiftDetailView.as_view(), name='shift_detail'),
+    path('cashier-shifts/open/', cashier_shift_views.OpenCashierShiftView.as_view(), name='shift_open'),
+    path('cashier-shifts/<int:pk>/close/', cashier_shift_views.CloseCashierShiftView.as_view(), name='shift_close'),
+    path('cashier-shifts/<int:pk>/reconcile/', cashier_shift_views.ReconcileCashierShiftView.as_view(), name='shift_reconcile'),
+    path('cashier-shifts/<int:pk>/summary/', cashier_shift_views.CashierShiftSummaryView.as_view(), name='shift_summary'),
+    path('cashier-shifts/current/', cashier_shift_views.CurrentShiftView.as_view(), name='shift_current'),
 ]
+

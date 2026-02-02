@@ -174,6 +174,7 @@ class GuestDocument(models.Model):
     class Meta:
         verbose_name = _('guest document')
         verbose_name_plural = _('guest documents')
+        ordering = ['-issue_date']  # Fix: Add default ordering to prevent pagination warning
     
     def __str__(self):
         return f"{self.guest}: {self.document_type}"

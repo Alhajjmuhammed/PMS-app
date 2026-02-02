@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.properties.models import Property, Building, Floor, SystemSetting
+from apps.properties.models import Property, Building, Floor, SystemSetting, Department, PropertyAmenity, TaxConfiguration
 
 
 class FloorSerializer(serializers.ModelSerializer):
@@ -124,3 +124,99 @@ class SystemSettingSerializer(serializers.ModelSerializer):
             'extra_settings', 'updated_at'
         ]
         read_only_fields = ['id', 'updated_at']
+
+
+class DepartmentSerializer(serializers.ModelSerializer):
+    """Serializer for Department model."""
+    property_name = serializers.CharField(source='property.name', read_only=True)
+    manager_name = serializers.SerializerMethodField()
+    staff_count = serializers.SerializerMethodField()
+    
+    class Meta:
+        model = Department
+        fields = [
+            'id', 'property', 'property_name', 'name', 'code',
+            'description', 'manager', 'manager_name', 'staff_count', 'is_active'
+        ]
+        read_only_fields = ['id']
+    
+    def get_manager_name(self, obj):
+        return obj.manager.get_full_name() if obj.manager else None
+    
+    def get_staff_count(self, obj):
+        return obj.users.count()
+    
+    def validate(self, data):
+        """Check uniqueness of department code within property."""
+        property_obj = data.get('property')
+        code = data.get('code')
+        
+        if property_obj and code:
+            instance = self.instance
+            qs = Department.objects.filter(property=property_obj, code=code)
+            if instance:
+                qs = qs.exclude(pk=instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'code': f"Department with code '{code}' already exists in this property."
+                })
+        
+        return data
+
+
+class PropertyAmenitySerializer(serializers.ModelSerializer):
+    """Serializer for PropertyAmenity model."""
+    property_name = serializers.CharField(source='property.name', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    
+    class Meta:
+        model = PropertyAmenity
+        fields = [
+            'id', 'property', 'property_name', 'name', 'category',
+            'category_display', 'description', 'icon',
+            'is_chargeable', 'price'
+        ]
+        read_only_fields = ['id']
+    
+    def validate_price(self, value):
+        """Validate price is non-negative."""
+        if value < 0:
+            raise serializers.ValidationError("Price cannot be negative.")
+        return value
+
+
+class TaxConfigurationSerializer(serializers.ModelSerializer):
+    """Serializer for TaxConfiguration model."""
+    property_name = serializers.CharField(source='property.name', read_only=True)
+    
+    class Meta:
+        model = TaxConfiguration
+        fields = [
+            'id', 'property', 'property_name', 'name', 'code', 'rate',
+            'is_percentage', 'applies_to_room', 'applies_to_services', 'is_active'
+        ]
+        read_only_fields = ['id']
+    
+    def validate_rate(self, value):
+        """Validate tax rate."""
+        if value < 0 or value > 100:
+            raise serializers.ValidationError("Tax rate must be between 0 and 100.")
+        return value
+    
+    def validate(self, data):
+        """Check uniqueness of tax code within property."""
+        property_obj = data.get('property')
+        code = data.get('code')
+        
+        if property_obj and code:
+            instance = self.instance
+            qs = TaxConfiguration.objects.filter(property=property_obj, code=code)
+            if instance:
+                qs = qs.exclude(pk=instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'code': f"Tax with code '{code}' already exists in this property."
+                })
+        
+        return data
+

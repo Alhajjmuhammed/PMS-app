@@ -3,11 +3,21 @@ from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.utils import timezone
+from django_filters.rest_framework import DjangoFilterBackend
+from rest_framework.filters import SearchFilter, OrderingFilter
 from datetime import date
-from apps.housekeeping.models import HousekeepingTask, RoomInspection
+from apps.housekeeping.models import (
+    HousekeepingTask, RoomInspection, AmenityInventory,
+    LinenInventory, StockMovement
+)
 from apps.rooms.models import Room
-from api.permissions import IsHousekeepingStaff
-from .serializers import HousekeepingTaskSerializer, TaskUpdateSerializer
+from api.permissions import IsHousekeepingStaff, IsAdminOrManager
+from .serializers import (
+    HousekeepingTaskSerializer, TaskUpdateSerializer,
+    AmenityInventorySerializer, AmenityInventoryCreateSerializer,
+    LinenInventorySerializer, LinenInventoryCreateSerializer,
+    StockMovementSerializer, StockMovementCreateSerializer
+)
 
 
 class TaskListView(generics.ListCreateAPIView):
@@ -174,3 +184,125 @@ class UpdateRoomStatusView(APIView):
         room.save()
         
         return Response({'message': 'Room status updated', 'status': new_status})
+
+
+# ============= Inventory Management Views =============
+
+class AmenityInventoryListCreateView(generics.ListCreateAPIView):
+    """List all amenity inventory items or create a new one."""
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['hotel', 'category']
+    search_fields = ['name', 'code']
+    ordering = ['name']
+    
+    def get_queryset(self):
+        queryset = AmenityInventory.objects.select_related('hotel')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
+        
+        # Filter by low stock
+        low_stock = self.request.query_params.get('low_stock')
+        if low_stock == 'true':
+            queryset = [item for item in queryset if item.quantity <= item.reorder_level]
+        
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return AmenityInventoryCreateSerializer
+        return AmenityInventorySerializer
+
+
+class AmenityInventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete an amenity inventory item."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def get_queryset(self):
+        queryset = AmenityInventory.objects.select_related('hotel')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return AmenityInventoryCreateSerializer
+        return AmenityInventorySerializer
+
+
+class LinenInventoryListCreateView(generics.ListCreateAPIView):
+    """List all linen inventory items or create a new one."""
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['hotel', 'linen_type']
+    search_fields = ['linen_type']
+    ordering = ['linen_type']
+    
+    def get_queryset(self):
+        queryset = LinenInventory.objects.select_related('hotel')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
+        
+        # Filter by low stock
+        low_stock = self.request.query_params.get('low_stock')
+        if low_stock == 'true':
+            queryset = [item for item in queryset if item.quantity_available <= item.reorder_level]
+        
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return LinenInventoryCreateSerializer
+        return LinenInventorySerializer
+
+
+class LinenInventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a linen inventory item."""
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    
+    def get_queryset(self):
+        queryset = LinenInventory.objects.select_related('hotel')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return LinenInventoryCreateSerializer
+        return LinenInventorySerializer
+
+
+class StockMovementListCreateView(generics.ListCreateAPIView):
+    """List all stock movements or create a new one."""
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['property', 'movement_type', 'amenity_inventory', 'linen_inventory']
+    search_fields = ['reference', 'reason']
+    ordering = ['-created_at']
+    
+    def get_queryset(self):
+        queryset = StockMovement.objects.select_related(
+            'property', 'amenity_inventory', 'linen_inventory', 'created_by'
+        )
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return StockMovementCreateSerializer
+        return StockMovementSerializer
+
+
+class StockMovementDetailView(generics.RetrieveAPIView):
+    """Retrieve a stock movement record."""
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
+    serializer_class = StockMovementSerializer
+    
+    def get_queryset(self):
+        queryset = StockMovement.objects.select_related(
+            'property', 'amenity_inventory', 'linen_inventory', 'created_by'
+        )
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
+        return queryset

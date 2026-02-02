@@ -6,10 +6,11 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Q, Sum
 from django.shortcuts import get_object_or_404
-from apps.guests.models import Guest, GuestDocument, Company, LoyaltyProgram, LoyaltyTier, LoyaltyTransaction
+from apps.guests.models import Guest, GuestDocument, GuestPreference, Company, LoyaltyProgram, LoyaltyTier, LoyaltyTransaction
 from api.permissions import IsFrontDeskOrAbove
 from .serializers import (
     GuestSerializer, GuestCreateSerializer, GuestDocumentSerializer,
+    GuestPreferenceSerializer, GuestPreferenceCreateSerializer,
     CompanySerializer, CompanyListSerializer,
     LoyaltyProgramSerializer, LoyaltyProgramCreateSerializer,
     LoyaltyTierSerializer, LoyaltyTransactionSerializer,
@@ -264,3 +265,44 @@ class GuestLoyaltyBalanceView(APIView):
                 many=True
             ).data
         })
+
+
+# ============= Guest Preferences Views =============
+
+class GuestPreferenceListCreateView(generics.ListCreateAPIView):
+    """List all guest preferences or create a new one."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['guest', 'category']
+    search_fields = ['preference']
+    ordering = ['category', 'guest__last_name']
+    
+    def get_queryset(self):
+        return GuestPreference.objects.select_related('guest')
+    
+    def get_serializer_class(self):
+        if self.request.method == 'POST':
+            return GuestPreferenceCreateSerializer
+        return GuestPreferenceSerializer
+
+
+class GuestPreferenceDetailView(generics.RetrieveUpdateDestroyAPIView):
+    """Retrieve, update or delete a guest preference."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    queryset = GuestPreference.objects.select_related('guest')
+    
+    def get_serializer_class(self):
+        if self.request.method in ['PUT', 'PATCH']:
+            return GuestPreferenceCreateSerializer
+        return GuestPreferenceSerializer
+
+
+class GuestPreferencesByGuestView(generics.ListAPIView):
+    """List all preferences for a specific guest."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    serializer_class = GuestPreferenceSerializer
+    
+    def get_queryset(self):
+        guest_id = self.kwargs.get('guest_id')
+        return GuestPreference.objects.filter(guest_id=guest_id).select_related('guest')
+

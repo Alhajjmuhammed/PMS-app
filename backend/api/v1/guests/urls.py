@@ -16,6 +16,11 @@ urlpatterns = [
     path('companies/', views.CompanyListCreateView.as_view(), name='company_list'),
     path('companies/<int:pk>/', views.CompanyDetailView.as_view(), name='company_detail'),
     
+    # Guest Preferences endpoints
+    path('preferences/', views.GuestPreferenceListCreateView.as_view(), name='preference_list'),
+    path('preferences/<int:pk>/', views.GuestPreferenceDetailView.as_view(), name='preference_detail'),
+    path('<int:guest_id>/preferences/', views.GuestPreferencesByGuestView.as_view(), name='guest_preferences'),
+    
     # Loyalty Program endpoints
     path('loyalty/programs/', views.LoyaltyProgramListCreateView.as_view(), name='loyalty_program_list'),
     path('loyalty/programs/<int:pk>/', views.LoyaltyProgramDetailView.as_view(), name='loyalty_program_detail'),
@@ -25,3 +30,4 @@ urlpatterns = [
     path('loyalty/transactions/<int:pk>/', views.LoyaltyTransactionDetailView.as_view(), name='loyalty_transaction_detail'),
     path('<int:guest_id>/loyalty/balance/', views.GuestLoyaltyBalanceView.as_view(), name='guest_loyalty_balance'),
 ]
+

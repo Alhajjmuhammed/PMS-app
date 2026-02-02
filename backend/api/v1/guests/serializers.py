@@ -5,9 +5,59 @@ from apps.guests.models import Guest, GuestPreference, GuestDocument, Company, L
 
 
 class GuestPreferenceSerializer(serializers.ModelSerializer):
+    """Guest preference read serializer."""
+    guest_name = serializers.CharField(source='guest.get_full_name', read_only=True)
+    category_display = serializers.CharField(source='get_category_display', read_only=True)
+    
     class Meta:
         model = GuestPreference
-        fields = ['id', 'category', 'preference', 'notes']
+        fields = ['id', 'guest', 'guest_name', 'category', 'category_display', 'preference', 'notes']
+        read_only_fields = ['id']
+
+
+class GuestPreferenceCreateSerializer(serializers.ModelSerializer):
+    """Guest preference write serializer."""
+    
+    class Meta:
+        model = GuestPreference
+        fields = ['guest', 'category', 'preference', 'notes']
+    
+    def validate_preference(self, value):
+        """Validate preference text."""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Preference must be at least 2 characters.")
+        if len(value) > 200:
+            raise serializers.ValidationError("Preference text is too long.")
+        return value.strip()
+    
+    def validate(self, data):
+        """Check for duplicate preferences."""
+        guest = data.get('guest')
+        category = data.get('category')
+        preference = data.get('preference', '').strip()
+        
+        # Check if similar preference already exists for this guest
+        if self.instance:
+            # Update - exclude self
+            exists = GuestPreference.objects.filter(
+                guest=guest,
+                category=category,
+                preference__iexact=preference
+            ).exclude(id=self.instance.id).exists()
+        else:
+            # Create
+            exists = GuestPreference.objects.filter(
+                guest=guest,
+                category=category,
+                preference__iexact=preference
+            ).exists()
+        
+        if exists:
+            raise serializers.ValidationError(
+                f"A similar {category} preference already exists for this guest."
+            )
+        
+        return data
 
 
 class GuestSerializer(serializers.ModelSerializer):

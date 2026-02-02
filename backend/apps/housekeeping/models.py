@@ -234,3 +234,72 @@ class HousekeepingSchedule(models.Model):
     
     def __str__(self):
         return f"{self.user} - {self.date}"
+
+
+class StockMovement(models.Model):
+    """Inventory stock movement tracking."""
+    
+    class MovementType(models.TextChoices):
+        RECEIVE = 'RECEIVE', _('Receive')
+        ISSUE = 'ISSUE', _('Issue')
+        TRANSFER = 'TRANSFER', _('Transfer')
+        ADJUST = 'ADJUST', _('Adjustment')
+        RETURN = 'RETURN', _('Return')
+        DAMAGE = 'DAMAGE', _('Damage')
+    
+    property = models.ForeignKey(
+        'properties.Property',
+        on_delete=models.CASCADE,
+        related_name='stock_movements'
+    )
+    
+    # Reference to either amenity or linen inventory
+    amenity_inventory = models.ForeignKey(
+        AmenityInventory,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='movements'
+    )
+    linen_inventory = models.ForeignKey(
+        LinenInventory,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name='movements'
+    )
+    
+    movement_type = models.CharField(
+        _('movement type'),
+        max_length=10,
+        choices=MovementType.choices
+    )
+    quantity = models.IntegerField(_('quantity'))  # Can be negative for issues
+    balance_after = models.PositiveIntegerField(_('balance after'))
+    
+    # Details
+    reference = models.CharField(_('reference'), max_length=100, blank=True)
+    reason = models.CharField(_('reason'), max_length=200, blank=True)
+    notes = models.TextField(_('notes'), blank=True)
+    
+    # Location
+    from_location = models.CharField(_('from location'), max_length=100, blank=True)
+    to_location = models.CharField(_('to location'), max_length=100, blank=True)
+    
+    # Audit
+    created_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name='stock_movements'
+    )
+    created_at = models.DateTimeField(_('created at'), auto_now_add=True)
+    
+    class Meta:
+        verbose_name = _('stock movement')
+        verbose_name_plural = _('stock movements')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        item = self.amenity_inventory or self.linen_inventory
+        return f"{self.movement_type} - {item} - {self.quantity}"

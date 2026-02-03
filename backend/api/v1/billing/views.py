@@ -281,7 +281,10 @@ class FolioExportView(APIView):
 class InvoiceDetailView(generics.RetrieveAPIView):
     """Get invoice detail."""
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
-    serializer_class = None
+    
+    def get_serializer_class(self):
+        from .serializers import InvoiceSerializer
+        return InvoiceSerializer
     
     def get_queryset(self):
         from apps.billing.models import Invoice
@@ -347,6 +350,10 @@ class PaymentDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     queryset = Payment.objects.all()
     
+    def get_serializer_class(self):
+        from .serializers import PaymentSerializer
+        return PaymentSerializer
+    
     def get(self, request, pk):
         from .serializers import PaymentSerializer
         
@@ -361,6 +368,10 @@ class PaymentDetailView(generics.RetrieveAPIView):
 class InvoiceListView(generics.ListCreateAPIView):
     """List all invoices and create new ones."""
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    
+    def get_serializer_class(self):
+        from .serializers import InvoiceSerializer
+        return InvoiceSerializer
     
     def get(self, request):
         from apps.billing.models import Invoice
@@ -389,6 +400,10 @@ class InvoiceListView(generics.ListCreateAPIView):
 class PaymentListView(generics.ListAPIView):
     """List all payments."""
     permission_classes = [IsAuthenticated]
+    
+    def get_serializer_class(self):
+        from .serializers import PaymentSerializer
+        return PaymentSerializer
     
     def get(self, request):
         from .serializers import PaymentSerializer

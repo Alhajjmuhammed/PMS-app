@@ -18,18 +18,19 @@ class HousekeepingTaskSerializer(serializers.ModelSerializer):
     room_number = serializers.CharField(source='room.number', read_only=True)
     assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
-    completed_by_name = serializers.CharField(source='completed_by.get_full_name', read_only=True)
+    inspected_by_name = serializers.CharField(source='inspected_by.get_full_name', read_only=True)
     
     class Meta:
         model = HousekeepingTask
         fields = [
-            'id', 'room', 'room_number', 'task_type', 'task_type_display',
-            'priority', 'status', 'description', 'assigned_to', 'assigned_to_name',
-            'scheduled_date', 'started_at', 'completed_at', 'duration_minutes',
-            'notes', 'inspection_required', 'inspected', 'created_by',
-            'created_by_name', 'completed_by', 'completed_by_name', 'created_at'
+            'id', 'room', 'room_number', 'task_type', 'priority', 'status',
+            'assigned_to', 'assigned_to_name', 'assigned_at', 'scheduled_date',
+            'scheduled_time', 'started_at', 'completed_at', 'inspected_by',
+            'inspected_by_name', 'inspected_at', 'inspection_notes',
+            'inspection_passed', 'notes', 'special_instructions', 'created_by',
+            'created_by_name', 'created_at', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_by', 'created_at', 'completed_by']
+        read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
     
     def validate(self, data):
         """Validate housekeeping task."""
@@ -47,26 +48,16 @@ class RoomInspectionSerializer(serializers.ModelSerializer):
     
     room_number = serializers.CharField(source='room.number', read_only=True)
     inspector_name = serializers.CharField(source='inspector.get_full_name', read_only=True)
-    task_info = serializers.SerializerMethodField()
     
     class Meta:
         model = RoomInspection
         fields = [
-            'id', 'task', 'task_info', 'room', 'room_number', 'inspector',
-            'inspector_name', 'inspection_date', 'cleanliness_rating',
-            'maintenance_issues', 'missing_items', 'notes', 'passed',
-            'requires_rework', 'created_at'
+            'id', 'room', 'room_number', 'inspector', 'inspector_name',
+            'inspection_date', 'cleanliness_score', 'bed_making_score',
+            'bathroom_score', 'amenities_score', 'overall_score',
+            'passed', 'notes'
         ]
-        read_only_fields = ['id', 'created_at']
-    
-    def get_task_info(self, obj):
-        if obj.task:
-            return {
-                'id': obj.task.id,
-                'task_type': obj.task.task_type,
-                'completed_by': obj.task.completed_by.get_full_name() if obj.task.completed_by else None
-            }
-        return None
+        read_only_fields = ['id']
     
     def validate(self, data):
         """Validate room inspection."""
@@ -80,24 +71,20 @@ class RoomInspectionSerializer(serializers.ModelSerializer):
 class LinenInventorySerializer(serializers.ModelSerializer):
     """Serializer for linen inventory."""
     
-    property_name = serializers.CharField(source='property.name', read_only=True)
-    in_use = serializers.SerializerMethodField()
-    available = serializers.SerializerMethodField()
+    hotel_name = serializers.CharField(source='hotel.name', read_only=True)
+    quantity_available = serializers.SerializerMethodField()
     
     class Meta:
         model = LinenInventory
         fields = [
-            'id', 'property', 'property_name', 'item_name', 'item_type',
-            'total_quantity', 'in_use', 'available', 'minimum_quantity',
-            'unit_cost', 'last_counted_at', 'notes', 'created_at', 'updated_at'
+            'id', 'hotel', 'hotel_name', 'linen_type', 'quantity_total',
+            'quantity_in_use', 'quantity_in_laundry', 'quantity_damaged',
+            'quantity_available', 'reorder_level', 'updated_at'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'updated_at']
     
-    def get_in_use(self, obj):
-        return obj.in_use
-    
-    def get_available(self, obj):
-        return obj.total_quantity - obj.in_use
+    def get_quantity_available(self, obj):
+        return obj.quantity_total - obj.quantity_in_use - obj.quantity_in_laundry - obj.quantity_damaged
     
     def validate(self, data):
         """Validate linen inventory."""
@@ -116,21 +103,19 @@ class LinenInventorySerializer(serializers.ModelSerializer):
 class AmenityInventorySerializer(serializers.ModelSerializer):
     """Serializer for amenity inventory."""
     
-    property_name = serializers.CharField(source='property.name', read_only=True)
+    hotel_name = serializers.CharField(source='hotel.name', read_only=True)
     needs_reorder = serializers.SerializerMethodField()
     
     class Meta:
         model = AmenityInventory
         fields = [
-            'id', 'property', 'property_name', 'item_name', 'item_type',
-            'current_stock', 'minimum_stock', 'reorder_quantity',
-            'unit_cost', 'supplier', 'last_restocked_at', 'needs_reorder',
-            'notes', 'created_at', 'updated_at'
+            'id', 'hotel', 'hotel_name', 'name', 'code', 'category',
+            'quantity', 'reorder_level', 'unit_cost', 'needs_reorder'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id']
     
     def get_needs_reorder(self, obj):
-        return obj.current_stock <= obj.minimum_stock
+        return obj.quantity <= obj.reorder_level
     
     def validate(self, data):
         """Validate amenity inventory."""
@@ -149,22 +134,15 @@ class AmenityInventorySerializer(serializers.ModelSerializer):
 class HousekeepingScheduleSerializer(serializers.ModelSerializer):
     """Serializer for housekeeping schedules."""
     
-    staff_name = serializers.CharField(source='staff.get_full_name', read_only=True)
-    rooms_assigned = serializers.SerializerMethodField()
+    user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     
     class Meta:
         model = HousekeepingSchedule
         fields = [
-            'id', 'staff', 'staff_name', 'shift_date', 'shift_start',
-            'shift_end', 'shift_type', 'area_assignment', 'rooms_assigned',
-            'notes', 'is_active', 'created_at', 'updated_at'
+            'id', 'user', 'user_name', 'date', 'shift_start',
+            'shift_end', 'assigned_floor', 'notes'
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
-    
-    def get_rooms_assigned(self, obj):
-        if obj.area_assignment:
-            return obj.area_assignment.split(',')
-        return []
+        read_only_fields = ['id']
     
     def validate(self, data):
         """Validate housekeeping schedule."""
@@ -181,17 +159,17 @@ class StockMovementSerializer(serializers.ModelSerializer):
     """Serializer for stock movements."""
     
     property_name = serializers.CharField(source='property.name', read_only=True)
-    performed_by_name = serializers.CharField(source='performed_by.get_full_name', read_only=True)
+    created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     
     class Meta:
         model = StockMovement
         fields = [
-            'id', 'property', 'property_name', 'item_type', 'item_name',
-            'movement_type', 'quantity', 'from_location', 'to_location',
-            'reason', 'notes', 'performed_by', 'performed_by_name',
-            'movement_date', 'created_at'
+            'id', 'property', 'property_name', 'amenity_inventory',
+            'linen_inventory', 'movement_type', 'quantity', 'balance_after',
+            'reference', 'reason', 'notes', 'from_location', 'to_location',
+            'created_by', 'created_by_name', 'created_at'
         ]
-        read_only_fields = ['id', 'performed_by', 'created_at']
+        read_only_fields = ['id', 'created_by', 'created_at', 'balance_after']
     
     def validate(self, data):
         """Validate stock movement."""

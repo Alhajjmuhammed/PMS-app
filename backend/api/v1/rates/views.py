@@ -19,7 +19,7 @@ class RatePlanListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = RatePlan.objects.filter(is_active=True)
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     
@@ -42,7 +42,7 @@ class SeasonListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = Season.objects.filter(is_active=True)
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset.order_by('start_date')
     
@@ -131,7 +131,7 @@ class PackageListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = Package.objects.select_related('property', 'rate_plan')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     
@@ -147,7 +147,7 @@ class PackageDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         queryset = Package.objects.select_related('property', 'rate_plan')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     
@@ -167,7 +167,7 @@ class DiscountListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = Discount.objects.select_related('property')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     
@@ -183,7 +183,7 @@ class DiscountDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         queryset = Discount.objects.select_related('property')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     
@@ -203,7 +203,7 @@ class YieldRuleListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = YieldRule.objects.select_related('property')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     
@@ -219,7 +219,7 @@ class YieldRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         queryset = YieldRule.objects.select_related('property')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     

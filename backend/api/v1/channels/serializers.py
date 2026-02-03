@@ -8,6 +8,7 @@ from apps.channels.models import (
 class ChannelSerializer(serializers.ModelSerializer):
     class Meta:
         model = Channel
+        ref_name = 'ChannelBasic'
         fields = ['id', 'name', 'code', 'channel_type', 'commission_percent', 'is_active']
 
 

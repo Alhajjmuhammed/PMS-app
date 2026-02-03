@@ -1,8 +1,8 @@
 // Environment configuration
 export const ENV = {
   development: {
-    API_URL: 'http://192.168.0.136:8000/api/v1',
-    API_BASE_URL: 'http://192.168.0.136:8000',
+    API_URL: 'http://192.168.0.123:8000/api/v1',
+    API_BASE_URL: 'http://192.168.0.123:8000',
   },
   production: {
     API_URL: 'https://your-domain.com/api/v1',

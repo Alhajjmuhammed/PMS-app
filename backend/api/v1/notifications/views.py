@@ -118,7 +118,7 @@ class NotificationTemplateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = NotificationTemplate.objects.select_related('property')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     
@@ -134,7 +134,7 @@ class NotificationTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         queryset = NotificationTemplate.objects.select_related('property')
-        if self.request.user.assigned_property:
+        if hasattr(self.request.user, 'assigned_property') and self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
     

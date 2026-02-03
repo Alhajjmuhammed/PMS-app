@@ -14,6 +14,7 @@ class ChannelSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Channel
+        ref_name = 'ChannelDetail'
         fields = [
             'id', 'name', 'code', 'channel_type', 'commission_percent',
             'api_url', 'logo', 'is_active'

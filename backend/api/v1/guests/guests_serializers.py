@@ -15,6 +15,7 @@ class GuestPreferenceSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = GuestPreference
+        ref_name = 'GuestPreferenceDetail'
         fields = [
             'id', 'guest', 'guest_name', 'category', 'category_display',
             'preference', 'notes'
@@ -30,6 +31,7 @@ class GuestDocumentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = GuestDocument
+        ref_name = 'GuestDocumentDetail'
         fields = [
             'id', 'guest', 'guest_name', 'document_type', 'document_type_display',
             'document_number', 'issuing_country', 'issue_date', 'expiry_date',

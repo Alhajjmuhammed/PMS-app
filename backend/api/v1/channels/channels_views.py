@@ -44,11 +44,11 @@ class PropertyChannelListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return PropertyChannel.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('channel', 'rate_plan').prefetch_related('room_mappings', 'rate_mappings')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=getattr(self.request.user, 'property', None))
 
 
 class PropertyChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -58,7 +58,7 @@ class PropertyChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return PropertyChannel.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('channel', 'rate_plan')
 
 
@@ -69,7 +69,7 @@ class ActivePropertyChannelsView(generics.ListAPIView):
     
     def get_queryset(self):
         return PropertyChannel.objects.filter(
-            property=self.request.user.property,
+            property=getattr(self.request.user, 'property', None),
             is_active=True
         ).select_related('channel')
 
@@ -121,7 +121,7 @@ class RoomTypeMappingListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return RoomTypeMapping.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'property_channel__channel', 'room_type')
 
 
@@ -132,7 +132,7 @@ class RoomTypeMappingDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return RoomTypeMapping.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'room_type')
 
 
@@ -145,7 +145,7 @@ class RoomTypeMappingsByChannelView(generics.ListAPIView):
         channel_id = self.kwargs.get('channel_id')
         return RoomTypeMapping.objects.filter(
             property_channel_id=channel_id,
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('room_type')
 
 
@@ -161,7 +161,7 @@ class RatePlanMappingListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return RatePlanMapping.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'property_channel__channel', 'rate_plan')
 
 
@@ -172,7 +172,7 @@ class RatePlanMappingDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return RatePlanMapping.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'rate_plan')
 
 
@@ -185,7 +185,7 @@ class RatePlanMappingsByChannelView(generics.ListAPIView):
         channel_id = self.kwargs.get('channel_id')
         return RatePlanMapping.objects.filter(
             property_channel_id=channel_id,
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('rate_plan')
 
 
@@ -202,7 +202,7 @@ class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = AvailabilityUpdate.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'property_channel__channel', 'room_type')
         
         # Filter by date range
@@ -224,7 +224,7 @@ class AvailabilityUpdateDetailView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return AvailabilityUpdate.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'room_type')
 
 
@@ -283,7 +283,7 @@ class RateUpdateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = RateUpdate.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'property_channel__channel', 'room_type', 'rate_plan')
         
         # Filter by date range
@@ -305,7 +305,7 @@ class RateUpdateDetailView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return RateUpdate.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'room_type', 'rate_plan')
 
 
@@ -366,7 +366,7 @@ class ChannelReservationListView(generics.ListAPIView):
     
     def get_queryset(self):
         queryset = ChannelReservation.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'property_channel__channel', 'reservation')
         
         # Filter by date range
@@ -388,7 +388,7 @@ class ChannelReservationDetailView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return ChannelReservation.objects.filter(
-            property_channel__property=self.request.user.property
+            property_channel__property=getattr(self.request.user, 'property', None)
         ).select_related('property_channel', 'reservation')
 
 
@@ -399,7 +399,7 @@ class UnprocessedChannelReservationsView(generics.ListAPIView):
     
     def get_queryset(self):
         return ChannelReservation.objects.filter(
-            property_channel__property=self.request.user.property,
+            property_channel__property=getattr(self.request.user, 'property', None),
             status='RECEIVED'
         ).select_related('property_channel', 'property_channel__channel').order_by('received_at')
 

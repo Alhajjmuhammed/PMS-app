@@ -38,6 +38,9 @@ class RatePlanListCreateView(generics.ListCreateAPIView):
     ordering = ['priority', 'name']
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return RatePlan.objects.none()
+       
         return RatePlan.objects.filter(
             property=self.request.user.property
         ).prefetch_related('room_rates')
@@ -52,6 +55,9 @@ class RatePlanDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = RatePlanDetailSerializer
     
     def get_queryset(self):
+        # Handle Swagger schema generation
+        if getattr(self, 'swagger_fake_view', False):
+            return RatePlan.objects.none()
         return RatePlan.objects.filter(
             property=self.request.user.property
         ).prefetch_related('room_rates__room_type')
@@ -63,6 +69,9 @@ class ActiveRatePlansView(generics.ListAPIView):
     serializer_class = RatePlanSerializer
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return RatePlan.objects.none()
+       
         return RatePlan.objects.filter(
             property=self.request.user.property,
             is_active=True
@@ -81,6 +90,9 @@ class RoomRateListCreateView(generics.ListCreateAPIView):
     ordering = ['room_type__name']
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return RoomRate.objects.none()
+       
         return RoomRate.objects.filter(
             property=self.request.user.property
         ).select_related('rate_plan', 'room_type')
@@ -95,6 +107,9 @@ class RoomRateDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = RoomRateSerializer
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return RoomRate.objects.none()
+       
         return RoomRate.objects.filter(
             property=self.request.user.property
         ).select_related('rate_plan', 'room_type')
@@ -188,6 +203,9 @@ class DateRateDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = DateRateSerializer
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return DateRate.objects.none()
+       
         return DateRate.objects.filter(
             property=self.request.user.property
         ).select_related('room_type')
@@ -219,6 +237,9 @@ class YieldRuleListCreateView(generics.ListCreateAPIView):
     ordering = ['priority', 'name']
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return YieldRule.objects.none()
+       
         return YieldRule.objects.filter(
             property=self.request.user.property
         ).select_related('room_type')
@@ -233,6 +254,9 @@ class YieldRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = YieldRuleSerializer
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return YieldRule.objects.none()
+       
         return YieldRule.objects.filter(
             property=self.request.user.property
         ).select_related('room_type')
@@ -244,6 +268,9 @@ class ActiveYieldRulesView(generics.ListAPIView):
     serializer_class = YieldRuleSerializer
     
     def get_queryset(self):
+        if getattr(self, 'swagger_fake_view', False):
+            return YieldRule.objects.none()
+       
         return YieldRule.objects.filter(
             property=self.request.user.property,
             is_active=True

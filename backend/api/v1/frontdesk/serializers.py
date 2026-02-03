@@ -20,10 +20,11 @@ class CheckOutSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = CheckOut
+        ref_name = 'CheckOutBasic'
         fields = [
             'id', 'check_in', 'room_number', 'guest_name',
-            'check_out_time', 'checked_out_by', 'key_cards_returned',
-            'late_check_out', 'late_charge'
+            'check_out_time', 'keys_returned', 'is_express',
+            'rating', 'feedback'
         ]
 
 

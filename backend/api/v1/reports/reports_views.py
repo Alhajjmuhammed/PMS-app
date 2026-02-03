@@ -38,7 +38,7 @@ class DailyStatisticsListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = DailyStatistics.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('property')
         
         # Filter by date range
@@ -53,7 +53,7 @@ class DailyStatisticsListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=getattr(self.request.user, 'property', None))
 
 
 class DailyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -63,7 +63,7 @@ class DailyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return DailyStatistics.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('property')
 
 
@@ -75,7 +75,7 @@ class DailyStatisticsByDateView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return DailyStatistics.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('property')
 
 
@@ -92,11 +92,11 @@ class MonthlyStatisticsListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return MonthlyStatistics.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('property')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=getattr(self.request.user, 'property', None))
 
 
 class MonthlyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -106,7 +106,7 @@ class MonthlyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return MonthlyStatistics.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('property')
 
 
@@ -123,12 +123,12 @@ class ReportTemplateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return ReportTemplate.objects.filter(
-            Q(property=self.request.user.property) | Q(property__isnull=True)
+            Q(property=getattr(self.request.user, 'property', None)) | Q(property__isnull=True)
         ).select_related('property', 'created_by')
     
     def perform_create(self, serializer):
         serializer.save(
-            property=self.request.user.property,
+            property=getattr(self.request.user, 'property', None),
             created_by=self.request.user
         )
 
@@ -140,7 +140,7 @@ class ReportTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return ReportTemplate.objects.filter(
-            Q(property=self.request.user.property) | Q(property__isnull=True)
+            Q(property=getattr(self.request.user, 'property', None)) | Q(property__isnull=True)
         ).select_related('property', 'created_by')
 
 
@@ -181,7 +181,7 @@ class NightAuditListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = NightAudit.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('property', 'completed_by').prefetch_related('logs')
         
         # Filter by date range
@@ -196,7 +196,7 @@ class NightAuditListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=getattr(self.request.user, 'property', None))
 
 
 class NightAuditDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -206,7 +206,7 @@ class NightAuditDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return NightAudit.objects.filter(
-            property=self.request.user.property
+            property=getattr(self.request.user, 'property', None)
         ).select_related('property', 'completed_by').prefetch_related('logs')
 
 
@@ -217,7 +217,7 @@ class PendingNightAuditsView(generics.ListAPIView):
     
     def get_queryset(self):
         return NightAudit.objects.filter(
-            property=self.request.user.property,
+            property=getattr(self.request.user, 'property', None),
             status='PENDING'
         ).select_related('property').order_by('audit_date')
 
@@ -314,7 +314,7 @@ class AuditLogListView(generics.ListAPIView):
         audit_id = self.kwargs.get('audit_id')
         return AuditLog.objects.filter(
             night_audit_id=audit_id,
-            night_audit__property=self.request.user.property
+            night_audit__property=getattr(self.request.user, 'property', None)
         ).order_by('timestamp')
 
 

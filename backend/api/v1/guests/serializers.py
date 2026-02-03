@@ -11,6 +11,7 @@ class GuestPreferenceSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = GuestPreference
+        ref_name = 'GuestPreferenceBasic'
         fields = ['id', 'guest', 'guest_name', 'category', 'category_display', 'preference', 'notes']
         read_only_fields = ['id']
 
@@ -153,13 +154,17 @@ class GuestCreateSerializer(serializers.ModelSerializer):
 
 
 class GuestDocumentSerializer(serializers.ModelSerializer):
-    uploaded_by_name = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
     file_size = serializers.SerializerMethodField()
     
     class Meta:
         model = GuestDocument
-        fields = ['id', 'document_type', 'document_file', 'description', 'uploaded_at', 'uploaded_by', 'uploaded_by_name', 'file_size']
-        read_only_fields = ['uploaded_at', 'uploaded_by', 'uploaded_by_name']
+        ref_name = 'GuestDocumentBasic'
+        fields = [
+            'id', 'guest', 'document_type', 'document_number',
+            'issuing_country', 'issue_date', 'expiry_date',
+            'document_file', 'file_size'
+        ]
+        read_only_fields = ['id']
     
     def get_file_size(self, obj):
         """Return file size in bytes."""

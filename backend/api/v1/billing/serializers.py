@@ -33,22 +33,28 @@ class ChargeCodeCreateSerializer(serializers.ModelSerializer):
 
 class FolioChargeSerializer(serializers.ModelSerializer):
     charge_code_name = serializers.CharField(source='charge_code.name', read_only=True)
+    total = serializers.SerializerMethodField()
     
     class Meta:
         model = FolioCharge
         fields = [
             'id', 'charge_code', 'charge_code_name', 'description',
             'quantity', 'unit_price', 'amount', 'tax_amount', 'total',
-            'charge_date', 'is_voided'
+            'charge_date', 'is_posted', 'reference'
         ]
+    
+    def get_total(self, obj):
+        """Calculate total including tax."""
+        return obj.amount + obj.tax_amount
 
 
 class PaymentSerializer(serializers.ModelSerializer):
     class Meta:
         model = Payment
+        ref_name = 'PaymentDetail'
         fields = [
-            'id', 'payment_method', 'amount', 'reference_number',
-            'card_last_four', 'payment_date', 'is_voided'
+            'id', 'payment_method', 'amount', 'reference',
+            'card_last_four', 'payment_date', 'status'
         ]
 
 
@@ -156,22 +162,18 @@ class AddPaymentSerializer(serializers.Serializer):
 
 class InvoiceSerializer(serializers.ModelSerializer):
     """Invoice serializer."""
-    customer_name = serializers.SerializerMethodField()
+    customer_name = serializers.CharField(source='bill_to_name', read_only=True)
     
     class Meta:
         from apps.billing.models import Invoice
         model = Invoice
         fields = [
-            'id', 'invoice_number', 'customer_name', 'status',
-            'subtotal', 'tax_amount', 'discount_amount', 'total_amount',
-            'paid_amount', 'balance', 'issue_date', 'due_date',
-            'created_at', 'updated_at'
+            'id', 'invoice_number', 'folio', 'status', 'invoice_date',
+            'due_date', 'subtotal', 'tax_amount', 'total',
+            'bill_to_name', 'customer_name', 'bill_to_address',
+            'notes', 'created_at'
         ]
-    
-    def get_customer_name(self, obj):
-        if hasattr(obj, 'folio') and obj.folio and obj.folio.guest:
-            return obj.folio.guest.full_name if hasattr(obj.folio.guest, 'full_name') else f"{obj.folio.guest.first_name} {obj.folio.guest.last_name}"
-        return ''
+        read_only_fields = ['invoice_number', 'created_at']
 
 
 class PaymentSerializer(serializers.ModelSerializer):
@@ -179,8 +181,9 @@ class PaymentSerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Payment
+        ref_name = 'PaymentList'
         fields = [
             'id', 'folio', 'payment_method', 'amount', 'status',
-            'reference_number', 'card_last_four', 'payment_date',
-            'processed_by', 'notes', 'created_at'
+            'reference', 'card_last_four', 'payment_date',
+            'notes'
         ]

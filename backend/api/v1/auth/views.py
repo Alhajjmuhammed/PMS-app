@@ -5,6 +5,8 @@ from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import Group, Permission
+from django.utils.decorators import method_decorator
+from django_ratelimit.decorators import ratelimit
 from api.permissions import CanManageUsers
 from .serializers import (
     LoginSerializer, UserSerializer, ChangePasswordSerializer,
@@ -14,10 +16,18 @@ from .serializers import (
 User = get_user_model()
 
 
+@method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=True), name='dispatch')
 class LoginView(APIView):
     permission_classes = [AllowAny]
     
     def post(self, request):
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            return Response(
+                {'error': 'Too many login attempts. Please try again later.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+        
         serializer = LoginSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         

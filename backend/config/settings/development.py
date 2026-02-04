@@ -6,6 +6,9 @@ from .base import *
 
 DEBUG = True
 
+# Allow testserver for testing
+ALLOWED_HOSTS += ['testserver']
+
 # Database - SQLite for development
 DATABASES = {
     'default': {

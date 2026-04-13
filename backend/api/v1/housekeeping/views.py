@@ -28,7 +28,7 @@ class TaskListView(generics.ListCreateAPIView):
         qs = HousekeepingTask.objects.select_related('room', 'assigned_to')
         
         if self.request.user.assigned_property:
-            qs = qs.filter(room__property=self.request.user.assigned_property)
+            qs = qs.filter(room__hotel=self.request.user.assigned_property)
         
         # Filters
         status_filter = self.request.query_params.get('status')
@@ -132,7 +132,7 @@ class RoomStatusView(APIView):
         rooms = Room.objects.filter(is_active=True)
         
         if request.user.assigned_property:
-            rooms = rooms.filter(property=request.user.assigned_property)
+            rooms = rooms.filter(hotel=request.user.assigned_property)
         
         floor = request.query_params.get('floor')
         if floor:

@@ -38,7 +38,7 @@ class CheckInListCreateView(generics.ListCreateAPIView):
         queryset = CheckIn.objects.select_related(
             'reservation', 'room', 'guest', 'checked_in_by'
         ).filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         )
         
         # Filter by date range
@@ -73,7 +73,7 @@ class CheckInDetailView(generics.RetrieveUpdateDestroyAPIView):
         return CheckIn.objects.select_related(
             'reservation', 'room', 'guest', 'checked_in_by'
         ).filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         )
 
 
@@ -87,7 +87,7 @@ class TodayCheckInsView(generics.ListAPIView):
         return CheckIn.objects.select_related(
             'reservation', 'room', 'guest', 'checked_in_by'
         ).filter(
-            room__property=self.request.user.property,
+            room__hotel=self.request.user.assigned_property,
             check_in_time__date=today
         ).order_by('-check_in_time')
 
@@ -108,7 +108,7 @@ class CheckOutListCreateView(generics.ListCreateAPIView):
             'check_in__guest',
             'checked_out_by'
         ).filter(
-            check_in__room__property=self.request.user.property
+            check_in__room__hotel=self.request.user.assigned_property
         )
         
         # Filter by date range
@@ -149,7 +149,7 @@ class CheckOutDetailView(generics.RetrieveUpdateDestroyAPIView):
             'check_in__guest',
             'checked_out_by'
         ).filter(
-            check_in__room__property=self.request.user.property
+            check_in__room__hotel=self.request.user.assigned_property
         )
 
 
@@ -166,7 +166,7 @@ class TodayCheckOutsView(generics.ListAPIView):
             'check_in__guest',
             'checked_out_by'
         ).filter(
-            check_in__room__property=self.request.user.property,
+            check_in__room__hotel=self.request.user.assigned_property,
             check_out_time__date=today
         ).order_by('-check_out_time')
 
@@ -187,7 +187,7 @@ class RoomMoveListCreateView(generics.ListCreateAPIView):
             'to_room',
             'moved_by'
         ).filter(
-            from_room__property=self.request.user.property
+            from_room__hotel=self.request.user.assigned_property
         )
     
     def perform_create(self, serializer):
@@ -217,7 +217,7 @@ class RoomMoveDetailView(generics.RetrieveUpdateDestroyAPIView):
             'to_room',
             'moved_by'
         ).filter(
-            from_room__property=self.request.user.property
+            from_room__hotel=self.request.user.assigned_property
         )
 
 
@@ -238,7 +238,7 @@ class WalkInListCreateView(generics.ListCreateAPIView):
             'room_type',
             'created_by'
         ).filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         )
     
     def perform_create(self, serializer):
@@ -257,7 +257,7 @@ class WalkInDetailView(generics.RetrieveUpdateDestroyAPIView):
             'room_type',
             'created_by'
         ).filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         )
 
 
@@ -269,7 +269,7 @@ class ConvertWalkInView(APIView):
         try:
             walk_in = WalkIn.objects.get(
                 pk=pk,
-                room__property=request.user.property
+                room__hotel=request.user.assigned_property
             )
             
             if walk_in.status == 'CONVERTED':
@@ -280,7 +280,7 @@ class ConvertWalkInView(APIView):
             
             # Create reservation from walk-in
             reservation = Reservation.objects.create(
-                property=request.user.property,
+                property=request.user.assigned_property,
                 guest=walk_in.guest,
                 check_in=walk_in.arrival_date,
                 check_out=walk_in.departure_date,
@@ -316,16 +316,16 @@ class FrontDeskDashboardView(APIView):
     
     def get(self, request):
         today = date.today()
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         
         # Get statistics
         total_check_ins_today = CheckIn.objects.filter(
-            room__property=property_obj,
+            room__hotel=property_obj,
             check_in_time__date=today
         ).count()
         
         total_check_outs_today = CheckOut.objects.filter(
-            check_in__room__property=property_obj,
+            check_in__room__hotel=property_obj,
             check_out_time__date=today
         ).count()
         
@@ -340,7 +340,7 @@ class FrontDeskDashboardView(APIView):
         
         # Expected departures (check-ins with expected checkout today, not yet checked out)
         expected_departures = CheckIn.objects.filter(
-            room__property=property_obj,
+            room__hotel=property_obj,
             expected_check_out=today
         ).exclude(
             check_out__isnull=False
@@ -348,7 +348,7 @@ class FrontDeskDashboardView(APIView):
         
         # In-house guests (checked in, not checked out)
         in_house_guests = CheckIn.objects.filter(
-            room__property=property_obj
+            room__hotel=property_obj
         ).exclude(
             check_out__isnull=False
         ).count()
@@ -363,12 +363,12 @@ class FrontDeskDashboardView(APIView):
         )
         
         walk_ins_today = WalkIn.objects.filter(
-            room__property=property_obj,
+            room__hotel=property_obj,
             created_at__date=today
         ).count()
         
         room_moves_today = RoomMove.objects.filter(
-            from_room__property=property_obj,
+            from_room__hotel=property_obj,
             move_date=today
         ).count()
         

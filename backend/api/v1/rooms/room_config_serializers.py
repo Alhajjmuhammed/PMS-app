@@ -9,17 +9,17 @@ from apps.properties.models import Property
 class RoomTypeSerializer(serializers.ModelSerializer):
     """Serializer for room types."""
     
-    property_name = serializers.CharField(source='property.name', read_only=True)
+    hotel_name = serializers.CharField(source='hotel.name', read_only=True)
     total_rooms = serializers.SerializerMethodField()
     amenities_count = serializers.SerializerMethodField()
     
     class Meta:
         model = RoomType
         fields = [
-            'id', 'property', 'property_name', 'name', 'code', 'description',
-            'base_occupancy', 'max_occupancy', 'extra_beds_allowed',
-            'size_sqm', 'view_type', 'bed_configuration', 'is_active',
-            'sort_order', 'total_rooms', 'amenities_count', 'created_at', 'updated_at'
+            'id', 'hotel', 'hotel_name', 'name', 'code', 'description',
+            'max_occupancy', 'max_adults', 'max_children',
+            'size_sqm', 'bed_type', 'base_rate', 'extra_adult_rate', 'extra_child_rate',
+            'is_active', 'sort_order', 'total_rooms', 'amenities_count', 'created_at', 'updated_at'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
     
@@ -31,14 +31,15 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate room type."""
-        base_occ = data.get('base_occupancy')
         max_occ = data.get('max_occupancy')
+        max_adults = data.get('max_adults', 0)
+        max_children = data.get('max_children', 0)
         
-        if base_occ and max_occ and max_occ < base_occ:
-            raise serializers.ValidationError("Max occupancy must be >= base occupancy.")
-        
-        if base_occ and base_occ < 1:
-            raise serializers.ValidationError("Base occupancy must be at least 1.")
+        if max_occ and max_occ < 1:
+            raise serializers.ValidationError("Max occupancy must be at least 1.")
+            
+        if max_adults and max_adults < 1:
+            raise serializers.ValidationError("Max adults must be at least 1.")
         
         return data
 

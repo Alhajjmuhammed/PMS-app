@@ -13,8 +13,8 @@ class POSDashboardView(LoginRequiredMixin, View):
     
     def get(self, request):
         outlets = Outlet.objects.filter(is_active=True)
-        if request.user.property:
-            outlets = outlets.filter(property=request.user.property)
+        if request.user.assigned_property:
+            outlets = outlets.filter(property=request.user.assigned_property)
         
         open_orders = POSOrder.objects.filter(status=POSOrder.Status.OPEN).count()
         
@@ -55,8 +55,8 @@ class OrderCreateView(LoginRequiredMixin, View):
     
     def get(self, request):
         outlets = Outlet.objects.filter(is_active=True)
-        if request.user.property:
-            outlets = outlets.filter(property=request.user.property)
+        if request.user.assigned_property:
+            outlets = outlets.filter(property=request.user.assigned_property)
         
         context = {'outlets': outlets}
         return render(request, self.template_name, context)

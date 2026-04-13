@@ -5,9 +5,9 @@ app_name = 'reservations'
 
 urlpatterns = [
     # Reservations
-    path('', views.ReservationListView.as_view(), name='list'),
-    path('create/', views.ReservationCreateView.as_view(), name='create'),
-    path('<int:pk>/', views.ReservationDetailView.as_view(), name='detail'),
+    path('', views.ReservationListView.as_view(), name='reservation_list'),
+    path('create/', views.ReservationCreateView.as_view(), name='reservation_create'),
+    path('<int:pk>/', views.ReservationDetailView.as_view(), name='reservation_detail'),
     path('<int:pk>/cancel/', views.CancelReservationView.as_view(), name='cancel'),
     path('arrivals/', views.ArrivalsView.as_view(), name='arrivals'),
     path('departures/', views.DeparturesView.as_view(), name='departures'),

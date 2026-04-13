@@ -10,8 +10,8 @@ class RateDashboardView(LoginRequiredMixin, View):
     
     def get(self, request):
         rate_plans = RatePlan.objects.filter(is_active=True)
-        if request.user.property:
-            rate_plans = rate_plans.filter(property=request.user.property)
+        if request.user.assigned_property:
+            rate_plans = rate_plans.filter(property=request.user.assigned_property)
         
         context = {
             'rate_plans': rate_plans[:10],
@@ -72,8 +72,8 @@ class RateCalendarView(LoginRequiredMixin, View):
         from apps.rooms.models import RoomType
         
         room_types = RoomType.objects.filter(is_active=True)
-        if request.user.property:
-            room_types = room_types.filter(property=request.user.property)
+        if request.user.assigned_property:
+            room_types = room_types.filter(property=request.user.assigned_property)
         
         context = {
             'room_types': room_types,

@@ -6,25 +6,28 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
     room_number = serializers.CharField(source='room.room_number', read_only=True)
     assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
     reported_by_name = serializers.CharField(source='reported_by.get_full_name', read_only=True)
+    category = serializers.CharField(source='request_type', read_only=True)  # Alias for backward compatibility
     
     class Meta:
         model = MaintenanceRequest
         fields = [
             'id', 'request_number', 'room', 'room_number', 'location',
-            'category', 'priority', 'status', 'title', 'description',
+            'request_type', 'category', 'priority', 'status', 'title', 'description',
             'assigned_to', 'assigned_to_name', 'reported_by', 'reported_by_name',
-            'scheduled_date', 'started_at', 'completed_at',
-            'estimated_cost', 'actual_cost', 'resolution_notes',
+            'assigned_at', 'started_at', 'completed_at',
+            'parts_cost', 'labor_hours', 'resolution_notes',
             'created_at'
         ]
 
 
 class MaintenanceRequestCreateSerializer(serializers.ModelSerializer):
+    category = serializers.CharField(source='request_type', write_only=True, required=False)  # Alias for backward compatibility
+    
     class Meta:
         model = MaintenanceRequest
         fields = [
-            'room', 'location', 'category', 'priority',
-            'title', 'description', 'scheduled_date'
+            'room', 'location', 'request_type', 'category', 'priority',
+            'title', 'description'
         ]
 
 

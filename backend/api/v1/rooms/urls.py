@@ -7,9 +7,9 @@ app_name = 'rooms'
 
 urlpatterns = [
     # Room endpoints
-    path('', views.RoomListView.as_view(), name='list'),
-    path('create/', views.RoomCreateView.as_view(), name='create'),
-    path('<int:pk>/', views.RoomDetailView.as_view(), name='detail'),
+    path('', views.RoomListView.as_view(), name='room_list'),
+    path('create/', views.RoomCreateView.as_view(), name='room_create'),
+    path('<int:pk>/', views.RoomDetailView.as_view(), name='room_detail'),
     path('<int:pk>/status/', views.UpdateRoomStatusView.as_view(), name='update_status'),
     
     # Room Images (legacy paths)

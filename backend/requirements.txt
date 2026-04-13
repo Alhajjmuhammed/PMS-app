@@ -19,6 +19,9 @@ python-dotenv>=1.0.0
 # API Documentation
 drf-yasg>=1.21.7
 
+# Production Server
+gunicorn>=21.2.0
+
 # Testing
 pytest>=7.4.3
 pytest-django>=4.7.0

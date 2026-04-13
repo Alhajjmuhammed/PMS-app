@@ -37,8 +37,8 @@ class DailyReportView(LoginRequiredMixin, View):
         report_date = date.fromisoformat(report_date)
         
         stats = DailyStatistics.objects.filter(date=report_date)
-        if request.user.property:
-            stats = stats.filter(property=request.user.property)
+        if request.user.assigned_property:
+            stats = stats.filter(property=request.user.assigned_property)
         
         context = {
             'report_date': report_date,
@@ -62,8 +62,8 @@ class OccupancyReportView(LoginRequiredMixin, View):
             date__lte=end_date
         ).order_by('date')
         
-        if request.user.property:
-            stats = stats.filter(property=request.user.property)
+        if request.user.assigned_property:
+            stats = stats.filter(property=request.user.assigned_property)
         
         # Calculate averages
         averages = stats.aggregate(
@@ -95,8 +95,8 @@ class RevenueReportView(LoginRequiredMixin, View):
             date__gte=start_date,
             date__lte=end_date
         )
-        if request.user.property:
-            stats = stats.filter(property=request.user.property)
+        if request.user.assigned_property:
+            stats = stats.filter(property=request.user.assigned_property)
         
         totals = stats.aggregate(
             total_room=Sum('room_revenue'),
@@ -128,8 +128,8 @@ class ArrivalsReportView(LoginRequiredMixin, View):
             status__in=['CONFIRMED', 'CHECKED_IN']
         ).select_related('guest', 'source')
         
-        if request.user.property:
-            arrivals = arrivals.filter(property=request.user.property)
+        if request.user.assigned_property:
+            arrivals = arrivals.filter(property=request.user.assigned_property)
         
         context = {
             'report_date': report_date,
@@ -152,8 +152,8 @@ class DeparturesReportView(LoginRequiredMixin, View):
             status__in=['CHECKED_IN', 'CHECKED_OUT']
         ).select_related('guest')
         
-        if request.user.property:
-            departures = departures.filter(property=request.user.property)
+        if request.user.assigned_property:
+            departures = departures.filter(property=request.user.assigned_property)
         
         context = {
             'report_date': report_date,
@@ -172,8 +172,8 @@ class InHouseReportView(LoginRequiredMixin, View):
             status='CHECKED_IN'
         ).select_related('guest')
         
-        if request.user.property:
-            in_house = in_house.filter(property=request.user.property)
+        if request.user.assigned_property:
+            in_house = in_house.filter(property=request.user.assigned_property)
         
         context = {
             'in_house': in_house,
@@ -201,8 +201,8 @@ class ProductionReportView(LoginRequiredMixin, View):
             created_at__date__lte=end_date
         )
         
-        if request.user.property:
-            reservations = reservations.filter(property=request.user.property)
+        if request.user.assigned_property:
+            reservations = reservations.filter(property=request.user.assigned_property)
         
         # Group by booking source
         by_source = reservations.values('source__name').annotate(
@@ -240,9 +240,9 @@ class ForecastReportView(LoginRequiredMixin, View):
                 status__in=['CONFIRMED', 'CHECKED_IN']
             )
             
-            if request.user.property:
-                reservations = reservations.filter(property=request.user.property)
-                total_rooms = Room.objects.filter(property=request.user.property, is_active=True).count()
+            if request.user.assigned_property:
+                reservations = reservations.filter(property=request.user.assigned_property)
+                total_rooms = Room.objects.filter(property=request.user.assigned_property, is_active=True).count()
             else:
                 total_rooms = Room.objects.filter(is_active=True).count()
             
@@ -280,7 +280,7 @@ class RunNightAuditView(LoginRequiredMixin, View):
         from apps.reservations.models import Reservation
         from apps.billing.models import FolioCharge
         
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         business_date = date.today() - timedelta(days=1)
         
         # Create night audit record
@@ -339,8 +339,8 @@ class StatisticsView(LoginRequiredMixin, View):
     def get(self, request):
         monthly_stats = MonthlyStatistics.objects.all()[:12]
         
-        if request.user.property:
-            monthly_stats = monthly_stats.filter(property=request.user.property)
+        if request.user.assigned_property:
+            monthly_stats = monthly_stats.filter(property=request.user.assigned_property)
         
         context = {
             'monthly_stats': monthly_stats,

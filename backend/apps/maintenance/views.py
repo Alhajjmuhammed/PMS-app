@@ -13,8 +13,8 @@ class MaintenanceDashboardView(LoginRequiredMixin, View):
     
     def get(self, request):
         requests = MaintenanceRequest.objects.all()
-        if request.user.property:
-            requests = requests.filter(property=request.user.property)
+        if request.user.assigned_property:
+            requests = requests.filter(property=request.user.assigned_property)
         
         stats = {
             'pending': requests.filter(status=MaintenanceRequest.Status.PENDING).count(),
@@ -50,7 +50,7 @@ class RequestCreateView(LoginRequiredMixin, CreateView):
     
     def form_valid(self, form):
         form.instance.reported_by = self.request.user
-        form.instance.property = self.request.user.property
+        form.instance.property = self.request.user.assigned_property
         form.instance.request_number = f"MR-{uuid.uuid4().hex[:8].upper()}"
         messages.success(self.request, 'Maintenance request created.')
         return super().form_valid(form)
@@ -85,5 +85,5 @@ class AssetCreateView(LoginRequiredMixin, CreateView):
     success_url = reverse_lazy('maintenance:asset_list')
     
     def form_valid(self, form):
-        form.instance.property = self.request.user.property
+        form.instance.property = self.request.user.assigned_property
         return super().form_valid(form)

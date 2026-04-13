@@ -74,7 +74,7 @@ class RoomTypeAmenitySerializer(serializers.ModelSerializer):
 
 
 class RoomTypeSerializer(serializers.ModelSerializer):
-    amenities = RoomAmenityListSerializer(many=True, read_only=True, source='amenities.all')
+    amenities = RoomTypeAmenitySerializer(many=True, read_only=True)
     amenity_ids = serializers.PrimaryKeyRelatedField(
         many=True, 
         queryset=RoomAmenity.objects.all(),

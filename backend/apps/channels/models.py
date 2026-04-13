@@ -208,3 +208,35 @@ class ChannelReservation(models.Model):
     
     def __str__(self):
         return f"{self.property_channel.channel.name} - {self.channel_booking_id}"
+
+
+class SyncLog(models.Model):
+    """Log of sync operations."""
+    
+    class Status(models.TextChoices):
+        SUCCESS = 'SUCCESS', _('Success')
+        FAILED = 'FAILED', _('Failed')
+        PARTIAL = 'PARTIAL', _('Partial Success')
+    
+    class SyncType(models.TextChoices):
+        RATES = 'rates', _('Rates')
+        AVAILABILITY = 'availability', _('Availability')
+        RESERVATIONS = 'reservations', _('Reservations')
+        RESTRICTIONS = 'restrictions', _('Restrictions')
+    
+    channel = models.ForeignKey(Channel, on_delete=models.CASCADE, related_name='sync_logs')
+    type = models.CharField(_('type'), max_length=20, choices=SyncType.choices)
+    status = models.CharField(_('status'), max_length=20, choices=Status.choices)
+    message = models.TextField(_('message'))
+    records_synced = models.IntegerField(_('records synced'), default=0)
+    error_details = models.TextField(_('error details'), blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    
+    class Meta:
+        verbose_name = _('sync log')
+        verbose_name_plural = _('sync logs')
+        ordering = ['-created_at']
+    
+    def __str__(self):
+        return f"{self.channel.name} - {self.type} - {self.status}"
+

@@ -74,7 +74,7 @@ class AlertCreateView(LoginRequiredMixin, View):
     
     def post(self, request):
         Alert.objects.create(
-            property=request.user.property,
+            property=request.user.assigned_property,
             alert_type=request.POST.get('alert_type', 'INFO'),
             title=request.POST.get('title'),
             message=request.POST.get('message'),

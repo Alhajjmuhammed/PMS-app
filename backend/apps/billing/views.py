@@ -145,7 +145,7 @@ class StartShiftView(LoginRequiredMixin, View):
     def post(self, request):
         CashierShift.objects.create(
             user=request.user,
-            property=request.user.property,
+            property=request.user.assigned_property,
             shift_start=timezone.now(),
             opening_balance=request.POST.get('opening_balance', 0)
         )

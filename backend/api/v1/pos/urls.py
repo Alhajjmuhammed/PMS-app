@@ -23,6 +23,7 @@ urlpatterns = [
     
     # ===== POS Orders =====
     path('orders/', pos_views.POSOrderListCreateView.as_view(), name='order_list'),
+    path('orders/', pos_views.POSOrderListCreateView.as_view(), name='orders'),  # Alias for compatibility
     path('orders/<int:pk>/', pos_views.POSOrderDetailView.as_view(), name='order_detail'),
     path('orders/open/', pos_views.OpenPOSOrdersView.as_view(), name='open_orders'),
     path('orders/<int:pk>/close/', pos_views.ClosePOSOrderView.as_view(), name='close_order'),

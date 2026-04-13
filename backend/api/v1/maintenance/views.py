@@ -68,7 +68,7 @@ class RequestCreateView(generics.CreateAPIView):
     
     def perform_create(self, serializer):
         serializer.save(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             reported_by=self.request.user
         )
 

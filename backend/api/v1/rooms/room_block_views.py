@@ -25,9 +25,9 @@ class RoomBlockListCreateView(generics.ListCreateAPIView):
         queryset = RoomBlock.objects.select_related(
             'room',
             'room__room_type',
-            'room__property',
+            'room__hotel',
             'created_by'
-        ).filter(room__property=self.request.user.assigned_property)
+        ).filter(room__hotel=self.request.user.assigned_property)
         
         # Filter by date range
         start_date = self.request.query_params.get('start_date')
@@ -63,9 +63,9 @@ class RoomBlockDetailView(generics.RetrieveUpdateDestroyAPIView):
         return RoomBlock.objects.select_related(
             'room',
             'room__room_type',
-            'room__property',
+            'room__hotel',
             'created_by'
-        ).filter(room__property=self.request.user.assigned_property)
+        ).filter(room__hotel=self.request.user.assigned_property)
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
@@ -92,10 +92,10 @@ class RoomBlocksByDateView(generics.ListAPIView):
         return RoomBlock.objects.select_related(
             'room',
             'room__room_type',
-            'room__property',
+            'room__hotel',
             'created_by'
         ).filter(
-            room__property=self.request.user.assigned_property,
+            room__hotel=self.request.user.assigned_property,
             start_date__lte=check_date,
             end_date__gte=check_date
         )
@@ -111,10 +111,10 @@ class ActiveRoomBlocksView(generics.ListAPIView):
         return RoomBlock.objects.select_related(
             'room',
             'room__room_type',
-            'room__property',
+            'room__hotel',
             'created_by'
         ).filter(
-            room__property=self.request.user.assigned_property,
+            room__hotel=self.request.user.assigned_property,
             start_date__lte=today,
             end_date__gte=today
         )
@@ -128,7 +128,7 @@ class RoomBlockStatsView(APIView):
         today = timezone.now().date()
         
         queryset = RoomBlock.objects.filter(
-            room__property=request.user.assigned_property
+            room__hotel=request.user.assigned_property
         )
         
         total = queryset.count()

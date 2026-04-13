@@ -1,0 +1,21 @@
+[Unit]
+Description=PMS Celery Beat Scheduler
+After=network.target redis.service postgresql.service
+Requires=redis.service postgresql.service
+
+[Service]
+Type=simple
+User=pmsuser
+Group=www-data
+WorkingDirectory=/opt/pms/backend
+Environment="PATH=/opt/pms/backend/venv/bin"
+EnvironmentFile=/opt/pms/backend/.env
+ExecStart=/opt/pms/backend/venv/bin/celery -A config beat \
+          --loglevel=info \
+          --logfile=/var/log/pms/celery-beat.log \
+          --pidfile=/run/pms/celery-beat.pid
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

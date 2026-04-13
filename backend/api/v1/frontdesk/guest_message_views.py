@@ -30,7 +30,7 @@ class GuestMessageListCreateView(generics.ListCreateAPIView):
             'check_in__room',
             'taken_by'
         ).filter(
-            check_in__room__property=self.request.user.assigned_property
+            check_in__room__hotel=self.request.user.assigned_property
         )
     
     def get_serializer_class(self):
@@ -51,7 +51,7 @@ class GuestMessageDetailView(generics.RetrieveUpdateDestroyAPIView):
             'check_in__room',
             'taken_by'
         ).filter(
-            check_in__room__property=self.request.user.assigned_property
+            check_in__room__hotel=self.request.user.assigned_property
         )
 
 
@@ -65,7 +65,7 @@ class MarkMessageDeliveredView(APIView):
                 'check_in__room'
             ).get(
                 pk=pk,
-                check_in__room__property=request.user.assigned_property
+                check_in__room__hotel=request.user.assigned_property
             )
         except GuestMessage.DoesNotExist:
             return Response(
@@ -99,7 +99,7 @@ class UndeliveredMessagesView(generics.ListAPIView):
             'check_in__room',
             'taken_by'
         ).filter(
-            check_in__room__property=self.request.user.assigned_property,
+            check_in__room__hotel=self.request.user.assigned_property,
             is_delivered=False
         ).order_by('-created_at')
 
@@ -118,7 +118,7 @@ class MessagesByCheckInView(generics.ListAPIView):
             'taken_by'
         ).filter(
             check_in_id=check_in_id,
-            check_in__room__property=self.request.user.assigned_property
+            check_in__room__hotel=self.request.user.assigned_property
         ).order_by('-created_at')
 
 
@@ -136,7 +136,7 @@ class MessagesByRoomView(generics.ListAPIView):
             'taken_by'
         ).filter(
             check_in__room_id=room_id,
-            check_in__room__property=self.request.user.assigned_property
+            check_in__room__hotel=self.request.user.assigned_property
         ).order_by('-created_at')
 
 
@@ -146,7 +146,7 @@ class GuestMessageStatsView(APIView):
     
     def get(self, request):
         queryset = GuestMessage.objects.filter(
-            check_in__room__property=request.user.assigned_property
+            check_in__room__hotel=request.user.assigned_property
         )
         
         total = queryset.count()

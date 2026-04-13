@@ -11,6 +11,7 @@ urlpatterns = [
     
     # New Check-In/Check-Out CRUD
     path('check-ins/', checkin_views.CheckInListCreateView.as_view(), name='checkin_list'),
+    path('check-ins/', checkin_views.CheckInListCreateView.as_view(), name='checkin'),  # Alias for compatibility
     path('check-ins/<int:pk>/', checkin_views.CheckInDetailView.as_view(), name='checkin_detail'),
     path('check-ins/today/', checkin_views.TodayCheckInsView.as_view(), name='checkin_today'),
     

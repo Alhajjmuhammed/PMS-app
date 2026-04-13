@@ -30,9 +30,7 @@ class RoomListView(generics.ListAPIView):
         qs = Room.objects.select_related('room_type', 'floor__building').filter(is_active=True)
         
         if self.request.user.assigned_property:
-            qs = qs.filter(property=self.request.user.assigned_property)
-        
-        return qs
+            qs = qs.filter(hotel=self.request.user.assigned_property)
         
         floor = self.request.query_params.get('floor')
         if floor:
@@ -108,13 +106,13 @@ class RoomTypeListView(generics.ListCreateAPIView):
     def get_queryset(self):
         qs = RoomType.objects.prefetch_related('amenities__amenity').filter(is_active=True)
         if self.request.user.assigned_property:
-            qs = qs.filter(property=self.request.user.assigned_property)
+            qs = qs.filter(hotel=self.request.user.assigned_property)
         return qs
     
     def perform_create(self, serializer):
         """Auto-assign property if user has one."""
-        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
-            serializer.save(property=self.request.user.assigned_property)
+        if self.request.user.assigned_property and 'hotel' not in serializer.validated_data:
+            serializer.save(hotel=self.request.user.assigned_property)
         else:
             serializer.save()
 
@@ -127,7 +125,7 @@ class RoomTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         qs = RoomType.objects.prefetch_related('amenities__amenity')
         if self.request.user.assigned_property:
-            qs = qs.filter(property=self.request.user.assigned_property)
+            qs = qs.filter(hotel=self.request.user.assigned_property)
         return qs
 
 
@@ -144,7 +142,7 @@ class AvailabilityView(APIView):
         # Get all room types
         room_types = RoomType.objects.filter(is_active=True)
         if request.user.assigned_property:
-            room_types = room_types.filter(property=request.user.assigned_property)
+            room_types = room_types.filter(hotel=request.user.assigned_property)
         
         availability = []
         for room_type in room_types:

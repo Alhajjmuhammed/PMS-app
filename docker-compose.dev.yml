@@ -1,0 +1,34 @@
+version: '3.8'
+
+# Development-specific overrides
+services:
+  db:
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: pms_dev
+      POSTGRES_USER: pms_dev
+      POSTGRES_PASSWORD: devpassword
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DEBUG=True
+    volumes:
+      - ./backend:/app
+      - /app/venv
+    command: python manage.py runserver 0.0.0.0:8000
+    ports:
+      - "8000:8000"
+
+  # Development doesn't need nginx
+  nginx:
+    profiles:
+      - production
+
+  redis:
+    ports:
+      - "6379:6379"

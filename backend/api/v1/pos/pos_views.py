@@ -40,7 +40,7 @@ class MenuCategoryListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return MenuCategory.objects.filter(
-            outlet__property=self.request.user.property
+            outlet__property=self.request.user.assigned_property
         ).select_related('outlet').prefetch_related('items')
 
 
@@ -51,7 +51,7 @@ class MenuCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return MenuCategory.objects.filter(
-            outlet__property=self.request.user.property
+            outlet__property=self.request.user.assigned_property
         ).select_related('outlet')
 
 
@@ -69,7 +69,7 @@ class MenuItemListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return MenuItem.objects.filter(
-            category__outlet__property=self.request.user.property
+            category__outlet__property=self.request.user.assigned_property
         ).select_related('category', 'category__outlet')
 
 
@@ -80,7 +80,7 @@ class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return MenuItem.objects.filter(
-            category__outlet__property=self.request.user.property
+            category__outlet__property=self.request.user.assigned_property
         ).select_related('category')
 
 
@@ -93,7 +93,7 @@ class MenuItemsByCategoryView(generics.ListAPIView):
         category_id = self.kwargs.get('category_id')
         return MenuItem.objects.filter(
             category_id=category_id,
-            category__outlet__property=self.request.user.property
+            category__outlet__property=self.request.user.assigned_property
         )
 
 
@@ -107,7 +107,7 @@ class AvailableMenuItemsView(generics.ListAPIView):
     
     def get_queryset(self):
         return MenuItem.objects.filter(
-            category__outlet__property=self.request.user.property,
+            category__outlet__property=self.request.user.assigned_property,
             is_available=True
         ).select_related('category')
 
@@ -130,7 +130,7 @@ class POSOrderListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = POSOrder.objects.filter(
-            outlet__property=self.request.user.property
+            outlet__property=self.request.user.assigned_property
         ).select_related('outlet', 'server', 'check_in').prefetch_related('items')
         
         # Filter by date range
@@ -154,7 +154,7 @@ class POSOrderListCreateView(generics.ListCreateAPIView):
         try:
             outlet = Outlet.objects.get(
                 id=data['outlet'],
-                property=request.user.property
+                property=request.user.assigned_property
             )
         except Outlet.DoesNotExist:
             return Response(
@@ -213,7 +213,7 @@ class POSOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return POSOrder.objects.filter(
-            outlet__property=self.request.user.property
+            outlet__property=self.request.user.assigned_property
         ).select_related('outlet', 'server').prefetch_related('items')
 
 
@@ -224,7 +224,7 @@ class OpenPOSOrdersView(generics.ListAPIView):
     
     def get_queryset(self):
         return POSOrder.objects.filter(
-            outlet__property=self.request.user.property,
+            outlet__property=self.request.user.assigned_property,
             status='OPEN'
         ).select_related('outlet').prefetch_related('items').order_by('-created_at')
 
@@ -237,7 +237,7 @@ class ClosePOSOrderView(APIView):
         try:
             order = POSOrder.objects.get(
                 pk=pk,
-                outlet__property=request.user.property
+                outlet__property=request.user.assigned_property
             )
             
             if order.status != 'OPEN':
@@ -267,7 +267,7 @@ class PostToRoomView(APIView):
         try:
             order = POSOrder.objects.get(
                 pk=pk,
-                outlet__property=request.user.property
+                outlet__property=request.user.assigned_property
             )
             
             if order.is_posted_to_room:
@@ -312,7 +312,7 @@ class POSOrderItemListView(generics.ListAPIView):
         order_id = self.kwargs.get('order_id')
         return POSOrderItem.objects.filter(
             order_id=order_id,
-            order__outlet__property=self.request.user.property
+            order__outlet__property=self.request.user.assigned_property
         ).select_related('menu_item', 'order')
 
 
@@ -351,7 +351,7 @@ class OutletListView(generics.ListAPIView):
     
     def get_queryset(self):
         return Outlet.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             is_active=True
         )
 
@@ -364,7 +364,7 @@ class POSDashboardView(APIView):
     
     def get(self, request):
         today = date.today()
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         
         # Order statistics
         open_orders = POSOrder.objects.filter(

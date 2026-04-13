@@ -1,13 +1,14 @@
 from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated, AllowAny, IsAdminUser
+from rest_framework.permissions import IsAuthenticated, AllowAny
 from rest_framework.authtoken.models import Token
 from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.utils.decorators import method_decorator
+from django.utils import timezone
 from django_ratelimit.decorators import ratelimit
-from api.permissions import CanManageUsers
+from api.permissions import CanManageUsers, IsAdminOrManager
 from .serializers import (
     LoginSerializer, UserSerializer, ChangePasswordSerializer,
     UserManagementSerializer, PermissionSerializer, RoleSerializer
@@ -38,6 +39,9 @@ class LoginView(APIView):
         
         if user:
             token, created = Token.objects.get_or_create(user=user)
+            # Always update token.created to reset expiration on login (sliding window)
+            token.created = timezone.now()
+            token.save(update_fields=['created'])
             return Response({
                 'token': token.key,
                 'user': UserSerializer(user).data
@@ -131,7 +135,7 @@ class PermissionListView(APIView):
 
 class RoleListCreateView(APIView):
     """List and create roles (groups)."""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         groups = Group.objects.prefetch_related('permissions').all()
@@ -176,7 +180,7 @@ class RoleListCreateView(APIView):
 
 class RoleDetailView(APIView):
     """Retrieve, update, or delete a role (group)."""
-    permission_classes = [IsAuthenticated, IsAdminUser]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request, pk):
         try:

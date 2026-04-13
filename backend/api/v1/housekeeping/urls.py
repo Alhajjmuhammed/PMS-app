@@ -7,6 +7,7 @@ app_name = 'housekeeping'
 urlpatterns = [
     # ===== Housekeeping Tasks =====
     path('tasks/', housekeeping_views.HousekeepingTaskListCreateView.as_view(), name='task_list'),
+    path('tasks/', housekeeping_views.HousekeepingTaskListCreateView.as_view(), name='housekeeping_task_list'),  # Alias for consistency
     path('tasks/<int:pk>/', housekeeping_views.HousekeepingTaskDetailView.as_view(), name='task_detail'),
     path('tasks/today/', housekeeping_views.TodayTasksView.as_view(), name='tasks_today'),
     path('tasks/my-tasks/', housekeeping_views.MyTasksView.as_view(), name='my_tasks'),
@@ -32,6 +33,11 @@ urlpatterns = [
     # ===== Stock Movements =====
     path('inventory/movements/', housekeeping_views.StockMovementListCreateView.as_view(), name='stock_movement_list'),
     path('inventory/movements/<int:pk>/', housekeeping_views.StockMovementDetailView.as_view(), name='stock_movement_detail'),
+    
+    # ===== Room Status =====
+    path('room-status/', views.RoomStatusView.as_view(), name='room_status'),
+    path('room-status/', views.RoomStatusView.as_view(), name='room_status_list'),  # Alias for API consistency
+    path('room-status/<int:room_id>/update/', views.UpdateRoomStatusView.as_view(), name='update_room_status'),
     
     # ===== Housekeeping Schedules =====
     path('schedules/', housekeeping_views.HousekeepingScheduleListCreateView.as_view(), name='schedule_list'),

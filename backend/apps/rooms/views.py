@@ -21,8 +21,8 @@ class RoomTypeListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         queryset = RoomType.objects.all()
-        if self.request.user.property:
-            queryset = queryset.filter(property=self.request.user.property)
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset
 
 
@@ -39,8 +39,8 @@ class RoomTypeCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
     success_url = reverse_lazy('rooms:room_type_list')
     
     def form_valid(self, form):
-        if self.request.user.property:
-            form.instance.property = self.request.user.property
+        if self.request.user.assigned_property:
+            form.instance.property = self.request.user.assigned_property
         messages.success(self.request, 'Room type created successfully.')
         return super().form_valid(form)
 
@@ -64,8 +64,8 @@ class RoomListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         queryset = Room.objects.select_related('room_type', 'property').all()
-        if self.request.user.property:
-            queryset = queryset.filter(property=self.request.user.property)
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
         
         # Filters
         room_type = self.request.GET.get('room_type')
@@ -109,8 +109,8 @@ class RoomCreateView(LoginRequiredMixin, AdminRequiredMixin, CreateView):
     success_url = reverse_lazy('rooms:room_list')
     
     def form_valid(self, form):
-        if self.request.user.property:
-            form.instance.property = self.request.user.property
+        if self.request.user.assigned_property:
+            form.instance.property = self.request.user.assigned_property
         messages.success(self.request, 'Room created successfully.')
         return super().form_valid(form)
 
@@ -187,8 +187,8 @@ class RoomGridView(LoginRequiredMixin, View):
     
     def get(self, request):
         rooms = Room.objects.select_related('room_type').filter(is_active=True)
-        if request.user.property:
-            rooms = rooms.filter(property=request.user.property)
+        if request.user.assigned_property:
+            rooms = rooms.filter(property=request.user.assigned_property)
         
         # Group by floor
         floors = {}

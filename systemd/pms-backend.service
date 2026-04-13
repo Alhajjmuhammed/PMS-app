@@ -1,0 +1,50 @@
+[Unit]
+Description=PMS Gunicorn Application Server
+After=network.target postgresql.service
+Requires=postgresql.service
+
+[Service]
+Type=notify
+User=pmsuser
+Group=www-data
+WorkingDirectory=/opt/pms/backend
+Environment="PATH=/opt/pms/backend/venv/bin"
+EnvironmentFile=/opt/pms/backend/.env
+ExecStart=/opt/pms/backend/venv/bin/gunicorn \
+          --workers 4 \
+          --threads 2 \
+          --worker-class gthread \
+          --worker-tmp-dir /dev/shm \
+          --bind unix:/run/pms/pms.sock \
+          --access-logfile /var/log/pms/access.log \
+          --error-logfile /var/log/pms/error.log \
+          --log-level info \
+          --timeout 120 \
+          --graceful-timeout 30 \
+          config.wsgi:application
+ExecReload=/bin/kill -s HUP $MAINPID
+KillMode=mixed
+TimeoutStopSec=5
+PrivateTmp=true
+Restart=always
+RestartSec=10
+
+# Security hardening
+NoNewPrivileges=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/pms/backend/media /opt/pms/backend/logs
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+RestrictRealtime=true
+RestrictNamespaces=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+SystemCallFilter=@system-service
+SystemCallErrorNumber=EPERM
+
+[Install]
+WantedBy=multi-user.target

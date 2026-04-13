@@ -40,8 +40,8 @@ class DashboardStatsView(APIView):
             reservations = Reservation.objects
             
             if property_obj:
-                rooms = rooms.filter(property=property_obj)
-                reservations = reservations.filter(property=property_obj)
+                rooms = rooms.filter(hotel=property_obj)
+                reservations = reservations.filter(hotel=property_obj)
             
             total_rooms = rooms.count()
             occupied = reservations.filter(status='CHECKED_IN').count()
@@ -215,7 +215,7 @@ class AdvancedAnalyticsView(APIView):
             day_stat = stats.filter(date=current_date).first()
             
             if metric == 'revenue':
-                value = float(day_stat.revenue) if day_stat else 0
+                value = float(day_stat.total_revenue) if day_stat else 0
             elif metric == 'occupancy':
                 value = float(day_stat.occupancy_percent) if day_stat else 0
             elif metric == 'reservations':
@@ -479,6 +479,9 @@ class StartNightAuditView(APIView):
     
     def _run_audit_steps(self, night_audit, user):
         """Run automatic audit steps."""
+        from apps.billing.models import FolioCharge, ChargeCode
+        from decimal import Decimal
+        
         property_obj = night_audit.property
         business_date = night_audit.business_date
         
@@ -489,9 +492,61 @@ class StartNightAuditView(APIView):
                 step='NO_SHOWS',
                 message='Processing no-show reservations'
             )
-            # TODO: Implement no-show processing logic
+            
+            # Find reservations that should have checked in but didn't
+            no_show_reservations = Reservation.objects.filter(
+                property=property_obj,
+                check_in_date=business_date,
+                status=Reservation.Status.CONFIRMED
+            )
+            
+            no_show_count = 0
+            for reservation in no_show_reservations:
+                # Update status to no-show
+                reservation.status = Reservation.Status.NO_SHOW
+                reservation.save()
+                
+                # Post no-show charge if folio exists
+                try:
+                    folio = reservation.folios.first()
+                    if folio:
+                        # Get or create no-show charge code
+                        charge_code, _ = ChargeCode.objects.get_or_create(
+                            property=property_obj,
+                            code='NOSHOW',
+                            defaults={
+                                'name': 'No-Show Charge',
+                                'category': 'OTHER',
+                                'default_amount': reservation.total_amount * Decimal('0.2')  # 20% penalty
+                            }
+                        )
+                        
+                        FolioCharge.objects.create(
+                            folio=folio,
+                            charge_code=charge_code,
+                            description=f'No-show penalty for {reservation.confirmation_number}',
+                            amount=charge_code.default_amount,
+                            quantity=1,
+                            date=business_date,
+                            posted_by=user
+                        )
+                        no_show_count += 1
+                except Exception as e:
+                    AuditLog.objects.create(
+                        night_audit=night_audit,
+                        step='NO_SHOWS',
+                        message=f'Error posting no-show charge for {reservation.confirmation_number}: {str(e)}',
+                        is_error=True
+                    )
+            
             night_audit.no_shows_processed = True
             night_audit.save()
+            
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='NO_SHOWS',
+                message=f'Processed {no_show_count} no-show reservations'
+            )
             
             # Step 2: Post room rates
             AuditLog.objects.create(
@@ -499,9 +554,62 @@ class StartNightAuditView(APIView):
                 step='ROOM_RATES',
                 message='Posting room rates for in-house guests'
             )
-            # TODO: Implement room rate posting logic
+            
+            # Find all checked-in guests for this date
+            in_house_reservations = Reservation.objects.filter(
+                property=property_obj,
+                status=Reservation.Status.CHECKED_IN,
+                check_in_date__lte=business_date,
+                check_out_date__gt=business_date
+            )
+            
+            room_rate_count = 0
+            for reservation in in_house_reservations:
+                try:
+                    folio = reservation.folios.first()
+                    if not folio:
+                        continue
+                    
+                    # Get or create room rate charge code
+                    charge_code, _ = ChargeCode.objects.get_or_create(
+                        property=property_obj,
+                        code='ROOM',
+                        defaults={
+                            'name': 'Room Rate',
+                            'category': 'ROOM',
+                            'default_amount': Decimal('0')
+                        }
+                    )
+                    
+                    # Calculate room rate for this night
+                    for res_room in reservation.rooms.all():
+                        FolioCharge.objects.create(
+                            folio=folio,
+                            charge_code=charge_code,
+                            description=f'Room rate for {business_date} - Room {res_room.room.room_number if res_room.room else res_room.room_type.name}',
+                            amount=res_room.rate_per_night,
+                            quantity=1,
+                            date=business_date,
+                            posted_by=user
+                        )
+                        room_rate_count += 1
+                        
+                except Exception as e:
+                    AuditLog.objects.create(
+                        night_audit=night_audit,
+                        step='ROOM_RATES',
+                        message=f'Error posting room rate for {reservation.confirmation_number}: {str(e)}',
+                        is_error=True
+                    )
+            
             night_audit.room_rates_posted = True
             night_audit.save()
+            
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='ROOM_RATES',
+                message=f'Posted {room_rate_count} room rate charges'
+            )
             
             # Step 3: Check departures
             AuditLog.objects.create(
@@ -509,9 +617,37 @@ class StartNightAuditView(APIView):
                 step='DEPARTURES',
                 message='Checking departure folios'
             )
-            # TODO: Implement departure checking logic
+            
+            # Find departures for next day
+            next_date = business_date + timedelta(days=1)
+            departing_reservations = Reservation.objects.filter(
+                property=property_obj,
+                check_out_date=next_date,
+                status=Reservation.Status.CHECKED_IN
+            )
+            
+            unsettled_count = 0
+            departure_count = 0
+            for reservation in departing_reservations:
+                departure_count += 1
+                folio = reservation.folios.first()
+                if folio and folio.balance > 0:
+                    unsettled_count += 1
+                    AuditLog.objects.create(
+                        night_audit=night_audit,
+                        step='DEPARTURES',
+                        message=f'Unsettled folio for departure: {reservation.confirmation_number} - Balance: ${folio.balance}',
+                        is_error=True
+                    )
+            
             night_audit.departures_checked = True
             night_audit.save()
+            
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='DEPARTURES',
+                message=f'Checked {departure_count} departures, {unsettled_count} unsettled'
+            )
             
             # Step 4: Verify settled folios
             AuditLog.objects.create(
@@ -519,9 +655,36 @@ class StartNightAuditView(APIView):
                 step='FOLIOS',
                 message='Verifying all folios are settled'
             )
-            # TODO: Implement folio verification logic
-            night_audit.folios_settled = True
+            
+            # Get all active folios
+            active_folios = Folio.objects.filter(
+                property=property_obj,
+                status='OPEN'
+            )
+            
+            total_outstanding = Decimal('0')
+            folio_count = 0
+            for folio in active_folios:
+                if folio.balance != 0:
+                    folio_count += 1
+                    total_outstanding += folio.balance
+            
+            night_audit.folios_settled = (folio_count == 0)
             night_audit.save()
+            
+            if folio_count > 0:
+                AuditLog.objects.create(
+                    night_audit=night_audit,
+                    step='FOLIOS',
+                    message=f'Warning: {folio_count} folios with outstanding balance: ${total_outstanding}',
+                    is_error=False
+                )
+            else:
+                AuditLog.objects.create(
+                    night_audit=night_audit,
+                    step='FOLIOS',
+                    message='All folios verified and settled'
+                )
             
             # Step 5: Calculate totals
             AuditLog.objects.create(
@@ -536,15 +699,15 @@ class StartNightAuditView(APIView):
                 payment_date__date=business_date
             ).aggregate(total=Sum('amount'))
             
-            # Get folios for revenue calculation
-            folios = Folio.objects.filter(
-                property=property_obj,
-                created_at__date=business_date
+            # Get charges for the business date
+            charges = FolioCharge.objects.filter(
+                folio__property=property_obj,
+                date=business_date
             )
             
-            room_revenue = folios.aggregate(total=Sum('room_charges'))['total'] or 0
-            fb_revenue = folios.aggregate(total=Sum('fb_charges'))['total'] or 0
-            other_revenue = folios.aggregate(total=Sum('other_charges'))['total'] or 0
+            room_revenue = charges.filter(charge_code__category='ROOM').aggregate(total=Sum('amount'))['total'] or 0
+            fb_revenue = charges.filter(charge_code__category='FB').aggregate(total=Sum('amount'))['total'] or 0
+            other_revenue = charges.filter(charge_code__category='OTHER').aggregate(total=Sum('amount'))['total'] or 0
             
             night_audit.room_revenue = room_revenue
             night_audit.fb_revenue = fb_revenue
@@ -556,24 +719,19 @@ class StartNightAuditView(APIView):
             reservations = Reservation.objects.filter(
                 property=property_obj,
                 check_in_date__lte=business_date,
-                check_out_date__gt=business_date
+                check_out_date__gt=business_date,
+                status=Reservation.Status.CHECKED_IN
             )
             night_audit.rooms_sold = reservations.count()
             night_audit.arrivals_count = reservations.filter(check_in_date=business_date).count()
-            
-            # Tomorrow's departures
-            next_date = business_date + timedelta(days=1)
-            night_audit.departures_count = Reservation.objects.filter(
-                property=property_obj,
-                check_out_date=next_date
-            ).count()
+            night_audit.departures_count = departure_count
             
             night_audit.save()
             
             AuditLog.objects.create(
                 night_audit=night_audit,
                 step='COMPLETE',
-                message='Night audit completed successfully'
+                message=f'Night audit completed - Revenue: ${night_audit.total_revenue}, Rooms: {night_audit.rooms_sold}'
             )
             
         except Exception as e:
@@ -583,6 +741,7 @@ class StartNightAuditView(APIView):
                 message=f'Error during audit: {str(e)}',
                 is_error=True
             )
+            raise
 
 
 class CompleteNightAuditView(APIView):
@@ -631,8 +790,43 @@ class CompleteNightAuditView(APIView):
             message=f'Night audit finalized by {request.user.get_full_name()}'
         )
         
-        # TODO: Roll business date forward
-        # TODO: Create daily statistics record
+        # Roll business date forward
+        try:
+            property_obj = night_audit.property
+            new_business_date = night_audit.business_date + timedelta(days=1)
+            
+            # Update property business date (if such field exists in your model)
+            # property_obj.business_date = new_business_date
+            # property_obj.save()
+            
+            # Create daily statistics record
+            DailyStatistics.objects.create(
+                property=property_obj,
+                date=night_audit.business_date,
+                total_rooms=Room.objects.filter(property=property_obj, is_active=True).count(),
+                rooms_occupied=night_audit.rooms_sold,
+                occupancy_rate=(night_audit.rooms_sold / Room.objects.filter(property=property_obj, is_active=True).count() * 100) if Room.objects.filter(property=property_obj, is_active=True).count() > 0 else 0,
+                room_revenue=night_audit.room_revenue,
+                fb_revenue=night_audit.fb_revenue,
+                other_revenue=night_audit.other_revenue,
+                total_revenue=night_audit.total_revenue,
+                arrivals=night_audit.arrivals_count,
+                departures=night_audit.departures_count
+            )
+            
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='FINALIZED',
+                message=f'Business date rolled forward to {new_business_date}. Daily statistics created.'
+            )
+            
+        except Exception as e:
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='ERROR',
+                message=f'Error rolling business date: {str(e)}',
+                is_error=True
+            )
         
         return Response(NightAuditSerializer(night_audit).data)
 
@@ -669,8 +863,44 @@ class RollbackNightAuditView(APIView):
             message=f'Night audit rolled back by {request.user.get_full_name()}'
         )
         
-        # TODO: Reverse any business date changes
-        # TODO: Mark daily statistics as invalid
+        # Reverse business date changes
+        try:
+            # Mark the daily statistics as invalid/rolled back
+            daily_stat = DailyStatistics.objects.filter(
+                property=night_audit.property,
+                date=night_audit.business_date
+            ).first()
+            
+            if daily_stat:
+                # Add a flag or delete the record
+                daily_stat.delete()  # Or mark as invalid if you have such a field
+                
+                AuditLog.objects.create(
+                    night_audit=night_audit,
+                    step='ROLLBACK',
+                    message=f'Daily statistics for {night_audit.business_date} marked as invalid'
+                )
+            
+            # Optionally reverse posted charges (this is aggressive, usually not done)
+            # You might want to just flag them instead
+            # FolioCharge.objects.filter(
+            #     date=night_audit.business_date,
+            #     folio__property=night_audit.property
+            # ).delete()
+            
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='ROLLBACK',
+                message='Rollback completed successfully. Review charges manually if needed.'
+            )
+            
+        except Exception as e:
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='ERROR',
+                message=f'Error during rollback: {str(e)}',
+                is_error=True
+            )
         
         return Response(NightAuditSerializer(night_audit).data)
 

@@ -5,8 +5,8 @@ app_name = 'properties'
 
 urlpatterns = [
     # Property endpoints
-    path('', views.PropertyListView.as_view(), name='list'),
-    path('<int:pk>/', views.PropertyDetailView.as_view(), name='detail'),
+    path('', views.PropertyListView.as_view(), name='property_list'),
+    path('<int:pk>/', views.PropertyDetailView.as_view(), name='property_detail'),
     path('settings/', views.SystemSettingView.as_view(), name='settings'),
     
     # Building endpoints

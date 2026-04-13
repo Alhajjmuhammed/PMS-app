@@ -1,0 +1,24 @@
+[Unit]
+Description=PMS Celery Worker
+After=network.target redis.service postgresql.service
+Requires=redis.service postgresql.service
+
+[Service]
+Type=forking
+User=pmsuser
+Group=www-data
+WorkingDirectory=/opt/pms/backend
+Environment="PATH=/opt/pms/backend/venv/bin"
+EnvironmentFile=/opt/pms/backend/.env
+ExecStart=/opt/pms/backend/venv/bin/celery -A config worker \
+          --loglevel=info \
+          --logfile=/var/log/pms/celery-worker.log \
+          --pidfile=/run/pms/celery-worker.pid \
+          --detach
+ExecStop=/bin/kill -s TERM $MAINPID
+ExecReload=/bin/kill -s HUP $MAINPID
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

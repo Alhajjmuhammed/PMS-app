@@ -29,20 +29,20 @@ class RoomTypeListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = RoomTypeSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'view_type']
+    filterset_fields = ['is_active']
     search_fields = ['name', 'code', 'description']
-    ordering_fields = ['name', 'sort_order', 'base_occupancy', 'size_sqm']
+    ordering_fields = ['name', 'sort_order', 'max_occupancy', 'size_sqm']
     ordering = ['sort_order', 'name']
     
     def get_queryset(self):
         return RoomType.objects.filter(
-            property=self.request.user.property
+            hotel=self.request.user.assigned_property
         ).annotate(
             rooms_count=Count('rooms')
         )
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(hotel=self.request.user.assigned_property)
 
 
 class RoomTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -52,7 +52,7 @@ class RoomTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return RoomType.objects.filter(
-            property=self.request.user.property
+            hotel=self.request.user.assigned_property
         ).prefetch_related('amenities', 'rooms')
 
 
@@ -63,7 +63,7 @@ class ActiveRoomTypesView(generics.ListAPIView):
     
     def get_queryset(self):
         return RoomType.objects.filter(
-            property=self.request.user.property,
+            hotel=self.request.user.assigned_property,
             is_active=True
         ).order_by('sort_order', 'name')
 
@@ -111,7 +111,7 @@ class RoomTypeAmenityListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return RoomTypeAmenity.objects.filter(
-            room_type__property=self.request.user.property
+            room_type__property=self.request.user.assigned_property
         ).select_related('room_type', 'amenity')
 
 
@@ -122,7 +122,7 @@ class RoomTypeAmenityDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return RoomTypeAmenity.objects.filter(
-            room_type__property=self.request.user.property
+            room_type__hotel=self.request.user.assigned_property
         ).select_related('room_type', 'amenity')
 
 
@@ -135,7 +135,7 @@ class RoomTypeAmenitiesByTypeView(generics.ListAPIView):
         room_type_id = self.kwargs.get('room_type_id')
         return RoomTypeAmenity.objects.filter(
             room_type_id=room_type_id,
-            room_type__property=self.request.user.property
+            room_type__hotel=self.request.user.assigned_property
         ).select_related('room_type', 'amenity')
 
 
@@ -155,7 +155,7 @@ class BulkAmenityAssignView(APIView):
         quantity = data.get('quantity', 1)
         
         # Verify room type belongs to user's property
-        if room_type.property != request.user.property:
+        if room_type.property != request.user.assigned_property:
             return Response(
                 {'error': 'Room type not found'},
                 status=status.HTTP_404_NOT_FOUND
@@ -197,7 +197,7 @@ class RoomImageListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return RoomImage.objects.filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         ).select_related('room')
 
 
@@ -208,7 +208,7 @@ class RoomImageDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return RoomImage.objects.filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         ).select_related('room')
 
 
@@ -221,7 +221,7 @@ class RoomImagesByRoomView(generics.ListAPIView):
         room_id = self.kwargs.get('room_id')
         return RoomImage.objects.filter(
             room_id=room_id,
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         ).order_by('display_order')
 
 
@@ -238,7 +238,7 @@ class RoomStatusLogListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = RoomStatusLog.objects.filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         ).select_related('room', 'changed_by')
         
         # Filter by date range
@@ -263,7 +263,7 @@ class RoomStatusLogDetailView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return RoomStatusLog.objects.filter(
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         ).select_related('room', 'changed_by')
 
 
@@ -276,7 +276,7 @@ class RoomStatusLogsByRoomView(generics.ListAPIView):
         room_id = self.kwargs.get('room_id')
         return RoomStatusLog.objects.filter(
             room_id=room_id,
-            room__property=self.request.user.property
+            room__hotel=self.request.user.assigned_property
         ).select_related('room', 'changed_by').order_by('-changed_at')
 
 
@@ -285,10 +285,10 @@ class RoomConfigStatsView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         
         room_type_stats = RoomType.objects.filter(
-            property=property_obj
+            hotel=property_obj
         ).aggregate(
             total=Count('id'),
             active=Count('id', filter=Q(is_active=True))
@@ -297,12 +297,12 @@ class RoomConfigStatsView(APIView):
         total_amenities = RoomAmenity.objects.filter(is_active=True).count()
         
         total_images = RoomImage.objects.filter(
-            room__property=property_obj
+            room__hotel=property_obj
         ).count()
         
         # Room stats by type
         rooms_by_type = Room.objects.filter(
-            property=property_obj
+            hotel=property_obj
         ).values('room_type__name').annotate(
             count=Count('id')
         )

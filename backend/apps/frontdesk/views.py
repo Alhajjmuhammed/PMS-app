@@ -23,8 +23,8 @@ class DashboardView(LoginRequiredMixin, View):
     def get(self, request):
         today = date.today()
         property_filter = {}
-        if request.user.property:
-            property_filter = {'property': request.user.property}
+        if request.user.assigned_property:
+            property_filter = {'property': request.user.assigned_property}
         
         # Today's statistics
         arrivals = Reservation.objects.filter(
@@ -36,12 +36,12 @@ class DashboardView(LoginRequiredMixin, View):
         departures = CheckIn.objects.filter(
             expected_check_out=today,
             check_out__isnull=True,
-            **({'room__property': request.user.property} if request.user.property else {})
+            **({'room__hotel': request.user.assigned_property} if request.user.assigned_property else {})
         ).count()
         
         in_house = CheckIn.objects.filter(
             check_out__isnull=True,
-            **({'room__property': request.user.property} if request.user.property else {})
+            **({'room__hotel': request.user.assigned_property} if request.user.assigned_property else {})
         ).count()
         
         # Room statistics
@@ -88,8 +88,8 @@ class ArrivalsView(LoginRequiredMixin, ListView):
             status__in=[Reservation.Status.CONFIRMED, Reservation.Status.PENDING]
         ).select_related('guest')
         
-        if self.request.user.property:
-            queryset = queryset.filter(property=self.request.user.property)
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
         
         return queryset
     
@@ -111,8 +111,8 @@ class DeparturesView(LoginRequiredMixin, ListView):
             check_out__isnull=True
         ).select_related('guest', 'room', 'reservation')
         
-        if self.request.user.property:
-            queryset = queryset.filter(room__property=self.request.user.property)
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(room__hotel=self.request.user.assigned_property)
         
         return queryset
 
@@ -128,8 +128,8 @@ class InHouseView(LoginRequiredMixin, ListView):
             check_out__isnull=True
         ).select_related('guest', 'room', 'reservation')
         
-        if self.request.user.property:
-            queryset = queryset.filter(room__property=self.request.user.property)
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(room__hotel=self.request.user.assigned_property)
         
         search = self.request.GET.get('search')
         if search:
@@ -378,8 +378,8 @@ class RoomAssignmentView(LoginRequiredMixin, View):
             rooms__room__isnull=True
         ).select_related('guest')
         
-        if request.user.property:
-            unassigned = unassigned.filter(property=request.user.property)
+        if request.user.assigned_property:
+            unassigned = unassigned.filter(property=request.user.assigned_property)
         
         context = {
             'unassigned_reservations': unassigned,
@@ -396,8 +396,8 @@ class WalkInListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         queryset = WalkIn.objects.all()
-        if self.request.user.property:
-            queryset = queryset.filter(property=self.request.user.property)
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(property=self.request.user.assigned_property)
         return queryset.order_by('-created_at')
 
 
@@ -410,8 +410,8 @@ class WalkInCreateView(LoginRequiredMixin, CreateView):
     
     def form_valid(self, form):
         form.instance.created_by = self.request.user
-        if self.request.user.property:
-            form.instance.property = self.request.user.property
+        if self.request.user.assigned_property:
+            form.instance.property = self.request.user.assigned_property
         messages.success(self.request, 'Walk-in record created.')
         return super().form_valid(form)
 
@@ -478,8 +478,8 @@ class RoomGridView(LoginRequiredMixin, View):
     
     def get(self, request):
         rooms = Room.objects.select_related('room_type', 'floor').filter(is_active=True)
-        if request.user.property:
-            rooms = rooms.filter(property=request.user.property)
+        if request.user.assigned_property:
+            rooms = rooms.filter(property=request.user.assigned_property)
         
         # Group by floor
         floors = {}

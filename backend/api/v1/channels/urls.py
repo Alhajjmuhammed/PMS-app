@@ -45,6 +45,12 @@ urlpatterns = [
     # ===== Dashboard =====
     path('dashboard/', channels_views.ChannelDashboardView.as_view(), name='dashboard'),
     
+    # ===== Sync Actions =====
+    path('property-channels/<int:pk>/sync-rates/', views.SyncChannelRatesView.as_view(), name='sync_rates'),
+    path('rates/', views.SyncChannelRatesView.as_view(), name='rates'),  # General rates alias
+    path('property-channels/<int:pk>/sync-availability/', views.SyncChannelAvailabilityView.as_view(), name='sync_availability'),
+    path('webhook/<int:property_channel_id>/', views.ChannelWebhookView.as_view(), name='webhook'),
+    
     # ===== Legacy compatibility =====
     path('', views.ChannelListView.as_view(), name='channel_list'),
     path('<int:pk>/', views.ChannelDetailView.as_view(), name='channel_detail'),

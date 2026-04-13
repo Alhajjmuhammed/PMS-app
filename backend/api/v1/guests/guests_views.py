@@ -140,11 +140,11 @@ class LoyaltyProgramListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return LoyaltyProgram.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).prefetch_related('tiers')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class LoyaltyProgramDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -154,7 +154,7 @@ class LoyaltyProgramDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return LoyaltyProgram.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         )
 
 
@@ -165,7 +165,7 @@ class ActiveLoyaltyProgramsView(generics.ListAPIView):
     
     def get_queryset(self):
         return LoyaltyProgram.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             is_active=True
         )
 
@@ -182,7 +182,7 @@ class LoyaltyTierListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return LoyaltyTier.objects.filter(
-            program__property=self.request.user.property
+            program__property=self.request.user.assigned_property
         ).select_related('program')
 
 
@@ -193,7 +193,7 @@ class LoyaltyTierDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return LoyaltyTier.objects.filter(
-            program__property=self.request.user.property
+            program__property=self.request.user.assigned_property
         ).select_related('program')
 
 
@@ -206,7 +206,7 @@ class LoyaltyTiersByProgramView(generics.ListAPIView):
         program_id = self.kwargs.get('program_id')
         return LoyaltyTier.objects.filter(
             program_id=program_id,
-            program__property=self.request.user.property
+            program__property=self.request.user.assigned_property
         ).order_by('min_points')
 
 

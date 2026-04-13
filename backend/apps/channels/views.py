@@ -15,8 +15,8 @@ class ChannelDashboardView(LoginRequiredMixin, View):
     
     def get(self, request):
         connections = PropertyChannel.objects.filter(is_active=True)
-        if request.user.property:
-            connections = connections.filter(property=request.user.property)
+        if request.user.assigned_property:
+            connections = connections.filter(property=request.user.assigned_property)
         
         pending_reservations = ChannelReservation.objects.filter(
             status=ChannelReservation.Status.RECEIVED
@@ -55,8 +55,8 @@ class ConnectionListView(LoginRequiredMixin, ListView):
     
     def get_queryset(self):
         qs = super().get_queryset()
-        if self.request.user.property:
-            qs = qs.filter(property=self.request.user.property)
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
         return qs
 
 

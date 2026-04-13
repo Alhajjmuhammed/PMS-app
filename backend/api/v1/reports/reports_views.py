@@ -38,7 +38,7 @@ class DailyStatisticsListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = DailyStatistics.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('property')
         
         # Filter by date range
@@ -53,7 +53,7 @@ class DailyStatisticsListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(property=getattr(self.request.user, 'property', None))
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class DailyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -63,7 +63,7 @@ class DailyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return DailyStatistics.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('property')
 
 
@@ -75,7 +75,7 @@ class DailyStatisticsByDateView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return DailyStatistics.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('property')
 
 
@@ -92,11 +92,11 @@ class MonthlyStatisticsListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return MonthlyStatistics.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('property')
     
     def perform_create(self, serializer):
-        serializer.save(property=getattr(self.request.user, 'property', None))
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class MonthlyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -106,7 +106,7 @@ class MonthlyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return MonthlyStatistics.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('property')
 
 
@@ -123,12 +123,12 @@ class ReportTemplateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return ReportTemplate.objects.filter(
-            Q(property=getattr(self.request.user, 'property', None)) | Q(property__isnull=True)
+            Q(property=self.request.user.assigned_property) | Q(property__isnull=True)
         ).select_related('property', 'created_by')
     
     def perform_create(self, serializer):
         serializer.save(
-            property=getattr(self.request.user, 'property', None),
+            property=self.request.user.assigned_property,
             created_by=self.request.user
         )
 
@@ -140,7 +140,7 @@ class ReportTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return ReportTemplate.objects.filter(
-            Q(property=getattr(self.request.user, 'property', None)) | Q(property__isnull=True)
+            Q(property=self.request.user.assigned_property) | Q(property__isnull=True)
         ).select_related('property', 'created_by')
 
 
@@ -176,12 +176,12 @@ class NightAuditListCreateView(generics.ListCreateAPIView):
     serializer_class = NightAuditSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['status']
-    ordering_fields = ['audit_date']
-    ordering = ['-audit_date']
+    ordering_fields = ['business_date']
+    ordering = ['-business_date']
     
     def get_queryset(self):
         queryset = NightAudit.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('property', 'completed_by').prefetch_related('logs')
         
         # Filter by date range
@@ -189,14 +189,14 @@ class NightAuditListCreateView(generics.ListCreateAPIView):
         end_date = self.request.query_params.get('end_date')
         
         if start_date:
-            queryset = queryset.filter(audit_date__gte=start_date)
+            queryset = queryset.filter(business_date__gte=start_date)
         if end_date:
-            queryset = queryset.filter(audit_date__lte=end_date)
+            queryset = queryset.filter(business_date__lte=end_date)
         
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(property=getattr(self.request.user, 'property', None))
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class NightAuditDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -206,7 +206,7 @@ class NightAuditDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return NightAudit.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('property', 'completed_by').prefetch_related('logs')
 
 
@@ -217,9 +217,9 @@ class PendingNightAuditsView(generics.ListAPIView):
     
     def get_queryset(self):
         return NightAudit.objects.filter(
-            property=getattr(self.request.user, 'property', None),
+            property=self.request.user.assigned_property,
             status='PENDING'
-        ).select_related('property').order_by('audit_date')
+        ).select_related('property').order_by('business_date')
 
 
 class StartNightAuditView(APIView):
@@ -231,7 +231,7 @@ class StartNightAuditView(APIView):
             from django.utils import timezone
             audit = NightAudit.objects.get(
                 pk=pk,
-                property=request.user.property
+                property=request.user.assigned_property
             )
             
             if audit.status != 'PENDING':
@@ -271,7 +271,7 @@ class CompleteNightAuditView(APIView):
             from django.utils import timezone
             audit = NightAudit.objects.get(
                 pk=pk,
-                property=request.user.property
+                property=request.user.assigned_property
             )
             
             if audit.status != 'IN_PROGRESS':
@@ -314,7 +314,7 @@ class AuditLogListView(generics.ListAPIView):
         audit_id = self.kwargs.get('audit_id')
         return AuditLog.objects.filter(
             night_audit_id=audit_id,
-            night_audit__property=getattr(self.request.user, 'property', None)
+            night_audit__property=self.request.user.assigned_property
         ).order_by('timestamp')
 
 
@@ -326,13 +326,13 @@ class NightAuditDashboardView(APIView):
     
     def get(self, request):
         from django.db import models
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         today = date.today()
         
         # Get last audit
         last_audit = NightAudit.objects.filter(
             property=property_obj
-        ).order_by('-audit_date').first()
+        ).order_by('-business_date').first()
         
         # Statistics
         pending = NightAudit.objects.filter(
@@ -344,8 +344,8 @@ class NightAuditDashboardView(APIView):
         completed_this_month = NightAudit.objects.filter(
             property=property_obj,
             status='COMPLETED',
-            audit_date__year=today.year,
-            audit_date__month=today.month
+            business_date__year=today.year,
+            business_date__month=today.month
         )
         
         completed_count = completed_this_month.count()
@@ -370,7 +370,7 @@ class NightAuditDashboardView(APIView):
         )['total'] or 0
         
         data = {
-            'last_audit_date': last_audit.audit_date if last_audit else None,
+            'last_business_date': last_audit.business_date if last_audit else None,
             'last_audit_status': last_audit.status if last_audit else 'NONE',
             'pending_audits': pending,
             'completed_this_month': completed_count,

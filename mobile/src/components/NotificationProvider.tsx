@@ -1,13 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Snackbar } from 'react-native-paper';
-import * as Notifications from 'expo-notifications';
+import Constants from 'expo-constants';
 import {
   registerForPushNotifications,
   addNotificationReceivedListener,
   addNotificationResponseListener,
 } from '../services/notifications';
 import { useAuth } from '../contexts/AuthContext';
+
+// Check if running in Expo Go
+const isExpoGo = Constants.appOwnership === 'expo';
 
 interface NotificationProviderProps {
   children: React.ReactNode;
@@ -16,16 +19,23 @@ interface NotificationProviderProps {
 export const NotificationProvider: React.FC<NotificationProviderProps> = ({ children }) => {
   const { user } = useAuth();
   const isAuthenticated = !!user;
-  const [notification, setNotification] = useState<Notifications.Notification | null>(null);
+  const [notification, setNotification] = useState<any>(null);
   const [visible, setVisible] = useState(false);
   
-  const notificationListener = useRef<Notifications.Subscription | null>(null);
-  const responseListener = useRef<Notifications.Subscription | null>(null);
+  const notificationListener = useRef<any>(null);
+  const responseListener = useRef<any>(null);
+  
+  // Skip notification setup in Expo Go
+  if (isExpoGo) {
+    return <View style={styles.container}>{children}</View>;
+  }
 
   useEffect(() => {
     if (isAuthenticated) {
-      // Register for push notifications
-      registerForPushNotifications();
+      // Register for push notifications (will skip if in Expo Go)
+      registerForPushNotifications().catch((error) => {
+        console.log('Push notification registration skipped:', error?.message || 'Not available in Expo Go');
+      });
 
       // Handle notifications received while app is foregrounded
       notificationListener.current = addNotificationReceivedListener((notification) => {

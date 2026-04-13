@@ -7,6 +7,7 @@ app_name = 'rates'
 urlpatterns = [
     # Rate Plans
     path('plans/', rate_plan_views.RatePlanListCreateView.as_view(), name='plan_list'),
+    path('rate-plans/', rate_plan_views.RatePlanListCreateView.as_view(), name='rate_plan_list'),  # Alias for better UX
     path('plans/<int:pk>/', rate_plan_views.RatePlanDetailView.as_view(), name='plan_detail'),
     path('plans/active/', rate_plan_views.ActiveRatePlansView.as_view(), name='plan_active'),
     

@@ -79,8 +79,6 @@ property, created = Property.objects.get_or_create(
         'email': 'info@grandplaza.com',
         'website': 'http://www.grandplaza.com',
         'total_rooms': 50,
-        'is_active': True,
-        'created_by': admin_user,
     }
 )
 print(f"   {'✅ Created' if created else 'ℹ️  Exists'}: {property.name}")
@@ -89,9 +87,9 @@ print()
 # 3. Create room types
 print("🛏️  Creating room types...")
 room_types_data = [
-    {'name': 'Standard Room', 'code': 'STD', 'base_price': '150.00', 'capacity': 2},
-    {'name': 'Deluxe Room', 'code': 'DLX', 'base_price': '250.00', 'capacity': 2},
-    {'name': 'Suite', 'code': 'STE', 'base_price': '450.00', 'capacity': 4},
+    {'name': 'Standard Room', 'code': 'STD', 'base_rate': '150.00', 'capacity': 2},
+    {'name': 'Deluxe Room', 'code': 'DLX', 'base_rate': '250.00', 'capacity': 2},
+    {'name': 'Suite', 'code': 'STE', 'base_rate': '450.00', 'capacity': 4},
 ]
 
 room_types = []
@@ -101,14 +99,14 @@ for rt_data in room_types_data:
         code=rt_data['code'],
         defaults={
             'name': rt_data['name'],
-            'base_price': Decimal(rt_data['base_price']),
+            'base_rate': Decimal(rt_data['base_rate']),
             'max_occupancy': rt_data['capacity'],
             'description': f'{rt_data["name"]} with modern amenities',
         }
     )
     room_types.append(rt)
     if created:
-        print(f"   ✅ {rt.name} - ${rt.base_price}/night")
+        print(f"   ✅ {rt.name} - ${rt.base_rate}/night")
 print()
 
 # 4. Create rooms
@@ -118,17 +116,16 @@ for room_num in range(101, 125):
     room_type = room_types[room_num % 3]
     room, created = Room.objects.get_or_create(
         hotel=property,
-        number=str(room_num),
+        room_number=str(room_num),
         defaults={
             'room_type': room_type,
-            'floor_number': ((room_num - 100) // 10) or 1,
-            'status': 'CLEAN' if room_num % 3 == 0 else 'VACANT',
+            'status': 'VC' if room_num % 3 == 0 else 'VD',
             'is_active': True,
         }
     )
     rooms.append(room)
     if created:
-        print(f"   ✅ Room {room.number} ({room_type.name})")
+        print(f"   ✅ Room {room.room_number} ({room_type.name})")
 print(f"   Total: {len(rooms)} rooms")
 print()
 

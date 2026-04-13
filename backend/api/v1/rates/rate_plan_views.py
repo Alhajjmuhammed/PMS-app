@@ -42,11 +42,11 @@ class RatePlanListCreateView(generics.ListCreateAPIView):
             return RatePlan.objects.none()
        
         return RatePlan.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).prefetch_related('room_rates')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class RatePlanDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -59,7 +59,7 @@ class RatePlanDetailView(generics.RetrieveUpdateDestroyAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return RatePlan.objects.none()
         return RatePlan.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).prefetch_related('room_rates__room_type')
 
 
@@ -73,7 +73,7 @@ class ActiveRatePlansView(generics.ListAPIView):
             return RatePlan.objects.none()
        
         return RatePlan.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             is_active=True
         ).order_by('priority', 'name')
 
@@ -94,11 +94,11 @@ class RoomRateListCreateView(generics.ListCreateAPIView):
             return RoomRate.objects.none()
        
         return RoomRate.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('rate_plan', 'room_type')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class RoomRateDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -111,7 +111,7 @@ class RoomRateDetailView(generics.RetrieveUpdateDestroyAPIView):
             return RoomRate.objects.none()
        
         return RoomRate.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('rate_plan', 'room_type')
 
 
@@ -123,7 +123,7 @@ class RoomRateByPlanView(generics.ListAPIView):
     def get_queryset(self):
         rate_plan_id = self.kwargs.get('rate_plan_id')
         return RoomRate.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             rate_plan_id=rate_plan_id
         ).select_related('rate_plan', 'room_type')
 
@@ -144,7 +144,7 @@ class BulkRoomRateCreateView(APIView):
         created_rates = []
         for room_type in room_types:
             room_rate, created = RoomRate.objects.update_or_create(
-                property=request.user.property,
+                property=request.user.assigned_property,
                 rate_plan=rate_plan,
                 room_type=room_type,
                 defaults={
@@ -179,7 +179,7 @@ class DateRateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = DateRate.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('room_type')
         
         # Filter by date range
@@ -194,7 +194,7 @@ class DateRateListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class DateRateDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -207,7 +207,7 @@ class DateRateDetailView(generics.RetrieveUpdateDestroyAPIView):
             return DateRate.objects.none()
        
         return DateRate.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('room_type')
 
 
@@ -219,7 +219,7 @@ class DateRateByDateView(generics.ListAPIView):
     def get_queryset(self):
         date_str = self.kwargs.get('date')
         return DateRate.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             date=date_str
         ).select_related('room_type')
 
@@ -241,11 +241,11 @@ class YieldRuleListCreateView(generics.ListCreateAPIView):
             return YieldRule.objects.none()
        
         return YieldRule.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('room_type')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class YieldRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -258,7 +258,7 @@ class YieldRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
             return YieldRule.objects.none()
        
         return YieldRule.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('room_type')
 
 
@@ -272,7 +272,7 @@ class ActiveYieldRulesView(generics.ListAPIView):
             return YieldRule.objects.none()
        
         return YieldRule.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             is_active=True
         ).select_related('room_type').order_by('priority')
 
@@ -303,7 +303,7 @@ class CalculateRateView(APIView):
         if rate_plan:
             try:
                 room_rate = RoomRate.objects.get(
-                    property=request.user.property,
+                    property=request.user.assigned_property,
                     rate_plan=rate_plan,
                     room_type=room_type,
                     is_active=True
@@ -320,12 +320,12 @@ class CalculateRateView(APIView):
             # Use default rate plan
             try:
                 default_plan = RatePlan.objects.get(
-                    property=request.user.property,
+                    property=request.user.assigned_property,
                     is_default=True,
                     is_active=True
                 )
                 room_rate = RoomRate.objects.get(
-                    property=request.user.property,
+                    property=request.user.assigned_property,
                     rate_plan=default_plan,
                     room_type=room_type,
                     is_active=True
@@ -347,7 +347,7 @@ class CalculateRateView(APIView):
             # Check for date-specific rate
             try:
                 date_rate = DateRate.objects.get(
-                    property=request.user.property,
+                    property=request.user.assigned_property,
                     room_type=room_type,
                     date=current_date
                 )
@@ -407,7 +407,7 @@ class RateStatsView(APIView):
     permission_classes = [IsAuthenticated]
     
     def get(self, request):
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         
         stats = RoomRate.objects.filter(
             property=property_obj,

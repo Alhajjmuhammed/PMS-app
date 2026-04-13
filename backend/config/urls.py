@@ -29,10 +29,14 @@ urlpatterns = [
     # Admin
     path('admin/', admin.site.urls),
     
+    # Health checks
+    path('health/', include('apps.core.urls')),
+    
     # API Documentation
     path('swagger<format>/', schema_view.without_ui(cache_timeout=0), name='schema-json'),
     path('swagger/', schema_view.with_ui('swagger', cache_timeout=0), name='schema-swagger-ui'),
     path('redoc/', schema_view.with_ui('redoc', cache_timeout=0), name='schema-redoc'),
+    path('api/schema/', schema_view.without_ui(cache_timeout=0), name='api-schema'),
     
     # Root redirect to API docs
     path('', RedirectView.as_view(url='/swagger/', permanent=False)),

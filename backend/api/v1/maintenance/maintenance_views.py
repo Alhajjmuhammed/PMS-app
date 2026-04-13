@@ -38,7 +38,7 @@ class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = MaintenanceRequest.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related(
             'room', 'assigned_to', 'reported_by', 'property'
         ).prefetch_related('logs')
@@ -57,7 +57,7 @@ class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         # Generate request number
         last_request = MaintenanceRequest.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).order_by('-id').first()
         
         if last_request:
@@ -67,7 +67,7 @@ class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
             request_number = "MR-000001"
         
         serializer.save(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             reported_by=self.request.user,
             request_number=request_number
         )
@@ -80,7 +80,7 @@ class MaintenanceRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return MaintenanceRequest.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related(
             'room', 'assigned_to', 'reported_by', 'property'
         ).prefetch_related('logs')
@@ -93,7 +93,7 @@ class PendingMaintenanceView(generics.ListAPIView):
     
     def get_queryset(self):
         return MaintenanceRequest.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             status='PENDING'
         ).select_related('room', 'reported_by').order_by('-priority', 'created_at')
 
@@ -117,7 +117,7 @@ class EmergencyMaintenanceView(generics.ListAPIView):
     
     def get_queryset(self):
         return MaintenanceRequest.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             priority='EMERGENCY',
             status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS']
         ).select_related('room', 'assigned_to').order_by('created_at')
@@ -131,7 +131,7 @@ class AssignMaintenanceView(APIView):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
                 pk=pk,
-                property=request.user.property
+                property=request.user.assigned_property
             )
             
             assigned_to_id = request.data.get('assigned_to')
@@ -144,7 +144,7 @@ class AssignMaintenanceView(APIView):
             try:
                 assigned_to = User.objects.get(
                     id=assigned_to_id,
-                    property=request.user.property
+                    property=request.user.assigned_property
                 )
             except User.DoesNotExist:
                 return Response(
@@ -188,7 +188,7 @@ class BulkAssignMaintenanceView(APIView):
         
         requests = MaintenanceRequest.objects.filter(
             id__in=data['requests'],
-            property=request.user.property
+            property=request.user.assigned_property
         )
         
         updated_count = 0
@@ -219,7 +219,7 @@ class StartMaintenanceView(APIView):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
                 pk=pk,
-                property=request.user.property
+                property=request.user.assigned_property
             )
             
             if maintenance_request.status not in ['PENDING', 'ASSIGNED']:
@@ -259,7 +259,7 @@ class CompleteMaintenanceView(APIView):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
                 pk=pk,
-                property=request.user.property
+                property=request.user.assigned_property
             )
             
             if maintenance_request.status == 'COMPLETED':
@@ -326,11 +326,11 @@ class AssetListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return Asset.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('room', 'property')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.property)
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class AssetDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -340,7 +340,7 @@ class AssetDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return Asset.objects.filter(
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         ).select_related('room', 'property')
 
 
@@ -353,7 +353,7 @@ class AssetsByRoomView(generics.ListAPIView):
         room_id = self.kwargs.get('room_id')
         return Asset.objects.filter(
             room_id=room_id,
-            property=self.request.user.property
+            property=self.request.user.assigned_property
         )
 
 
@@ -365,7 +365,7 @@ class AssetsDueMaintenanceView(generics.ListAPIView):
     def get_queryset(self):
         today = date.today()
         return Asset.objects.filter(
-            property=self.request.user.property,
+            property=self.request.user.assigned_property,
             is_active=True,
             next_maintenance__lte=today
         ).order_by('next_maintenance')
@@ -382,7 +382,7 @@ class MaintenanceLogListView(generics.ListAPIView):
         request_id = self.kwargs.get('request_id')
         return MaintenanceLog.objects.filter(
             request_id=request_id,
-            request__property=self.request.user.property
+            request__property=self.request.user.assigned_property
         ).select_related('user', 'request').order_by('-timestamp')
 
 
@@ -404,7 +404,7 @@ class MaintenanceDashboardView(APIView):
     def get(self, request):
         from django.db import models
         today = date.today()
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         
         # Request statistics
         request_stats = MaintenanceRequest.objects.filter(

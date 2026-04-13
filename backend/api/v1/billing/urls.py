@@ -26,6 +26,9 @@ urlpatterns = [
     path('payments/', views.PaymentListView.as_view(), name='payment_list'),
     path('payments/<int:pk>/', views.PaymentDetailView.as_view(), name='payment_detail'),
     
+    # Folio Charge endpoints  
+    path('folio-charges/', views.FolioChargeListView.as_view(), name='folio_charge_list'),
+    
     # Cashier Shift endpoints
     path('cashier-shifts/', cashier_shift_views.CashierShiftListView.as_view(), name='shift_list'),
     path('cashier-shifts/<int:pk>/', cashier_shift_views.CashierShiftDetailView.as_view(), name='shift_detail'),

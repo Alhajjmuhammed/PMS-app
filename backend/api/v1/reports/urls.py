@@ -31,6 +31,11 @@ urlpatterns = [
     path('night-audits/<int:audit_id>/logs/', reports_views.AuditLogListView.as_view(), name='audit_logs'),
     path('night-audits/dashboard/', reports_views.NightAuditDashboardView.as_view(), name='night_audit_dashboard'),
     
+    # ===== Convenience Aliases (for better UX) =====
+    path('night-audit/', reports_views.NightAuditListCreateView.as_view(), name='night_audit_list_alias'),
+    path('daily-stats/', reports_views.DailyStatisticsListCreateView.as_view(), name='daily_stats'),  # Alias for API consistency
+    path('monthly-stats/', reports_views.MonthlyStatisticsListCreateView.as_view(), name='monthly_stats'),  # Alias for API consistency
+    
     # ===== Legacy compatibility =====
     path('dashboard/', views.DashboardStatsView.as_view(), name='dashboard'),
     path('advanced-analytics/', views.AdvancedAnalyticsView.as_view(), name='advanced_analytics'),

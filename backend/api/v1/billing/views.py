@@ -416,3 +416,20 @@ class PaymentListView(generics.ListAPIView):
             payments = payments.filter(folio_id=folio_id)
         
         return Response(PaymentSerializer(payments, many=True).data)
+
+
+class FolioChargeListView(generics.ListAPIView):
+    """List all folio charges."""
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
+    filterset_fields = ['folio', 'charge_code', 'is_posted']
+    search_fields = ['description', 'folio__folio_number']
+    ordering_fields = ['charge_date', 'amount']
+    ordering = ['-charge_date']
+    
+    def get_serializer_class(self):
+        from .serializers import FolioChargeSerializer
+        return FolioChargeSerializer
+    
+    def get_queryset(self):
+        return FolioCharge.objects.select_related('folio', 'charge_code').all()

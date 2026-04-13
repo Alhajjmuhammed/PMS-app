@@ -108,10 +108,6 @@ class CanViewInvoices(BasePermission):
         if request.user.role == 'FRONT_DESK':
             return request.method in ['GET', 'HEAD', 'OPTIONS']
         return request.user.is_superuser or request.user.role in allowed_roles
-        if not request.user or not request.user.is_authenticated:
-            return False
-        allowed_roles = ['ADMIN', 'MANAGER', 'POS_STAFF']
-        return request.user.is_superuser or request.user.role in allowed_roles
 
 
 class IsReadOnly(BasePermission):
@@ -127,28 +123,24 @@ class IsReadOnly(BasePermission):
 class CanManageUsers(BasePermission):
     """
     Permission class for user management.
-    Only superusers can manage users.
+    Superusers and Admins can manage users.
     """
     def has_permission(self, request, view):
-        return request.user and request.user.is_superuser
+        if not request.user or not request.user.is_authenticated:
+            return False
+        allowed_roles = ['ADMIN']
+        return request.user.is_superuser or request.user.role in allowed_roles
 
 
 class CanManageProperties(BasePermission):
     """
     Permission class for property management.
-    Only superusers can create/delete properties.
-    Managers can view and update their own property.
+    Superusers, Admins, and Managers can manage properties.
     """
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
         
-        # Superusers can do everything
-        if request.user.is_superuser:
-            return True
-        
-        # Managers can only view (GET requests)
-        if request.user.role == 'MANAGER' and request.method in ['GET', 'HEAD', 'OPTIONS']:
-            return True
-        
-        return False
+        # Superusers, Admins, Managers can do everything
+        allowed_roles = ['ADMIN', 'MANAGER']
+        return request.user.is_superuser or request.user.role in allowed_roles

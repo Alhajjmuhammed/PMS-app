@@ -82,7 +82,7 @@ class SyncPropertyChannelView(APIView):
         try:
             property_channel = PropertyChannel.objects.get(
                 pk=pk,
-                property=request.user.property
+                property=request.user.assigned_property
             )
             
             if not property_channel.is_active:
@@ -243,7 +243,7 @@ class BulkAvailabilityUpdateView(APIView):
         try:
             property_channel = PropertyChannel.objects.get(
                 id=data['property_channel'],
-                property=request.user.property
+                property=request.user.assigned_property
             )
         except PropertyChannel.DoesNotExist:
             return Response(
@@ -324,7 +324,7 @@ class BulkRateUpdateView(APIView):
         try:
             property_channel = PropertyChannel.objects.get(
                 id=data['property_channel'],
-                property=request.user.property
+                property=request.user.assigned_property
             )
         except PropertyChannel.DoesNotExist:
             return Response(
@@ -413,7 +413,7 @@ class ChannelDashboardView(APIView):
     def get(self, request):
         from django.db import models
         today = date.today()
-        property_obj = request.user.property
+        property_obj = request.user.assigned_property
         
         # Channel statistics
         active_channels = PropertyChannel.objects.filter(

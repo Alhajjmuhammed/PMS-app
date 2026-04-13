@@ -60,8 +60,7 @@ class ReservationDetailView(generics.RetrieveUpdateAPIView):
         return Reservation.objects.select_related(
             'guest', 'hotel', 'created_by'
         ).prefetch_related(
-            'rooms__room__room_type',
-            'rooms__rate_plan'
+            'rooms__room__room_type'
         )
 
 

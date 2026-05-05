@@ -5,12 +5,13 @@ import { ActivityIndicator, View } from 'react-native';
 
 // Screens
 import LoginScreen from '../screens/auth/LoginScreen';
+import MFAScreen from '../screens/auth/MFAScreen';
 import MainNavigator from './MainNavigator';
 
 const Stack = createNativeStackNavigator();
 
 export default function RootNavigator() {
-  const { user, isLoading } = useAuth();
+  const { user, isLoading, mfaPending } = useAuth();
 
   if (isLoading) {
     return (
@@ -24,6 +25,8 @@ export default function RootNavigator() {
     <Stack.Navigator screenOptions={{ headerShown: false }}>
       {user ? (
         <Stack.Screen name="Main" component={MainNavigator} />
+      ) : mfaPending ? (
+        <Stack.Screen name="MFA" component={MFAScreen} />
       ) : (
         <Stack.Screen name="Login" component={LoginScreen} />
       )}

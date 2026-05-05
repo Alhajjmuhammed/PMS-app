@@ -3,6 +3,7 @@ import { View, StyleSheet, ScrollView, Alert } from 'react-native';
 import { Text, TextInput, Button, Card, SegmentedButtons } from 'react-native-paper';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { guestsApi } from '../../services/apiServices';
+import { validators, sanitizeInput } from '../../utils/validation';
 
 export default function CreateGuestScreen({ navigation }: any) {
   const queryClient = useQueryClient();
@@ -24,7 +25,13 @@ export default function CreateGuestScreen({ navigation }: any) {
   });
 
   const createMutation = useMutation({
-    mutationFn: (data: any) => guestsApi.create(data),
+    mutationFn: (data: any) => guestsApi.create({
+      ...data,
+      first_name: sanitizeInput.trim(data.first_name),
+      last_name: sanitizeInput.trim(data.last_name),
+      email: sanitizeInput.toLowerCase(data.email),
+      phone: sanitizeInput.trim(data.phone),
+    }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['guests'] });
       Alert.alert('Success', 'Guest created successfully');
@@ -36,9 +43,52 @@ export default function CreateGuestScreen({ navigation }: any) {
   });
 
   const handleSubmit = () => {
-    if (!formData.first_name || !formData.last_name || !formData.email) {
-      Alert.alert('Error', 'Please fill in required fields (Name and Email)');
+    // Validate first name
+    const firstNameValidation = validators.required(formData.first_name, 'First name');
+    if (!firstNameValidation.isValid) {
+      Alert.alert('Validation Error', firstNameValidation.error);
       return;
+    }
+
+    // Validate last name
+    const lastNameValidation = validators.required(formData.last_name, 'Last name');
+    if (!lastNameValidation.isValid) {
+      Alert.alert('Validation Error', lastNameValidation.error);
+      return;
+    }
+
+    // Validate email
+    const emailValidation = validators.email(formData.email);
+    if (!emailValidation.isValid) {
+      Alert.alert('Validation Error', emailValidation.error);
+      return;
+    }
+
+    // Validate phone if provided
+    if (formData.phone) {
+      const phoneValidation = validators.phone(formData.phone);
+      if (!phoneValidation.isValid) {
+        Alert.alert('Validation Error', phoneValidation.error);
+        return;
+      }
+    }
+
+    // Validate date of birth if provided
+    if (formData.date_of_birth) {
+      const dobValidation = validators.dateFormat(formData.date_of_birth, 'Date of birth');
+      if (!dobValidation.isValid) {
+        Alert.alert('Validation Error', dobValidation.error);
+        return;
+      }
+    }
+
+    // Validate ID number if provided
+    if (formData.id_number) {
+      const idValidation = validators.idNumber(formData.id_number, 'ID number');
+      if (!idValidation.isValid) {
+        Alert.alert('Validation Error', idValidation.error);
+        return;
+      }
     }
 
     createMutation.mutate(formData);

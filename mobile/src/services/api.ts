@@ -1,6 +1,7 @@
-import axios from 'axios';
+import axios, { AxiosError, InternalAxiosRequestConfig } from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { API_URL, TOKEN_KEY, REQUEST_TIMEOUT } from '../config/env';
+import { API_URL, TOKEN_KEY, REFRESH_TOKEN_KEY, REQUEST_TIMEOUT } from '../config/env';
+import { authEvents } from '../utils/authEvents';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -9,6 +10,52 @@ const api = axios.create({
   },
   timeout: REQUEST_TIMEOUT,
 });
+
+let isRefreshing = false;
+let refreshSubscribers: Array<(token: string) => void> = [];
+
+// Function to handle token refresh subscribers
+const subscribeTokenRefresh = (cb: (token: string) => void) => {
+  refreshSubscribers.push(cb);
+};
+
+const onRefreshed = (token: string) => {
+  refreshSubscribers.forEach((cb) => cb(token));
+  refreshSubscribers = [];
+};
+
+// Function to refresh access token
+const refreshAccessToken = async (): Promise<string | null> => {
+  try {
+    const refreshToken = await SecureStore.getItemAsync(REFRESH_TOKEN_KEY);
+    if (!refreshToken) {
+      return null;
+    }
+
+    const response = await axios.post(`${API_URL}/auth/token/refresh/`, {
+      refresh: refreshToken,
+    });
+
+    const { access, refresh: newRefresh } = response.data;
+    
+    if (access) {
+      await SecureStore.setItemAsync(TOKEN_KEY, access);
+      if (newRefresh) {
+        await SecureStore.setItemAsync(REFRESH_TOKEN_KEY, newRefresh);
+      }
+      return access;
+    }
+    
+    return null;
+  } catch (error) {
+    console.error('Token refresh failed:', error);
+    // Clear tokens on refresh failure
+    await SecureStore.deleteItemAsync(TOKEN_KEY);
+    await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+    authEvents.emitUnauthorized();
+    return null;
+  }
+};
 
 // Request interceptor to add auth token
 api.interceptors.request.use(
@@ -24,13 +71,45 @@ api.interceptors.request.use(
   }
 );
 
-// Response interceptor to handle errors
+// Response interceptor to handle errors and token refresh
 api.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    if (error.response?.status === 401) {
-      await SecureStore.deleteItemAsync(TOKEN_KEY);
-      // Navigate to login
+  async (error: AxiosError) => {
+    const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
+    
+    // Handle 401 errors with token refresh
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      if (isRefreshing) {
+        // Wait for token refresh to complete
+        return new Promise((resolve) => {
+          subscribeTokenRefresh(async (token: string) => {
+            if (originalRequest.headers) {
+              originalRequest.headers.Authorization = `Token ${token}`;
+            }
+            resolve(api(originalRequest));
+          });
+        });
+      }
+
+      originalRequest._retry = true;
+      isRefreshing = true;
+
+      const newToken = await refreshAccessToken();
+      
+      if (newToken) {
+        isRefreshing = false;
+        onRefreshed(newToken);
+        
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Token ${newToken}`;
+        }
+        return api(originalRequest);
+      } else {
+        isRefreshing = false;
+        await SecureStore.deleteItemAsync(TOKEN_KEY);
+        await SecureStore.deleteItemAsync(REFRESH_TOKEN_KEY);
+        authEvents.emitUnauthorized();
+      }
     }
     
     // Format error message
@@ -54,7 +133,9 @@ export const authApi = {
   login: (email: string, password: string) =>
     api.post('/auth/login/', { email, password }),
   logout: () => api.post('/auth/logout/'),
-  getProfile: () => api.get('/auth/profile/'),
+  getProfile: () => api.get('/auth/me/'),
+  verifyMFA: (mfa_token: string, mfa_code: string) =>
+    api.post('/auth/mfa/verify/', { mfa_token, mfa_code }),
 };
 
 // Housekeeping API

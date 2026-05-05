@@ -17,7 +17,7 @@ class RoomBlockListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['room', 'reason']
-    search_fields = ['room__number', 'notes']
+    search_fields = ['room__room_number', 'notes']
     ordering_fields = ['start_date', 'end_date', 'created_at']
     ordering = ['-start_date']
     

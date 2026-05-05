@@ -51,7 +51,12 @@ class TaskListView(generics.ListCreateAPIView):
 class TaskDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     serializer_class = HousekeepingTaskSerializer
-    queryset = HousekeepingTask.objects.all()
+    
+    def get_queryset(self):
+        qs = HousekeepingTask.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(room__hotel=self.request.user.assigned_property)
+        return qs
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
@@ -75,8 +80,12 @@ class StartTaskView(APIView):
     permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            task = HousekeepingTask.objects.get(pk=pk)
+            task_qs = HousekeepingTask.objects.all()
+            if prop:
+                task_qs = task_qs.filter(room__hotel=prop)
+            task = task_qs.get(pk=pk)
         except HousekeepingTask.DoesNotExist:
             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -98,8 +107,12 @@ class CompleteTaskView(APIView):
     permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            task = HousekeepingTask.objects.get(pk=pk)
+            task_qs = HousekeepingTask.objects.all()
+            if prop:
+                task_qs = task_qs.filter(room__hotel=prop)
+            task = task_qs.get(pk=pk)
         except HousekeepingTask.DoesNotExist:
             return Response({'error': 'Task not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -165,9 +178,13 @@ class UpdateRoomStatusView(APIView):
     """Update room housekeeping status."""
     permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
-    def post(self, request, pk):
+    def post(self, request, room_id):
+        prop = request.user.assigned_property
         try:
-            room = Room.objects.get(pk=pk)
+            room_qs = Room.objects.all()
+            if prop:
+                room_qs = room_qs.filter(hotel=prop)
+            room = room_qs.get(pk=room_id)
         except Room.DoesNotExist:
             return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -213,10 +230,17 @@ class AmenityInventoryListCreateView(generics.ListCreateAPIView):
             return AmenityInventoryCreateSerializer
         return AmenityInventorySerializer
 
+    def perform_create(self, serializer):
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(hotel=prop)
+        else:
+            serializer.save()
+
 
 class AmenityInventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete an amenity inventory item."""
-    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def get_queryset(self):
         queryset = AmenityInventory.objects.select_related('hotel')
@@ -255,10 +279,17 @@ class LinenInventoryListCreateView(generics.ListCreateAPIView):
             return LinenInventoryCreateSerializer
         return LinenInventorySerializer
 
+    def perform_create(self, serializer):
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(hotel=prop)
+        else:
+            serializer.save()
+
 
 class LinenInventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a linen inventory item."""
-    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def get_queryset(self):
         queryset = LinenInventory.objects.select_related('hotel')

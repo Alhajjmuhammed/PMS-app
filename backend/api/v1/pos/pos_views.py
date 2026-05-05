@@ -13,6 +13,8 @@ from datetime import date
 from decimal import Decimal
 
 from apps.pos.models import MenuCategory, MenuItem, POSOrder, POSOrderItem, Outlet
+from apps.properties.models import TaxConfiguration
+from apps.billing.models import FolioCharge, ChargeCode, Folio
 from .pos_serializers import (
     MenuCategorySerializer,
     MenuItemSerializer,
@@ -24,6 +26,17 @@ from .pos_serializers import (
     OutletSerializer
 )
 from api.permissions import IsAdminOrManager
+
+
+def _get_pos_tax_rate(property_obj):
+    """Return summed active service tax rate as a decimal multiplier (e.g. 0.10 for 10%)."""
+    total_rate = TaxConfiguration.objects.filter(
+        property=property_obj,
+        applies_to_services=True,
+        is_active=True,
+        is_percentage=True,
+    ).aggregate(total=Sum('rate'))['total']
+    return (total_rate / Decimal('100')) if total_rate else Decimal('0')
 
 
 # ===== Menu Categories =====
@@ -175,14 +188,16 @@ class POSOrderListCreateView(generics.ListCreateAPIView):
         )
         
         # Create order items and calculate totals
+        tax_rate = _get_pos_tax_rate(outlet.property)
         subtotal = Decimal('0')
-        tax_rate = Decimal('0.10')  # 10% tax
-        
+        taxable_subtotal = Decimal('0')
+
         for item_data in data['items']:
             menu_item = MenuItem.objects.get(id=item_data['menu_item'])
             quantity = item_data['quantity']
             unit_price = menu_item.price
-            
+            item_amount = unit_price * quantity
+
             POSOrderItem.objects.create(
                 order=order,
                 menu_item=menu_item,
@@ -190,11 +205,13 @@ class POSOrderListCreateView(generics.ListCreateAPIView):
                 unit_price=unit_price,
                 notes=item_data.get('notes', '')
             )
-            
-            subtotal += unit_price * quantity
-        
+
+            subtotal += item_amount
+            if menu_item.is_taxable:
+                taxable_subtotal += item_amount
+
         # Calculate tax and total
-        tax_amount = subtotal * tax_rate
+        tax_amount = taxable_subtotal * tax_rate
         total = subtotal + tax_amount
         
         order.subtotal = subtotal
@@ -281,8 +298,62 @@ class PostToRoomView(APIView):
                     {'error': 'Room information is required'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
-            # In real implementation, this would create a folio charge
+
+            # Resolve the folio for this stay
+            folio = None
+            if order.check_in:
+                try:
+                    folio = order.check_in.reservation.folio
+                except Folio.DoesNotExist:
+                    pass
+            elif order.room_number:
+                # Fall back to finding the active check-in for this room number
+                from apps.frontdesk.models import CheckIn as CheckInModel
+                active_checkin = (
+                    CheckInModel.objects
+                    .filter(
+                        room__room_number=order.room_number,
+                        room__hotel=order.outlet.property,
+                    )
+                    .filter(check_out__isnull=True)   # no CheckOut record yet
+                    .select_related('reservation')
+                    .order_by('-check_in_time')
+                    .first()
+                )
+                if active_checkin:
+                    try:
+                        folio = active_checkin.reservation.folio
+                    except Folio.DoesNotExist:
+                        pass
+
+            if folio is None or folio.status != 'OPEN':
+                return Response(
+                    {'error': 'No open folio found for this room stay'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            # Get or create the F&B charge code
+            charge_code, _ = ChargeCode.objects.get_or_create(
+                code='POS',
+                defaults={
+                    'name': 'POS / Food & Beverage',
+                    'category': ChargeCode.ChargeCategory.FOOD,
+                    'is_taxable': True,
+                }
+            )
+
+            outlet_name = order.outlet.name
+            FolioCharge.objects.create(
+                folio=folio,
+                charge_code=charge_code,
+                description=f'POS Order #{order.pk} - {outlet_name}',
+                quantity=1,
+                unit_price=order.total,
+                tax_amount=order.tax_amount,
+                reference=str(order.pk),
+                posted_by=request.user,
+            )
+
             order.is_posted_to_room = True
             order.posted_at = timezone.now()
             order.status = 'CLOSED'
@@ -323,16 +394,22 @@ class POSOrderItemCreateView(generics.CreateAPIView):
     
     def perform_create(self, serializer):
         order_item = serializer.save()
-        
+
         # Recalculate order totals
         order = order_item.order
-        items = order.items.filter(is_voided=False)
-        
-        subtotal = sum(item.amount for item in items)
-        tax_rate = Decimal('0.10')
-        tax_amount = subtotal * tax_rate
+        items = order.items.filter(is_voided=False).select_related('menu_item')
+        tax_rate = _get_pos_tax_rate(order.outlet.property)
+
+        subtotal = Decimal('0')
+        taxable_subtotal = Decimal('0')
+        for item in items:
+            subtotal += item.amount
+            if item.menu_item.is_taxable:
+                taxable_subtotal += item.amount
+
+        tax_amount = taxable_subtotal * tax_rate
         total = subtotal + tax_amount - order.discount
-        
+
         order.subtotal = subtotal
         order.tax_amount = tax_amount
         order.total = total

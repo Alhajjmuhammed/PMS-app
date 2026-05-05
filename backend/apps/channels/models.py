@@ -64,6 +64,10 @@ class PropertyChannel(models.Model):
     
     last_sync = models.DateTimeField(_('last sync'), null=True, blank=True)
     
+    # Webhook security
+    webhook_secret = models.CharField(_('webhook secret'), max_length=255, blank=True, 
+                                      help_text=_('Secret key for HMAC webhook signature validation'))
+    
     is_active = models.BooleanField(_('active'), default=True)
     
     class Meta:

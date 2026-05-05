@@ -19,6 +19,8 @@ class PropertyListView(generics.ListCreateAPIView):
     serializer_class = PropertySerializer
     
     def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Property.objects.all()
         if self.request.user.assigned_property:
             return Property.objects.filter(pk=self.request.user.assigned_property.pk)
         return Property.objects.filter(is_active=True)
@@ -27,7 +29,13 @@ class PropertyListView(generics.ListCreateAPIView):
 class PropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, CanManageProperties]
     serializer_class = PropertySerializer
-    queryset = Property.objects.all()
+
+    def get_queryset(self):
+        if self.request.user.is_superuser:
+            return Property.objects.all()
+        if self.request.user.assigned_property:
+            return Property.objects.filter(pk=self.request.user.assigned_property.pk)
+        return Property.objects.none()
 
 
 class SystemSettingView(APIView):
@@ -74,16 +82,20 @@ class BuildingListCreateView(generics.ListCreateAPIView):
     search_fields = ['name', 'code']
     ordering_fields = ['name', 'property']
     ordering = ['property', 'name']
-    
+
     def get_queryset(self):
         queryset = Building.objects.select_related('property')
-        
-        # Filter by user's property if assigned
         if self.request.user.assigned_property:
             queryset = queryset.filter(property=self.request.user.assigned_property)
-        
         return queryset
-    
+
+    def perform_create(self, serializer):
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
+        else:
+            serializer.save()
+
     def get_serializer_class(self):
         if self.request.method == 'GET':
             return BuildingListSerializer
@@ -156,9 +168,9 @@ class DepartmentListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        # Auto-set property from user if not provided
-        if 'property' not in serializer.validated_data and self.request.user.assigned_property:
-            serializer.save(property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
         else:
             serializer.save()
 
@@ -210,9 +222,9 @@ class PropertyAmenityListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        # Auto-set property from user if not provided
-        if 'property' not in serializer.validated_data and self.request.user.assigned_property:
-            serializer.save(property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
         else:
             serializer.save()
 
@@ -246,9 +258,9 @@ class TaxConfigurationListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        # Auto-set property from user if not provided
-        if 'property' not in serializer.validated_data and self.request.user.assigned_property:
-            serializer.save(property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
         else:
             serializer.save()
 

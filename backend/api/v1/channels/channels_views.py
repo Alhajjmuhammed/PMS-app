@@ -9,12 +9,15 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
 from django.db.models import Q, Count
+from django.core.exceptions import ValidationError
 from datetime import date, timedelta
+import logging
 
 from apps.channels.models import (
     PropertyChannel, RoomTypeMapping, RatePlanMapping,
     AvailabilityUpdate, RateUpdate, ChannelReservation, Channel
 )
+from apps.channels.services import sync_channel_rates, sync_channel_availability
 from .channels_serializers import (
     PropertyChannelSerializer,
     RoomTypeMappingSerializer,
@@ -28,6 +31,8 @@ from .channels_serializers import (
     ChannelSerializer
 )
 from api.permissions import IsAdminOrManager
+
+logger = logging.getLogger(__name__)
 
 
 # ===== Property Channels =====
@@ -44,11 +49,11 @@ class PropertyChannelListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return PropertyChannel.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('channel', 'rate_plan').prefetch_related('room_mappings', 'rate_mappings')
     
     def perform_create(self, serializer):
-        serializer.save(property=getattr(self.request.user, 'property', None))
+        serializer.save(property=self.request.user.assigned_property)
 
 
 class PropertyChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -58,7 +63,7 @@ class PropertyChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return PropertyChannel.objects.filter(
-            property=getattr(self.request.user, 'property', None)
+            property=self.request.user.assigned_property
         ).select_related('channel', 'rate_plan')
 
 
@@ -69,7 +74,7 @@ class ActivePropertyChannelsView(generics.ListAPIView):
     
     def get_queryset(self):
         return PropertyChannel.objects.filter(
-            property=getattr(self.request.user, 'property', None),
+            property=self.request.user.assigned_property,
             is_active=True
         ).select_related('channel')
 
@@ -94,12 +99,31 @@ class SyncPropertyChannelView(APIView):
             # Update last sync time
             property_channel.last_sync = timezone.now()
             property_channel.save()
-            
-            # In real implementation, this would trigger actual sync logic
+
+            # Sync rates and availability for the next 30 days
+            sync_start = date.today()
+            sync_end = sync_start + timedelta(days=30)
+            results = {}
+            try:
+                results['rates'] = sync_channel_rates(
+                    property_channel.id, sync_start, sync_end
+                )
+            except (ValidationError, ValueError, ConnectionError) as exc:
+                logger.error(f"Rate sync failed for PropertyChannel {property_channel.id}: {str(exc)}")
+                results['rates_error'] = str(exc)
+            try:
+                results['availability'] = sync_channel_availability(
+                    property_channel.id, sync_start, sync_end
+                )
+            except (ValidationError, ValueError, ConnectionError) as exc:
+                logger.error(f"Availability sync failed for PropertyChannel {property_channel.id}: {str(exc)}")
+                results['availability_error'] = str(exc)
+
             serializer = PropertyChannelSerializer(property_channel)
             return Response({
                 'message': 'Sync initiated successfully',
-                'channel': serializer.data
+                'channel': serializer.data,
+                'sync_results': results,
             })
             
         except PropertyChannel.DoesNotExist:
@@ -121,7 +145,7 @@ class RoomTypeMappingListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return RoomTypeMapping.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'property_channel__channel', 'room_type')
 
 
@@ -132,7 +156,7 @@ class RoomTypeMappingDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return RoomTypeMapping.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'room_type')
 
 
@@ -145,7 +169,7 @@ class RoomTypeMappingsByChannelView(generics.ListAPIView):
         channel_id = self.kwargs.get('channel_id')
         return RoomTypeMapping.objects.filter(
             property_channel_id=channel_id,
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('room_type')
 
 
@@ -161,7 +185,7 @@ class RatePlanMappingListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return RatePlanMapping.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'property_channel__channel', 'rate_plan')
 
 
@@ -172,7 +196,7 @@ class RatePlanMappingDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return RatePlanMapping.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'rate_plan')
 
 
@@ -185,7 +209,7 @@ class RatePlanMappingsByChannelView(generics.ListAPIView):
         channel_id = self.kwargs.get('channel_id')
         return RatePlanMapping.objects.filter(
             property_channel_id=channel_id,
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('rate_plan')
 
 
@@ -202,7 +226,7 @@ class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = AvailabilityUpdate.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'property_channel__channel', 'room_type')
         
         # Filter by date range
@@ -224,7 +248,7 @@ class AvailabilityUpdateDetailView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return AvailabilityUpdate.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'room_type')
 
 
@@ -283,7 +307,7 @@ class RateUpdateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = RateUpdate.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'property_channel__channel', 'room_type', 'rate_plan')
         
         # Filter by date range
@@ -305,7 +329,7 @@ class RateUpdateDetailView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return RateUpdate.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'room_type', 'rate_plan')
 
 
@@ -366,7 +390,7 @@ class ChannelReservationListView(generics.ListAPIView):
     
     def get_queryset(self):
         queryset = ChannelReservation.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'property_channel__channel', 'reservation')
         
         # Filter by date range
@@ -388,7 +412,7 @@ class ChannelReservationDetailView(generics.RetrieveAPIView):
     
     def get_queryset(self):
         return ChannelReservation.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None)
+            property_channel__property=self.request.user.assigned_property
         ).select_related('property_channel', 'reservation')
 
 
@@ -399,7 +423,7 @@ class UnprocessedChannelReservationsView(generics.ListAPIView):
     
     def get_queryset(self):
         return ChannelReservation.objects.filter(
-            property_channel__property=getattr(self.request.user, 'property', None),
+            property_channel__property=self.request.user.assigned_property,
             status='RECEIVED'
         ).select_related('property_channel', 'property_channel__channel').order_by('received_at')
 
@@ -488,7 +512,13 @@ class ChannelDashboardView(APIView):
 # ===== Channels (Global) =====
 
 class ChannelListView(generics.ListAPIView):
-    """List all available channels."""
+    """
+    List all available channels.
+    
+    NOTE: Intentionally GLOBAL - Channels like Booking.com, Expedia, Airbnb 
+    are master data shared across all properties. Each property then links 
+    to these channels via PropertyChannel model which IS property-scoped.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = ChannelSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
@@ -496,4 +526,5 @@ class ChannelListView(generics.ListAPIView):
     ordering = ['name']
     
     def get_queryset(self):
+        # Intentionally global - master channel list
         return Channel.objects.filter(is_active=True)

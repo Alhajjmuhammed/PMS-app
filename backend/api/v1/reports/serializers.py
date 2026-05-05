@@ -8,6 +8,7 @@ class DailyStatisticsSerializer(serializers.ModelSerializer):
     property_name = serializers.CharField(source='property.name', read_only=True)
     
     class Meta:
+        ref_name = 'DailyStatisticsSerializer'
         model = DailyStatistics
         fields = [
             'id', 'property', 'property_name', 'date',
@@ -58,6 +59,7 @@ class MonthlyStatisticsSerializer(serializers.ModelSerializer):
     month_name = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'MonthlyStatisticsSerializer'
         model = MonthlyStatistics
         fields = [
             'id', 'property', 'property_name', 'year', 'month', 'month_name',
@@ -107,6 +109,7 @@ class AuditLogSerializer(serializers.ModelSerializer):
     """Serializer for audit logs."""
     
     class Meta:
+        ref_name = 'AuditLogSerializer'
         model = AuditLog
         fields = ['id', 'step', 'message', 'is_error', 'created_at']
         read_only_fields = ['id', 'created_at']
@@ -121,6 +124,7 @@ class NightAuditSerializer(serializers.ModelSerializer):
     duration_minutes = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'NightAuditSerializer'
         model = NightAudit
         fields = [
             'id', 'property', 'property_name', 'business_date', 'status',

@@ -7,6 +7,8 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from datetime import datetime, timedelta
+import logging
+
 from apps.channels.models import (
     Channel, PropertyChannel, RoomTypeMapping, RatePlanMapping,
     AvailabilityUpdate, RateUpdate, ChannelReservation
@@ -14,6 +16,7 @@ from apps.channels.models import (
 from apps.channels.services import (
     sync_channel_rates, sync_channel_availability, process_channel_webhook
 )
+from apps.channels.webhook_utils import WebhookValidator, log_webhook_attempt
 from api.permissions import IsAdminOrManager
 from .serializers import (
     ChannelSerializer, PropertyChannelSerializer, RoomTypeMappingSerializer,
@@ -22,6 +25,8 @@ from .serializers import (
     RateUpdateSerializer, RateUpdateCreateSerializer,
     ChannelReservationSerializer, ChannelReservationCreateSerializer
 )
+
+logger = logging.getLogger(__name__)
 
 
 class ChannelListView(generics.ListAPIView):
@@ -47,8 +52,9 @@ class PropertyChannelListView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
-            serializer.save(property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
         else:
             serializer.save()
 
@@ -56,7 +62,12 @@ class PropertyChannelListView(generics.ListCreateAPIView):
 class PropertyChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = PropertyChannelSerializer
-    queryset = PropertyChannel.objects.all()
+    
+    def get_queryset(self):
+        qs = PropertyChannel.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs
 
 
 class RoomTypeMappingListView(generics.ListAPIView):
@@ -140,7 +151,13 @@ class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
         return AvailabilityUpdateSerializer
     
     def perform_create(self, serializer):
-        # Save the update and trigger sync via service layer
+        # Verify property_channel belongs to user's property before saving
+        prop = self.request.user.assigned_property
+        if prop:
+            pc = serializer.validated_data.get('property_channel')
+            if pc and pc.property != prop:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You do not have access to this property channel.')
         availability_update = serializer.save()
 
 
@@ -167,24 +184,26 @@ class ResendAvailabilityUpdateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        availability_update = get_object_or_404(AvailabilityUpdate, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if availability_update.property_channel.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        update_qs = AvailabilityUpdate.objects.filter(property_channel__property=prop) if prop else AvailabilityUpdate.objects.all()
+        availability_update = get_object_or_404(update_qs, pk=pk)
         
         # Reset status to pending
         availability_update.status = AvailabilityUpdate.Status.PENDING
         availability_update.error_message = ''
         availability_update.sent_at = None
         availability_update.save()
-        
-        # TODO: Trigger the actual sync
-        
+
+        try:
+            sync_channel_availability(
+                availability_update.property_channel_id,
+                availability_update.date,
+                availability_update.date,
+            )
+        except (ValidationError, ValueError, ConnectionError) as exc:
+            logger.warning(f"Availability sync retry failed: {str(exc)}")
+            availability_update.refresh_from_db()
+
         return Response(AvailabilityUpdateSerializer(availability_update).data)
 
 
@@ -214,7 +233,13 @@ class RateUpdateListCreateView(generics.ListCreateAPIView):
         return RateUpdateSerializer
     
     def perform_create(self, serializer):
-        # Save the update and trigger sync via service layer
+        # Verify property_channel belongs to user's property before saving
+        prop = self.request.user.assigned_property
+        if prop:
+            pc = serializer.validated_data.get('property_channel')
+            if pc and pc.property != prop:
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You do not have access to this property channel.')
         rate_update = serializer.save()
 
 
@@ -241,15 +266,9 @@ class ResendRateUpdateView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        rate_update = get_object_or_404(RateUpdate, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if rate_update.property_channel.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        update_qs = RateUpdate.objects.filter(property_channel__property=prop) if prop else RateUpdate.objects.all()
+        rate_update = get_object_or_404(update_qs, pk=pk)
         
         # Reset status to pending
         rate_update.status = RateUpdate.Status.PENDING
@@ -311,15 +330,9 @@ class ProcessChannelReservationView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        channel_reservation = get_object_or_404(ChannelReservation, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if channel_reservation.property_channel.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        chanres_qs = ChannelReservation.objects.filter(property_channel__property=prop) if prop else ChannelReservation.objects.all()
+        channel_reservation = get_object_or_404(chanres_qs, pk=pk)
         
         # Check if already processed
         if channel_reservation.status == ChannelReservation.Status.PROCESSED:
@@ -343,15 +356,9 @@ class CancelChannelReservationView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        channel_reservation = get_object_or_404(ChannelReservation, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if channel_reservation.property_channel.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        chanres_qs = ChannelReservation.objects.filter(property_channel__property=prop) if prop else ChannelReservation.objects.all()
+        channel_reservation = get_object_or_404(chanres_qs, pk=pk)
         
         # Cancel the reservation
         channel_reservation.status = ChannelReservation.Status.CANCELLED
@@ -372,15 +379,9 @@ class SyncChannelRatesView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        property_channel = get_object_or_404(PropertyChannel, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if property_channel.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        pc_qs = PropertyChannel.objects.filter(property=prop) if prop else PropertyChannel.objects.all()
+        property_channel = get_object_or_404(pc_qs, pk=pk)
         
         # Get date range from request (default to next 30 days)
         start_date_str = request.data.get('start_date')
@@ -405,7 +406,8 @@ class SyncChannelRatesView(APIView):
                 'total_synced': result['total_synced'],
                 'errors': result.get('errors', [])
             })
-        except Exception as e:
+        except (ValidationError, ValueError, ConnectionError) as e:
+            logger.error(f"Rate sync failed for channel {property_channel.id}: {str(e)}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -417,15 +419,9 @@ class SyncChannelAvailabilityView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        property_channel = get_object_or_404(PropertyChannel, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if property_channel.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        pc_qs = PropertyChannel.objects.filter(property=prop) if prop else PropertyChannel.objects.all()
+        property_channel = get_object_or_404(pc_qs, pk=pk)
         
         # Get date range from request (default to next 30 days)
         start_date_str = request.data.get('start_date')
@@ -450,7 +446,8 @@ class SyncChannelAvailabilityView(APIView):
                 'total_synced': result['total_synced'],
                 'errors': result.get('errors', [])
             })
-        except Exception as e:
+        except (ValidationError, ValueError, ConnectionError) as e:
+            logger.error(f"Availability sync failed for channel {property_channel.id}: {str(e)}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR
@@ -458,24 +455,73 @@ class SyncChannelAvailabilityView(APIView):
 
 
 class ChannelWebhookView(APIView):
-    """Receive and process channel reservation webhooks (no auth for webhooks)."""
-    permission_classes = []  # Webhooks from OTAs don't have auth
+    """
+    Receive and process channel reservation webhooks.
+    
+    Security: Uses HMAC signature validation to verify webhook authenticity.
+    Each OTA sends a signature in request headers that we validate against
+    the webhook_secret configured for that PropertyChannel.
+    
+    Rate Limiting: 60 requests per minute per channel to prevent abuse.
+    """
+    permission_classes = []  # No session auth, but HMAC signature required
     authentication_classes = []
+    throttle_classes = ['api.throttling.WebhookThrottle']
     
     def post(self, request, property_channel_id):
         """
-        Process incoming reservation webhook from OTA
+        Process incoming reservation webhook from OTA.
+        
         Expected format varies by channel, but generally includes:
         - guest info
         - reservation dates
         - room type
         - rate info
+        
+        Security: Validates HMAC signature before processing.
         """
         try:
-            # Verify webhook signature (implementation depends on channel)
-            # For now, just process the data
+            # Get property channel and validate it exists
+            property_channel = PropertyChannel.objects.select_related('channel').get(
+                id=property_channel_id,
+                is_active=True
+            )
             
+            # Validate webhook signature
+            is_valid = WebhookValidator.validate_by_channel(
+                request,
+                property_channel.channel.code,
+                property_channel.webhook_secret
+            )
+            
+            # Log webhook attempt for security audit
+            log_webhook_attempt(
+                property_channel_id=property_channel_id,
+                request_data={
+                    'timestamp': timezone.now().isoformat(),
+                    'source_ip': request.META.get('REMOTE_ADDR', 'unknown'),
+                },
+                is_valid=is_valid,
+                error=None if is_valid else 'Invalid signature'
+            )
+            
+            if not is_valid:
+                logger.warning(
+                    f"Webhook signature validation failed for PropertyChannel {property_channel_id} "
+                    f"from IP {request.META.get('REMOTE_ADDR')}"
+                )
+                return Response(
+                    {'error': 'Invalid webhook signature'},
+                    status=status.HTTP_401_UNAUTHORIZED
+                )
+            
+            # Process the webhook
             result = process_channel_webhook(property_channel_id, request.data)
+            
+            logger.info(
+                f"Successfully processed webhook for PropertyChannel {property_channel_id}, "
+                f"created reservation {result.id}"
+            )
             
             return Response({
                 'success': True,
@@ -484,12 +530,20 @@ class ChannelWebhookView(APIView):
             }, status=status.HTTP_201_CREATED)
             
         except PropertyChannel.DoesNotExist:
+            logger.error(f"Webhook received for non-existent PropertyChannel {property_channel_id}")
             return Response(
                 {'error': 'Property channel not found'},
                 status=status.HTTP_404_NOT_FOUND
             )
-        except Exception as e:
+        except ValueError as e:
+            logger.error(f"Webhook validation error: {str(e)}")
             return Response(
-                {'error': str(e)},
+                {'error': 'Invalid webhook data'},
                 status=status.HTTP_400_BAD_REQUEST
+            )
+        except (KeyError, TypeError, AttributeError) as e:
+            logger.exception(f"Webhook processing error - malformed data: {str(e)}")
+            return Response(
+                {'error': 'Failed to process webhook'},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
             )

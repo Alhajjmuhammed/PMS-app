@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, StyleSheet, Image, KeyboardAvoidingView, Platform } from 'react-native';
 import { TextInput, Button, Text, HelperText } from 'react-native-paper';
 import { useAuth } from '../../contexts/AuthContext';
+import { validators, sanitizeInput } from '../../utils/validation';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
@@ -11,8 +12,17 @@ export default function LoginScreen() {
   const { login } = useAuth();
 
   const handleLogin = async () => {
-    if (!email || !password) {
-      setError('Please enter email and password');
+    // Validate email
+    const emailValidation = validators.email(email);
+    if (!emailValidation.isValid) {
+      setError(emailValidation.error || 'Invalid email');
+      return;
+    }
+
+    // Validate password
+    const passwordValidation = validators.required(password, 'Password');
+    if (!passwordValidation.isValid) {
+      setError(passwordValidation.error || 'Password is required');
       return;
     }
 
@@ -21,7 +31,9 @@ export default function LoginScreen() {
 
     try {
       console.log('Attempting login with:', email);
-      await login(email, password);
+      // Sanitize email before sending
+      const sanitizedEmail = sanitizeInput.toLowerCase(email);
+      await login(sanitizedEmail, password);
       console.log('Login successful!');
     } catch (err: any) {
       console.error('Login error:', err);
@@ -60,6 +72,9 @@ export default function LoginScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             style={styles.input}
+            accessible={true}
+            accessibilityLabel="Email address input field"
+            accessibilityHint="Enter your email address to log in"
           />
 
           <TextInput
@@ -69,10 +84,13 @@ export default function LoginScreen() {
             mode="outlined"
             secureTextEntry
             style={styles.input}
+            accessible={true}
+            accessibilityLabel="Password input field"
+            accessibilityHint="Enter your password to log in"
           />
 
           {error ? (
-            <HelperText type="error" visible={true}>
+            <HelperText type="error" visible={true} accessible={true} accessibilityLabel="Login error message">
               {error}
             </HelperText>
           ) : null}
@@ -83,6 +101,10 @@ export default function LoginScreen() {
             loading={loading}
             disabled={loading}
             style={styles.button}
+            accessible={true}
+            accessibilityLabel="Login button"
+            accessibilityHint="Double tap to log in to the application"
+            accessibilityRole="button"
           >
             Login
           </Button>

@@ -7,6 +7,7 @@ class CheckInSerializer(serializers.ModelSerializer):
     room_number = serializers.CharField(source='room.room_number', read_only=True)
     
     class Meta:
+        ref_name = 'CheckInSerializer'
         model = CheckIn
         fields = [
             'id', 'reservation', 'room', 'room_number', 'guest_name',
@@ -61,6 +62,7 @@ class WalkInSerializer(serializers.ModelSerializer):
     reservation_number = serializers.CharField(source='reservation.confirmation_number', read_only=True, allow_null=True)
     
     class Meta:
+        ref_name = 'WalkInSerializer'
         model = WalkIn
         fields = [
             'id', 'property', 'property_name', 'first_name', 'last_name',

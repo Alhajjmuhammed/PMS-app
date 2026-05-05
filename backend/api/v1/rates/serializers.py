@@ -25,6 +25,7 @@ class RoomRateSerializer(serializers.ModelSerializer):
     season_name = serializers.CharField(source='season.name', read_only=True, allow_null=True)
     
     class Meta:
+        ref_name = 'RoomRateSerializer'
         model = RoomRate
         fields = [
             'id', 'rate_plan', 'rate_plan_name', 'room_type', 'room_type_name',
@@ -77,6 +78,7 @@ class DateRateSerializer(serializers.ModelSerializer):
     rate_plan_name = serializers.CharField(source='rate_plan.name', read_only=True, allow_null=True)
     
     class Meta:
+        ref_name = 'DateRateSerializer'
         model = DateRate
         fields = [
             'id', 'room_type', 'room_type_name', 'rate_plan', 'rate_plan_name',
@@ -95,6 +97,7 @@ class RatePlanSerializer(serializers.ModelSerializer):
     room_rates = RoomRateSerializer(many=True, read_only=True)
     
     class Meta:
+        ref_name = 'RatePlanSerializer'
         model = RatePlan
         fields = [
             'id', 'property', 'property_name', 'name', 'code', 'rate_type',
@@ -263,6 +266,7 @@ class YieldRuleSerializer(serializers.ModelSerializer):
     property_name = serializers.CharField(source='property.name', read_only=True)
     
     class Meta:
+        ref_name = 'YieldRuleSerializer'
         model = YieldRule
         fields = [
             'id', 'property', 'property_name', 'name', 'trigger_type',

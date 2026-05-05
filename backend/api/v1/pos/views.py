@@ -29,15 +29,24 @@ class OutletDetailView(generics.RetrieveAPIView):
     """Get POS outlet details."""
     permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = OutletSerializer
-    queryset = Outlet.objects.filter(is_active=True)
+    
+    def get_queryset(self):
+        qs = Outlet.objects.filter(is_active=True)
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs
 
 
 class MenuView(APIView):
     permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def get(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            outlet = Outlet.objects.get(pk=pk)
+            outlet_qs = Outlet.objects.all()
+            if prop:
+                outlet_qs = outlet_qs.filter(property=prop)
+            outlet = outlet_qs.get(pk=pk)
         except Outlet.DoesNotExist:
             return Response({'error': 'Outlet not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -76,7 +85,12 @@ class OrderListView(generics.ListAPIView):
 class OrderDetailView(generics.RetrieveAPIView):
     permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = POSOrderSerializer
-    queryset = POSOrder.objects.all()
+    
+    def get_queryset(self):
+        qs = POSOrder.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(outlet__property=self.request.user.assigned_property)
+        return qs
 
 
 class OrderCreateView(APIView):
@@ -87,8 +101,12 @@ class OrderCreateView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         
+        prop = request.user.assigned_property
         try:
-            outlet = Outlet.objects.get(pk=data['outlet_id'])
+            outlet_qs = Outlet.objects.all()
+            if prop:
+                outlet_qs = outlet_qs.filter(property=prop)
+            outlet = outlet_qs.get(pk=data['outlet_id'])
         except Outlet.DoesNotExist:
             return Response({'error': 'Outlet not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -108,8 +126,12 @@ class AddItemView(APIView):
     permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            order = POSOrder.objects.get(pk=pk)
+            order_qs = POSOrder.objects.all()
+            if prop:
+                order_qs = order_qs.filter(outlet__property=prop)
+            order = order_qs.get(pk=pk)
         except POSOrder.DoesNotExist:
             return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -121,7 +143,10 @@ class AddItemView(APIView):
         data = serializer.validated_data
         
         try:
-            menu_item = MenuItem.objects.get(pk=data['menu_item_id'])
+            item_qs = MenuItem.objects.all()
+            if prop:
+                item_qs = item_qs.filter(category__outlet__property=prop)
+            menu_item = item_qs.get(pk=data['menu_item_id'])
         except MenuItem.DoesNotExist:
             return Response({'error': 'Menu item not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -147,8 +172,12 @@ class PostToRoomView(APIView):
     permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            order = POSOrder.objects.get(pk=pk)
+            order_qs = POSOrder.objects.all()
+            if prop:
+                order_qs = order_qs.filter(outlet__property=prop)
+            order = order_qs.get(pk=pk)
         except POSOrder.DoesNotExist:
             return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -212,7 +241,9 @@ class MenuCategoryListView(generics.ListCreateAPIView):
     
     def perform_create(self, serializer):
         outlet_id = self.kwargs.get('outlet_id')
-        outlet = get_object_or_404(Outlet, pk=outlet_id)
+        prop = self.request.user.assigned_property
+        outlet_qs = Outlet.objects.filter(property=prop) if prop else Outlet.objects.all()
+        outlet = get_object_or_404(outlet_qs, pk=outlet_id)
         serializer.save(outlet=outlet)
 
 
@@ -220,7 +251,12 @@ class MenuCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a menu category."""
     permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuCategorySerializer
-    queryset = MenuCategory.objects.all()
+    
+    def get_queryset(self):
+        qs = MenuCategory.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(outlet__property=self.request.user.assigned_property)
+        return qs
 
 
 class MenuItemListView(generics.ListCreateAPIView):
@@ -230,6 +266,9 @@ class MenuItemListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         qs = MenuItem.objects.select_related('category__outlet')
+        
+        if self.request.user.assigned_property:
+            qs = qs.filter(category__outlet__property=self.request.user.assigned_property)
         
         # Filter by outlet if specified
         outlet_id = self.request.query_params.get('outlet')
@@ -248,4 +287,9 @@ class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a menu item."""
     permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuItemSerializer
-    queryset = MenuItem.objects.all()
+    
+    def get_queryset(self):
+        qs = MenuItem.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(category__outlet__property=self.request.user.assigned_property)
+        return qs

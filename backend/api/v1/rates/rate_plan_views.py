@@ -32,10 +32,10 @@ class RatePlanListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = RatePlanSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['is_active', 'is_default', 'rate_type', 'meal_plan']
+    filterset_fields = ['is_active', 'rate_type']
     search_fields = ['name', 'code', 'description']
-    ordering_fields = ['name', 'priority', 'created_at']
-    ordering = ['priority', 'name']
+    ordering_fields = ['name', 'created_at']
+    ordering = ['name']
     
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
@@ -72,10 +72,11 @@ class ActiveRatePlansView(generics.ListAPIView):
         if getattr(self, 'swagger_fake_view', False):
             return RatePlan.objects.none()
        
-        return RatePlan.objects.filter(
-            property=self.request.user.assigned_property,
-            is_active=True
-        ).order_by('priority', 'name')
+        prop = self.request.user.assigned_property
+        qs = RatePlan.objects.filter(is_active=True)
+        if prop:
+            qs = qs.filter(property=prop)
+        return qs.order_by('name')
 
 
 # ===== Room Rates =====
@@ -92,13 +93,15 @@ class RoomRateListCreateView(generics.ListCreateAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return RoomRate.objects.none()
-       
-        return RoomRate.objects.filter(
-            property=self.request.user.assigned_property
-        ).select_related('rate_plan', 'room_type')
+        prop = self.request.user.assigned_property
+        if prop:
+            return RoomRate.objects.filter(
+                rate_plan__property=prop
+            ).select_related('rate_plan', 'room_type')
+        return RoomRate.objects.all().select_related('rate_plan', 'room_type')
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.assigned_property)
+        serializer.save()
 
 
 class RoomRateDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -109,10 +112,12 @@ class RoomRateDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return RoomRate.objects.none()
-       
-        return RoomRate.objects.filter(
-            property=self.request.user.assigned_property
-        ).select_related('rate_plan', 'room_type')
+        prop = self.request.user.assigned_property
+        if prop:
+            return RoomRate.objects.filter(
+                rate_plan__property=prop
+            ).select_related('rate_plan', 'room_type')
+        return RoomRate.objects.all().select_related('rate_plan', 'room_type')
 
 
 class RoomRateByPlanView(generics.ListAPIView):
@@ -122,10 +127,11 @@ class RoomRateByPlanView(generics.ListAPIView):
     
     def get_queryset(self):
         rate_plan_id = self.kwargs.get('rate_plan_id')
-        return RoomRate.objects.filter(
-            property=self.request.user.assigned_property,
-            rate_plan_id=rate_plan_id
-        ).select_related('rate_plan', 'room_type')
+        prop = self.request.user.assigned_property
+        qs = RoomRate.objects.filter(rate_plan_id=rate_plan_id)
+        if prop:
+            qs = qs.filter(rate_plan__property=prop)
+        return qs.select_related('rate_plan', 'room_type')
 
 
 class BulkRoomRateCreateView(APIView):
@@ -178,9 +184,13 @@ class DateRateListCreateView(generics.ListCreateAPIView):
     ordering = ['date']
     
     def get_queryset(self):
-        queryset = DateRate.objects.filter(
-            property=self.request.user.assigned_property
-        ).select_related('room_type')
+        prop = self.request.user.assigned_property
+        if prop:
+            queryset = DateRate.objects.filter(
+                room_type__hotel=prop
+            ).select_related('room_type')
+        else:
+            queryset = DateRate.objects.all().select_related('room_type')
         
         # Filter by date range
         start_date = self.request.query_params.get('start_date')
@@ -194,7 +204,7 @@ class DateRateListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.assigned_property)
+        serializer.save()
 
 
 class DateRateDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -205,10 +215,12 @@ class DateRateDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_queryset(self):
         if getattr(self, 'swagger_fake_view', False):
             return DateRate.objects.none()
-       
-        return DateRate.objects.filter(
-            property=self.request.user.assigned_property
-        ).select_related('room_type')
+        prop = self.request.user.assigned_property
+        if prop:
+            return DateRate.objects.filter(
+                room_type__hotel=prop
+            ).select_related('room_type')
+        return DateRate.objects.all().select_related('room_type')
 
 
 class DateRateByDateView(generics.ListAPIView):
@@ -218,10 +230,11 @@ class DateRateByDateView(generics.ListAPIView):
     
     def get_queryset(self):
         date_str = self.kwargs.get('date')
-        return DateRate.objects.filter(
-            property=self.request.user.assigned_property,
-            date=date_str
-        ).select_related('room_type')
+        prop = self.request.user.assigned_property
+        qs = DateRate.objects.filter(date=date_str)
+        if prop:
+            qs = qs.filter(room_type__hotel=prop)
+        return qs.select_related('room_type')
 
 
 # ===== Yield Rules =====

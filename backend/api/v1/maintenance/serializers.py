@@ -9,6 +9,7 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
     category = serializers.CharField(source='request_type', read_only=True)  # Alias for backward compatibility
     
     class Meta:
+        ref_name = 'MaintenanceRequest'
         model = MaintenanceRequest
         fields = [
             'id', 'request_number', 'room', 'room_number', 'location',
@@ -35,6 +36,7 @@ class MaintenanceLogSerializer(serializers.ModelSerializer):
     performed_by_name = serializers.CharField(source='performed_by.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'MaintenanceLogSerializer'
         model = MaintenanceLog
         fields = ['id', 'request', 'action', 'notes', 'performed_by', 'performed_by_name', 'created_at']
 

@@ -54,6 +54,8 @@ THIRD_PARTY_APPS = [
     'corsheaders',
     'django_filters',
     'drf_yasg',  # API Documentation
+    'django_ratelimit',
+    'django_celery_beat',  # Celery Beat scheduler
 ]
 
 LOCAL_APPS = [
@@ -202,6 +204,10 @@ REST_FRAMEWORK = {
     'DEFAULT_THROTTLE_RATES': {
         'anon': '100/hour',  # Anonymous users: 100 requests per hour
         'user': '1000/hour',  # Authenticated users: 1000 requests per hour
+        'webhook': '60/minute',  # Webhook endpoints: 60 requests per minute per channel
+        'mfa_verify': '5/minute',  # MFA verification: 5 attempts per minute (brute force protection)
+        'mfa_send': '3/minute',  # MFA code sending: 3 per minute (SMS bombing protection)
+        'login': '10/hour',  # Login attempts: 10 per hour per IP (brute force protection)
     },
 }
 
@@ -385,11 +391,28 @@ else:
             'TIMEOUT': 300,
         }
     }
+    # LocMemCache is acceptable for single-process dev; silence ratelimit cache checks
+    SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003', 'django_ratelimit.W001']
+
+# Tell django-ratelimit which cache to use
+RATELIMIT_USE_CACHE = 'default'
 
 # Session Configuration
 SESSION_ENGINE = 'django.contrib.sessions.backends.cached_db'
 SESSION_CACHE_ALIAS = 'default'
 SESSION_COOKIE_AGE = 3600  # 1 hour
+
+# Celery Configuration
+_redis_url = os.getenv('REDIS_URL', 'redis://127.0.0.1:6379/0')
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', _redis_url)
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', _redis_url)
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = 30 * 60  # 30 minutes hard limit
+CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25 minutes soft limit
 
 # Email Configuration
 # Use console backend for development, SMTP for production

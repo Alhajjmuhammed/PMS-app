@@ -7,7 +7,10 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django.shortcuts import get_object_or_404
 from django.db.models import Sum, Avg, Count
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from datetime import date, timedelta
+import logging
+
 from apps.reports.models import DailyStatistics, MonthlyStatistics, NightAudit, AuditLog
 from apps.reservations.models import Reservation
 from apps.rooms.models import Room
@@ -18,6 +21,8 @@ from .serializers import (
     NightAuditSerializer, NightAuditCreateSerializer, NightAuditUpdateSerializer,
     StartNightAuditSerializer, AuditLogSerializer
 )
+
+logger = logging.getLogger(__name__)
 
 
 class DashboardStatsView(APIView):
@@ -50,6 +55,8 @@ class DashboardStatsView(APIView):
             
             # Today's revenue
             payments = Payment.objects.filter(payment_date__date=today)
+            if property_obj:
+                payments = payments.filter(folio__reservation__hotel=property_obj)
             revenue = payments.aggregate(total=Sum('amount'))['total'] or 0
             
             return Response({
@@ -225,7 +232,7 @@ class AdvancedAnalyticsView(APIView):
                 if property_obj:
                     value = Reservation.objects.filter(
                         created_at__date=current_date,
-                        property=property_obj
+                        hotel=property_obj
                     ).count()
             else:
                 value = 0
@@ -279,7 +286,7 @@ class RevenueForecastView(APIView):
         forecast = []
         for i in range(30):
             forecast_date = today + timedelta(days=i)
-            # Add some variance (±10%)
+            # Add some variance (+/-10%)
             import random
             variance = random.uniform(0.9, 1.1)
             forecasted_value = float(avg_daily_revenue) * variance
@@ -339,7 +346,8 @@ class DailyReportView(APIView):
                     'date': target_date,
                     'message': 'No data available for this date'
                 })
-        except Exception as e:
+        except (ValueError, TypeError, AttributeError) as e:
+            logger.error(f"Error retrieving daily statistics: {str(e)}")
             return Response({
                 'date': target_date,
                 'error': str(e)
@@ -409,9 +417,9 @@ class NightAuditListCreateView(generics.ListCreateAPIView):
         return NightAuditSerializer
     
     def perform_create(self, serializer):
-        # If no property specified and user has assigned property, use it
-        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
-            serializer.save(property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
         else:
             serializer.save()
 
@@ -439,15 +447,9 @@ class StartNightAuditView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        night_audit = get_object_or_404(NightAudit, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if night_audit.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        audit_qs = NightAudit.objects.filter(property=prop) if prop else NightAudit.objects.all()
+        night_audit = get_object_or_404(audit_qs, pk=pk)
         
         # Check if already started
         if night_audit.status != NightAudit.Status.PENDING:
@@ -495,7 +497,7 @@ class StartNightAuditView(APIView):
             
             # Find reservations that should have checked in but didn't
             no_show_reservations = Reservation.objects.filter(
-                property=property_obj,
+                hotel=property_obj,
                 check_in_date=business_date,
                 status=Reservation.Status.CONFIRMED
             )
@@ -512,7 +514,6 @@ class StartNightAuditView(APIView):
                     if folio:
                         # Get or create no-show charge code
                         charge_code, _ = ChargeCode.objects.get_or_create(
-                            property=property_obj,
                             code='NOSHOW',
                             defaults={
                                 'name': 'No-Show Charge',
@@ -531,7 +532,8 @@ class StartNightAuditView(APIView):
                             posted_by=user
                         )
                         no_show_count += 1
-                except Exception as e:
+                except (ValidationError, ValueError) as e:
+                    logger.error(f"Error posting no-show charge for {reservation.confirmation_number}: {str(e)}")
                     AuditLog.objects.create(
                         night_audit=night_audit,
                         step='NO_SHOWS',
@@ -557,7 +559,7 @@ class StartNightAuditView(APIView):
             
             # Find all checked-in guests for this date
             in_house_reservations = Reservation.objects.filter(
-                property=property_obj,
+                hotel=property_obj,
                 status=Reservation.Status.CHECKED_IN,
                 check_in_date__lte=business_date,
                 check_out_date__gt=business_date
@@ -572,7 +574,6 @@ class StartNightAuditView(APIView):
                     
                     # Get or create room rate charge code
                     charge_code, _ = ChargeCode.objects.get_or_create(
-                        property=property_obj,
                         code='ROOM',
                         defaults={
                             'name': 'Room Rate',
@@ -594,7 +595,8 @@ class StartNightAuditView(APIView):
                         )
                         room_rate_count += 1
                         
-                except Exception as e:
+                except (ValidationError, ValueError, AttributeError) as e:
+                    logger.error(f"Error posting room rate for {reservation.confirmation_number}: {str(e)}")
                     AuditLog.objects.create(
                         night_audit=night_audit,
                         step='ROOM_RATES',
@@ -621,7 +623,7 @@ class StartNightAuditView(APIView):
             # Find departures for next day
             next_date = business_date + timedelta(days=1)
             departing_reservations = Reservation.objects.filter(
-                property=property_obj,
+                hotel=property_obj,
                 check_out_date=next_date,
                 status=Reservation.Status.CHECKED_IN
             )
@@ -656,9 +658,9 @@ class StartNightAuditView(APIView):
                 message='Verifying all folios are settled'
             )
             
-            # Get all active folios
+            # Get all active folios (linked through reservation)
             active_folios = Folio.objects.filter(
-                property=property_obj,
+                reservation__hotel=property_obj,
                 status='OPEN'
             )
             
@@ -695,13 +697,13 @@ class StartNightAuditView(APIView):
             
             # Get payments for the business date
             payments = Payment.objects.filter(
-                folio__property=property_obj,
+                folio__reservation__hotel=property_obj,
                 payment_date__date=business_date
             ).aggregate(total=Sum('amount'))
             
             # Get charges for the business date
             charges = FolioCharge.objects.filter(
-                folio__property=property_obj,
+                folio__reservation__hotel=property_obj,
                 date=business_date
             )
             
@@ -717,7 +719,7 @@ class StartNightAuditView(APIView):
             
             # Get room counts
             reservations = Reservation.objects.filter(
-                property=property_obj,
+                hotel=property_obj,
                 check_in_date__lte=business_date,
                 check_out_date__gt=business_date,
                 status=Reservation.Status.CHECKED_IN
@@ -734,7 +736,8 @@ class StartNightAuditView(APIView):
                 message=f'Night audit completed - Revenue: ${night_audit.total_revenue}, Rooms: {night_audit.rooms_sold}'
             )
             
-        except Exception as e:
+        except (ValidationError, ValueError) as e:
+            logger.error(f"Error during night audit: {str(e)}")
             AuditLog.objects.create(
                 night_audit=night_audit,
                 step='ERROR',
@@ -749,15 +752,9 @@ class CompleteNightAuditView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        night_audit = get_object_or_404(NightAudit, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if night_audit.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        audit_qs = NightAudit.objects.filter(property=prop) if prop else NightAudit.objects.all()
+        night_audit = get_object_or_404(audit_qs, pk=pk)
         
         # Check if audit is in progress
         if night_audit.status != NightAudit.Status.IN_PROGRESS:
@@ -800,12 +797,13 @@ class CompleteNightAuditView(APIView):
             # property_obj.save()
             
             # Create daily statistics record
+            total_rooms = Room.objects.filter(hotel=property_obj, is_active=True).count()
             DailyStatistics.objects.create(
                 property=property_obj,
                 date=night_audit.business_date,
-                total_rooms=Room.objects.filter(property=property_obj, is_active=True).count(),
-                rooms_occupied=night_audit.rooms_sold,
-                occupancy_rate=(night_audit.rooms_sold / Room.objects.filter(property=property_obj, is_active=True).count() * 100) if Room.objects.filter(property=property_obj, is_active=True).count() > 0 else 0,
+                total_rooms=total_rooms,
+                rooms_sold=night_audit.rooms_sold,
+                occupancy_percent=(night_audit.rooms_sold / total_rooms * 100) if total_rooms > 0 else 0,
                 room_revenue=night_audit.room_revenue,
                 fb_revenue=night_audit.fb_revenue,
                 other_revenue=night_audit.other_revenue,
@@ -820,7 +818,8 @@ class CompleteNightAuditView(APIView):
                 message=f'Business date rolled forward to {new_business_date}. Daily statistics created.'
             )
             
-        except Exception as e:
+        except (ValidationError, ValueError) as e:
+            logger.error(f"Error rolling business date: {str(e)}")
             AuditLog.objects.create(
                 night_audit=night_audit,
                 step='ERROR',
@@ -836,15 +835,9 @@ class RollbackNightAuditView(APIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def post(self, request, pk):
-        night_audit = get_object_or_404(NightAudit, pk=pk)
-        
-        # Check if user has access
-        if request.user.assigned_property:
-            if night_audit.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        audit_qs = NightAudit.objects.filter(property=prop) if prop else NightAudit.objects.all()
+        night_audit = get_object_or_404(audit_qs, pk=pk)
         
         # Check if audit is completed
         if night_audit.status != NightAudit.Status.COMPLETED:
@@ -894,7 +887,8 @@ class RollbackNightAuditView(APIView):
                 message='Rollback completed successfully. Review charges manually if needed.'
             )
             
-        except Exception as e:
+        except (ValidationError, ValueError) as e:
+            logger.error(f"Error during rollback: {str(e)}")
             AuditLog.objects.create(
                 night_audit=night_audit,
                 step='ERROR',

@@ -1,0 +1,91 @@
+version: '3.8'
+
+services:
+  # PostgreSQL Test Database
+  db_test:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: pms_test_db
+      POSTGRES_USER: pms_test_user
+      POSTGRES_PASSWORD: test_password_12345
+    ports:
+      - "5433:5432"
+    volumes:
+      - test_postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pms_test_user"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis Test Instance
+  redis_test:
+    image: redis:7-alpine
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Backend Test Runner
+  backend_test:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    environment:
+      - DJANGO_SETTINGS_MODULE=config.settings.development
+      - DATABASE_URL=postgresql://pms_test_user:test_password_12345@db_test:5432/pms_test_db
+      - REDIS_URL=redis://redis_test:6379/0
+      - DEBUG=True
+    depends_on:
+      db_test:
+        condition: service_healthy
+      redis_test:
+        condition: service_healthy
+    command: >
+      sh -c "
+        python manage.py migrate --noinput &&
+        pytest --cov=apps --cov-report=term-missing --cov-report=html -v
+      "
+    volumes:
+      - ./backend:/app
+      - backend_test_coverage:/app/htmlcov
+
+  # Web Frontend Test Runner
+  web_test:
+    build:
+      context: ./web
+      dockerfile: Dockerfile.dev
+    environment:
+      - NODE_ENV=test
+      - NEXT_PUBLIC_API_URL=http://backend_test:8000
+    command: npm test -- --coverage --watchAll=false
+    volumes:
+      - ./web:/app
+      - /app/node_modules
+      - web_test_coverage:/app/coverage
+
+  # Mobile Test Runner
+  mobile_test:
+    build:
+      context: ./mobile
+      dockerfile: Dockerfile.dev
+    environment:
+      - NODE_ENV=test
+    command: npm test -- --coverage --watchAll=false
+    volumes:
+      - ./mobile:/app
+      - /app/node_modules
+      - mobile_test_coverage:/app/coverage
+
+volumes:
+  test_postgres_data:
+  backend_test_coverage:
+  web_test_coverage:
+  mobile_test_coverage:
+
+networks:
+  default:
+    name: pms_test_network

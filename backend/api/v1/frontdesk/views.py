@@ -7,8 +7,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Count
+from django.core.exceptions import ValidationError
 from datetime import date
 from decimal import Decimal
+import logging
+
 from apps.reservations.models import Reservation
 from apps.rooms.models import Room
 from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
@@ -23,6 +26,8 @@ from .serializers import (
 )
 from api.v1.reservations.serializers import ReservationSerializer
 
+logger = logging.getLogger(__name__)
+
 
 class DashboardView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
@@ -34,7 +39,7 @@ class DashboardView(APIView):
         # Room statistics
         rooms = Room.objects.filter(is_active=True)
         if property_obj:
-            rooms = rooms.filter(property=property_obj)
+            rooms = rooms.filter(hotel=property_obj)
         
         room_stats = rooms.values('status').annotate(count=Count('id'))
         room_stats_dict = {stat['status']: stat['count'] for stat in room_stats}
@@ -42,7 +47,7 @@ class DashboardView(APIView):
         # Reservation statistics
         reservations = Reservation.objects
         if property_obj:
-            reservations = reservations.filter(property=property_obj)
+            reservations = reservations.filter(hotel=property_obj)
         
         arrivals = reservations.filter(
             check_in_date=today,
@@ -80,9 +85,15 @@ class CheckInView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         
+        prop = request.user.assigned_property
         try:
-            reservation = Reservation.objects.get(pk=data['reservation_id'])
-            room = Room.objects.get(pk=data['room_id'])
+            res_qs = Reservation.objects.all()
+            room_qs = Room.objects.all()
+            if prop:
+                res_qs = res_qs.filter(hotel=prop)
+                room_qs = room_qs.filter(hotel=prop)
+            reservation = res_qs.get(pk=data['reservation_id'])
+            room = room_qs.get(pk=data['room_id'])
         except (Reservation.DoesNotExist, Room.DoesNotExist) as e:
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         
@@ -153,8 +164,12 @@ class CheckOutView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         
+        prop = request.user.assigned_property
         try:
-            check_in = CheckIn.objects.get(pk=data['check_in_id'])
+            checkin_qs = CheckIn.objects.all()
+            if prop:
+                checkin_qs = checkin_qs.filter(reservation__hotel=prop)
+            check_in = checkin_qs.get(pk=data['check_in_id'])
         except CheckIn.DoesNotExist:
             return Response({'error': 'Check-in not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -187,9 +202,15 @@ class RoomMoveView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         
+        prop = request.user.assigned_property
         try:
-            check_in = CheckIn.objects.get(pk=data['check_in_id'])
-            new_room = Room.objects.get(pk=data['new_room_id'])
+            checkin_qs = CheckIn.objects.all()
+            room_qs = Room.objects.all()
+            if prop:
+                checkin_qs = checkin_qs.filter(reservation__hotel=prop)
+                room_qs = room_qs.filter(hotel=prop)
+            check_in = checkin_qs.get(pk=data['check_in_id'])
+            new_room = room_qs.get(pk=data['new_room_id'])
         except (CheckIn.DoesNotExist, Room.DoesNotExist) as e:
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
         
@@ -225,8 +246,12 @@ class CheckInWithIDView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            reservation = Reservation.objects.get(pk=pk)
+            res_qs = Reservation.objects.all()
+            if prop:
+                res_qs = res_qs.filter(hotel=prop)
+            reservation = res_qs.get(pk=pk)
         except Reservation.DoesNotExist:
             return Response({'error': 'Reservation not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -257,8 +282,12 @@ class CheckOutWithIDView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            reservation = Reservation.objects.get(pk=pk)
+            res_qs = Reservation.objects.all()
+            if prop:
+                res_qs = res_qs.filter(hotel=prop)
+            reservation = res_qs.get(pk=pk)
         except Reservation.DoesNotExist:
             return Response({'error': 'Reservation not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -367,9 +396,9 @@ class WalkInListCreateView(generics.ListCreateAPIView):
         return WalkInSerializer
     
     def perform_create(self, serializer):
-        # Auto-assign property if user has one and property not specified
-        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
-            serializer.save(created_by=self.request.user, property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(created_by=self.request.user, property=prop)
         else:
             serializer.save(created_by=self.request.user)
 
@@ -404,15 +433,9 @@ class ConvertWalkInView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
-        walk_in = get_object_or_404(WalkIn, pk=pk)
-        
-        # Check access
-        if request.user.assigned_property:
-            if walk_in.property != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        walkin_qs = WalkIn.objects.filter(property=prop) if prop else WalkIn.objects.all()
+        walk_in = get_object_or_404(walkin_qs, pk=pk)
         
         # Check if already converted
         if walk_in.is_converted:
@@ -472,7 +495,14 @@ class ConvertWalkInView(APIView):
                 'walk_in': WalkInSerializer(walk_in).data
             })
             
-        except Exception as e:
+        except ValidationError as e:
+            logger.error(f"Validation error converting walk-in {walk_in_id}: {str(e)}")
+            return Response(
+                {'error': f'Failed to convert walk-in: {str(e)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        except (ValueError, TypeError) as e:
+            logger.error(f"Data error converting walk-in {walk_in_id}: {str(e)}")
             return Response(
                 {'error': f'Failed to convert walk-in: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

@@ -21,15 +21,33 @@ class HousekeepingTaskSerializer(serializers.ModelSerializer):
     inspected_by_name = serializers.CharField(source='inspected_by.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'HousekeepingTaskSerializerExtended'
         model = HousekeepingTask
         fields = [
-            'id', 'room', 'room_number', 'task_type', 'priority', 'status',
-            'assigned_to', 'assigned_to_name', 'assigned_at', 'scheduled_date',
-            'scheduled_time', 'started_at', 'completed_at', 'inspected_by',
-            'inspected_by_name', 'inspected_at', 'inspection_notes',
-            'inspection_passed', 'notes', 'special_instructions', 'created_by',
-            'created_by_name', 'created_at', 'updated_at'
+            'id',
+            'room',
+            'task_type',
+            'priority',
+            'status',
+            'assigned_to',
+            'assigned_at',
+            'scheduled_date',
+            'scheduled_time',
+            'started_at',
+            'completed_at',
+            'inspected_by',
+            'inspected_at',
+            'inspection_notes',
+            'inspection_passed',
+            'notes',
+            'special_instructions',
+            'created_by',
+            'created_at',
+            'updated_at',
+            'room_number', 'assigned_to_name', 'created_by_name', 'inspected_by_name'
+        
         ]
+        
         read_only_fields = ['id', 'created_by', 'created_at', 'updated_at']
     
     def validate(self, data):
@@ -50,13 +68,24 @@ class RoomInspectionSerializer(serializers.ModelSerializer):
     inspector_name = serializers.CharField(source='inspector.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'RoomInspectionSerializerExtended'
         model = RoomInspection
         fields = [
-            'id', 'room', 'room_number', 'inspector', 'inspector_name',
-            'inspection_date', 'cleanliness_score', 'bed_making_score',
-            'bathroom_score', 'amenities_score', 'overall_score',
-            'passed', 'notes'
+            'id',
+            'room',
+            'inspector',
+            'inspection_date',
+            'cleanliness_score',
+            'bed_making_score',
+            'bathroom_score',
+            'amenities_score',
+            'overall_score',
+            'passed',
+            'notes',
+            'room_number', 'inspector_name'
+        
         ]
+        
         read_only_fields = ['id']
     
     def validate(self, data):
@@ -75,12 +104,22 @@ class LinenInventorySerializer(serializers.ModelSerializer):
     quantity_available = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'LinenInventorySerializerExtended'
         model = LinenInventory
         fields = [
-            'id', 'hotel', 'hotel_name', 'linen_type', 'quantity_total',
-            'quantity_in_use', 'quantity_in_laundry', 'quantity_damaged',
-            'quantity_available', 'reorder_level', 'updated_at'
+            'id',
+            'hotel',
+            'linen_type',
+            'quantity_total',
+            'quantity_in_use',
+            'quantity_in_laundry',
+            'quantity_damaged',
+            'reorder_level',
+            'updated_at',
+            'hotel_name', 'quantity_available'
+        
         ]
+        
         read_only_fields = ['id', 'updated_at']
     
     def get_quantity_available(self, obj):
@@ -107,11 +146,21 @@ class AmenityInventorySerializer(serializers.ModelSerializer):
     needs_reorder = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'AmenityInventorySerializerExtended'
         model = AmenityInventory
         fields = [
-            'id', 'hotel', 'hotel_name', 'name', 'code', 'category',
-            'quantity', 'reorder_level', 'unit_cost', 'needs_reorder'
+            'id',
+            'hotel',
+            'name',
+            'code',
+            'category',
+            'quantity',
+            'reorder_level',
+            'unit_cost',
+            'hotel_name', 'needs_reorder'
+        
         ]
+        
         read_only_fields = ['id']
     
     def get_needs_reorder(self, obj):
@@ -139,9 +188,17 @@ class HousekeepingScheduleSerializer(serializers.ModelSerializer):
     class Meta:
         model = HousekeepingSchedule
         fields = [
-            'id', 'user', 'user_name', 'date', 'shift_start',
-            'shift_end', 'assigned_floor', 'notes'
+            'id',
+            'user',
+            'date',
+            'shift_start',
+            'shift_end',
+            'assigned_floor',
+            'notes',
+            'user_name'
+        
         ]
+        
         read_only_fields = ['id']
     
     def validate(self, data):
@@ -162,13 +219,27 @@ class StockMovementSerializer(serializers.ModelSerializer):
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'StockMovementSerializerExtended'
         model = StockMovement
         fields = [
-            'id', 'property', 'property_name', 'amenity_inventory',
-            'linen_inventory', 'movement_type', 'quantity', 'balance_after',
-            'reference', 'reason', 'notes', 'from_location', 'to_location',
-            'created_by', 'created_by_name', 'created_at'
+            'id',
+            'property',
+            'amenity_inventory',
+            'linen_inventory',
+            'movement_type',
+            'quantity',
+            'balance_after',
+            'reference',
+            'reason',
+            'notes',
+            'from_location',
+            'to_location',
+            'created_by',
+            'created_at',
+            'property_name', 'created_by_name'
+        
         ]
+        
         read_only_fields = ['id', 'created_by', 'created_at', 'balance_after']
     
     def validate(self, data):

@@ -11,11 +11,19 @@ class MaintenanceLogSerializer(serializers.ModelSerializer):
     user_name = serializers.CharField(source='user.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'MaintenanceLogSerializerExtended'
         model = MaintenanceLog
         fields = [
-            'id', 'request', 'action', 'notes', 'user', 'user_name',
-            'timestamp'
+            'id',
+            'request',
+            'action',
+            'notes',
+            'user',
+            'timestamp',
+            'user_name'
+        
         ]
+        
         read_only_fields = ['id', 'user', 'timestamp']
 
 
@@ -30,16 +38,34 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
     is_overdue = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'MaintenanceRequestDetail'
         model = MaintenanceRequest
         fields = [
-            'id', 'request_number', 'property', 'room', 'room_number',
-            'location', 'request_type', 'priority', 'status', 'title',
-            'description', 'assigned_to', 'assigned_to_name', 'assigned_at',
-            'started_at', 'completed_at', 'resolution_notes', 'parts_cost',
-            'labor_hours', 'total_cost', 'duration_hours', 'is_overdue',
-            'reported_by', 'reported_by_name', 'created_at', 'updated_at',
-            'logs'
+            'id',
+            'request_number',
+            'property',
+            'room',
+            'location',
+            'request_type',
+            'priority',
+            'status',
+            'title',
+            'description',
+            'assigned_to',
+            'assigned_at',
+            'started_at',
+            'completed_at',
+            'resolution_notes',
+            'parts_cost',
+            'labor_hours',
+            'reported_by',
+            'created_at',
+            'updated_at',
+            'logs',
+            'room_number', 'assigned_to_name', 'reported_by_name', 'total_cost', 'duration_hours', 'is_overdue'
+        
         ]
+        
         read_only_fields = ['id', 'request_number', 'reported_by', 'created_at', 'updated_at']
     
     def get_total_cost(self, obj):
@@ -107,13 +133,29 @@ class AssetSerializer(serializers.ModelSerializer):
     class Meta:
         model = Asset
         fields = [
-            'id', 'property', 'name', 'code', 'category', 'location',
-            'room', 'room_number', 'brand', 'model', 'serial_number',
-            'purchase_date', 'warranty_expiry', 'warranty_expired',
-            'purchase_cost', 'current_value', 'depreciation_value',
-            'last_maintenance', 'next_maintenance', 'maintenance_interval_days',
-            'maintenance_due', 'maintenance_history_count', 'is_active', 'notes'
+            'id',
+            'property',
+            'name',
+            'code',
+            'category',
+            'location',
+            'room',
+            'brand',
+            'model',
+            'serial_number',
+            'purchase_date',
+            'warranty_expiry',
+            'purchase_cost',
+            'current_value',
+            'last_maintenance',
+            'next_maintenance',
+            'maintenance_interval_days',
+            'is_active',
+            'notes',
+            'room_number', 'warranty_expired', 'maintenance_due', 'depreciation_value', 'maintenance_history_count'
+        
         ]
+        
         read_only_fields = ['id']
     
     def get_warranty_expired(self, obj):

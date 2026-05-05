@@ -100,15 +100,18 @@ class PushNotificationService:
     ) -> Dict[str, Any]:
         """
         Send notification to a specific user
-        Looks up user's device tokens from their profile
+        Looks up user's active FCM device tokens from PushDeviceToken model.
         """
-        # Get user's device tokens (would need to be stored in user profile)
-        device_tokens = getattr(user, 'fcm_tokens', [])
-        
+        from apps.notifications.models import PushDeviceToken
+        device_tokens = list(
+            PushDeviceToken.objects.filter(user=user, is_active=True)
+            .values_list('token', flat=True)
+        )
+
         if not device_tokens:
             logger.warning(f"User {user.id} has no FCM tokens")
             return {'success': False, 'error': 'No device tokens'}
-        
+
         return self.send_notification(device_tokens, title, body, data)
 
 

@@ -15,12 +15,22 @@ class CashierShiftSerializer(serializers.ModelSerializer):
     class Meta:
         model = CashierShift
         fields = [
-            'id', 'user', 'user_name', 'property', 'property_name',
-            'shift_start', 'shift_end', 'duration_hours', 'is_open',
-            'opening_balance', 'closing_balance', 'expected_closing',
-            'total_cash_received', 'total_card_received', 'total_received',
-            'is_balanced', 'variance', 'notes'
+            'id',
+            'user',
+            'property',
+            'shift_start',
+            'shift_end',
+            'opening_balance',
+            'closing_balance',
+            'total_cash_received',
+            'total_card_received',
+            'is_balanced',
+            'variance',
+            'notes',
+            'user_name', 'property_name', 'duration_hours', 'expected_closing', 'is_open', 'total_received'
+        
         ]
+        
         read_only_fields = ['id']
     
     def get_user_name(self, obj):

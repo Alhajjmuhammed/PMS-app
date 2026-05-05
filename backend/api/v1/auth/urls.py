@@ -5,6 +5,7 @@ app_name = 'auth'
 
 urlpatterns = [
     path('login/', views.LoginView.as_view(), name='login'),
+    path('mfa/verify/', views.MFAVerifyView.as_view(), name='mfa_verify'),
     path('logout/', views.LogoutView.as_view(), name='logout'),
     path('profile/', views.ProfileView.as_view(), name='profile'),
     path('me/', views.ProfileView.as_view(), name='me'),  # Alias for profile

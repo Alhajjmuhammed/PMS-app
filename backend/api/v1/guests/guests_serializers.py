@@ -17,9 +17,15 @@ class GuestPreferenceSerializer(serializers.ModelSerializer):
         model = GuestPreference
         ref_name = 'GuestPreferenceDetail'
         fields = [
-            'id', 'guest', 'guest_name', 'category', 'category_display',
-            'preference', 'notes'
+            'id',
+            'guest',
+            'category',
+            'preference',
+            'notes',
+            'guest_name', 'category_display'
+        
         ]
+        
         read_only_fields = ['id']
 
 
@@ -33,10 +39,18 @@ class GuestDocumentSerializer(serializers.ModelSerializer):
         model = GuestDocument
         ref_name = 'GuestDocumentDetail'
         fields = [
-            'id', 'guest', 'guest_name', 'document_type', 'document_type_display',
-            'document_number', 'issuing_country', 'issue_date', 'expiry_date',
-            'is_expired', 'document_file'
+            'id',
+            'guest',
+            'document_type',
+            'document_number',
+            'issuing_country',
+            'issue_date',
+            'expiry_date',
+            'document_file',
+            'guest_name', 'document_type_display', 'is_expired'
+        
         ]
+        
         read_only_fields = ['id']
     
     def get_is_expired(self, obj):
@@ -67,15 +81,35 @@ class CompanySerializer(serializers.ModelSerializer):
     is_contract_active = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'CompanySerializerExtended'
         model = Company
         fields = [
-            'id', 'name', 'code', 'company_type', 'company_type_display',
-            'contact_person', 'email', 'phone', 'fax', 'website',
-            'address', 'city', 'country', 'tax_id', 'credit_limit',
-            'payment_terms', 'discount_percentage', 'contract_start',
-            'contract_end', 'is_contract_active', 'is_active', 'notes',
-            'guests_count', 'created_at', 'updated_at'
+            'id',
+            'name',
+            'code',
+            'company_type',
+            'contact_person',
+            'email',
+            'phone',
+            'fax',
+            'website',
+            'address',
+            'city',
+            'country',
+            'tax_id',
+            'credit_limit',
+            'payment_terms',
+            'discount_percentage',
+            'contract_start',
+            'contract_end',
+            'is_active',
+            'notes',
+            'created_at',
+            'updated_at',
+            'company_type_display', 'guests_count', 'is_contract_active'
+        
         ]
+        
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_is_contract_active(self, obj):
@@ -123,11 +157,19 @@ class LoyaltyProgramSerializer(serializers.ModelSerializer):
     tiers_count = serializers.IntegerField(source='tiers.count', read_only=True)
     
     class Meta:
+        ref_name = 'LoyaltyProgramSerializerExtended'
         model = LoyaltyProgram
         fields = [
-            'id', 'property', 'name', 'description', 'points_per_currency',
-            'is_active', 'tiers_count'
+            'id',
+            'property',
+            'name',
+            'description',
+            'points_per_currency',
+            'is_active',
+            'tiers_count'
+        
         ]
+        
         read_only_fields = ['id']
     
     def validate_points_per_currency(self, value):
@@ -144,11 +186,19 @@ class LoyaltyTierSerializer(serializers.ModelSerializer):
     program_name = serializers.CharField(source='program.name', read_only=True)
     
     class Meta:
+        ref_name = 'LoyaltyTierSerializerExtended'
         model = LoyaltyTier
         fields = [
-            'id', 'program', 'program_name', 'name', 'min_points',
-            'benefits', 'discount_percentage'
+            'id',
+            'program',
+            'name',
+            'min_points',
+            'benefits',
+            'discount_percentage',
+            'program_name'
+        
         ]
+        
         read_only_fields = ['id']
     
     def validate_min_points(self, value):
@@ -174,12 +224,21 @@ class LoyaltyTransactionSerializer(serializers.ModelSerializer):
     )
     
     class Meta:
+        ref_name = 'LoyaltyTransactionSerializerExtended'
         model = LoyaltyTransaction
         fields = [
-            'id', 'guest', 'guest_name', 'transaction_type',
-            'transaction_type_display', 'points', 'description',
-            'reference', 'balance_after', 'created_at'
+            'id',
+            'guest',
+            'transaction_type',
+            'points',
+            'description',
+            'reference',
+            'balance_after',
+            'created_at',
+            'guest_name', 'transaction_type_display'
+        
         ]
+        
         read_only_fields = ['id', 'balance_after', 'created_at']
     
     def validate_points(self, value):

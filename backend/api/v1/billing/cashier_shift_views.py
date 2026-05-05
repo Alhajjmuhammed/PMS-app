@@ -71,6 +71,7 @@ class OpenCashierShiftView(APIView):
         # Check if user already has an open shift
         open_shift = CashierShift.objects.filter(
             user=request.user,
+            property=request.user.assigned_property,
             shift_end__isnull=True
         ).first()
         
@@ -209,6 +210,7 @@ class CurrentShiftView(APIView):
     def get(self, request):
         shift = CashierShift.objects.filter(
             user=request.user,
+            property=request.user.assigned_property,
             shift_end__isnull=True
         ).select_related('property').first()
         

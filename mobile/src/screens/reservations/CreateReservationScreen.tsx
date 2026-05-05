@@ -4,6 +4,7 @@ import { Text, TextInput, Button, Card, Chip } from 'react-native-paper';
 import { useMutation, useQueryClient, useQuery } from '@tanstack/react-query';
 import { reservationsApi, guestsApi, roomsApi } from '../../services/apiServices';
 import { Loading } from '../../components';
+import { validators, sanitizeInput } from '../../utils/validation';
 
 export default function CreateReservationScreen({ navigation }: any) {
   const queryClient = useQueryClient();
@@ -36,8 +37,24 @@ export default function CreateReservationScreen({ navigation }: any) {
   });
 
   const checkAvailability = async () => {
-    if (!formData.check_in_date || !formData.check_out_date) {
-      Alert.alert('Error', 'Please enter check-in and check-out dates');
+    // Validate check-in date
+    const checkInValidation = validators.dateFormat(formData.check_in_date, 'Check-in date');
+    if (!checkInValidation.isValid) {
+      Alert.alert('Validation Error', checkInValidation.error);
+      return;
+    }
+
+    // Validate check-out date
+    const checkOutValidation = validators.dateFormat(formData.check_out_date, 'Check-out date');
+    if (!checkOutValidation.isValid) {
+      Alert.alert('Validation Error', checkOutValidation.error);
+      return;
+    }
+
+    // Validate date range
+    const dateRangeValidation = validators.dateRange(formData.check_in_date, formData.check_out_date);
+    if (!dateRangeValidation.isValid) {
+      Alert.alert('Validation Error', dateRangeValidation.error);
       return;
     }
 
@@ -61,8 +78,12 @@ export default function CreateReservationScreen({ navigation }: any) {
   };
 
   const calculatePrice = async () => {
-    if (!formData.check_in_date || !formData.check_out_date) {
-      Alert.alert('Error', 'Please enter check-in and check-out dates');
+    // Validate dates before calculating
+    const checkInValidation = validators.dateFormat(formData.check_in_date, 'Check-in date');
+    const checkOutValidation = validators.dateFormat(formData.check_out_date, 'Check-out date');
+    
+    if (!checkInValidation.isValid || !checkOutValidation.isValid) {
+      Alert.alert('Error', 'Please enter valid dates');
       return;
     }
 
@@ -81,8 +102,45 @@ export default function CreateReservationScreen({ navigation }: any) {
   };
 
   const handleSubmit = () => {
-    if (!formData.guest_id || !formData.check_in_date || !formData.check_out_date) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    // Validate guest ID
+    const guestIdValidation = validators.required(formData.guest_id, 'Guest');
+    if (!guestIdValidation.isValid) {
+      Alert.alert('Validation Error', guestIdValidation.error);
+      return;
+    }
+
+    // Validate check-in date
+    const checkInValidation = validators.dateFormat(formData.check_in_date, 'Check-in date');
+    if (!checkInValidation.isValid) {
+      Alert.alert('Validation Error', checkInValidation.error);
+      return;
+    }
+
+    // Validate check-out date
+    const checkOutValidation = validators.dateFormat(formData.check_out_date, 'Check-out date');
+    if (!checkOutValidation.isValid) {
+      Alert.alert('Validation Error', checkOutValidation.error);
+      return;
+    }
+
+    // Validate date range
+    const dateRangeValidation = validators.dateRange(formData.check_in_date, formData.check_out_date);
+    if (!dateRangeValidation.isValid) {
+      Alert.alert('Validation Error', dateRangeValidation.error);
+      return;
+    }
+
+    // Validate adults count
+    const adultsValidation = validators.range(parseInt(formData.adults), 1, 10, 'Adults');
+    if (!adultsValidation.isValid) {
+      Alert.alert('Validation Error', adultsValidation.error);
+      return;
+    }
+
+    // Validate children count
+    const childrenValidation = validators.range(parseInt(formData.children), 0, 10, 'Children');
+    if (!childrenValidation.isValid) {
+      Alert.alert('Validation Error', childrenValidation.error);
       return;
     }
 
@@ -97,7 +155,7 @@ export default function CreateReservationScreen({ navigation }: any) {
       check_out_date: formData.check_out_date,
       adults: parseInt(formData.adults),
       children: parseInt(formData.children),
-      special_requests: formData.special_requests,
+      special_requests: sanitizeInput.trim(formData.special_requests),
     });
   };
 

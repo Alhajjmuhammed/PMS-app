@@ -36,6 +36,10 @@ class GuestListView(generics.ListCreateAPIView):
     def get_queryset(self):
         qs = super().get_queryset()
         
+        # Multi-tenancy: only show guests from assigned property
+        if self.request.user.assigned_property:
+            qs = qs.filter(reservations__hotel=self.request.user.assigned_property).distinct()
+        
         # Custom filters
         vip_only = self.request.query_params.get('vip_only')
         if vip_only == 'true':
@@ -49,11 +53,14 @@ class GuestDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = GuestSerializer
     
     def get_queryset(self):
-        return Guest.objects.prefetch_related(
+        qs = Guest.objects.prefetch_related(
             'reservations',
             'documents',
             'preferences'
         )
+        if self.request.user.assigned_property:
+            qs = qs.filter(reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class GuestCreateView(generics.CreateAPIView):
@@ -75,7 +82,12 @@ class GuestSearchView(APIView):
             Q(last_name__icontains=query) |
             Q(email__icontains=query) |
             Q(phone__icontains=query)
-        )[:20]
+        )
+        
+        if request.user.assigned_property:
+            guests = guests.filter(reservations__hotel=request.user.assigned_property).distinct()
+        
+        guests = guests[:20]
         
         return Response({
             'results': GuestSerializer(guests, many=True).data
@@ -93,7 +105,12 @@ class GuestDocumentListView(generics.ListCreateAPIView):
     
     def perform_create(self, serializer):
         guest_id = self.kwargs.get('guest_id')
-        guest = get_object_or_404(Guest, pk=guest_id)
+        prop = self.request.user.assigned_property
+        if prop:
+            guest_qs = Guest.objects.filter(reservations__hotel=prop).distinct()
+        else:
+            guest_qs = Guest.objects.all()
+        guest = get_object_or_404(guest_qs, pk=guest_id)
         serializer.save(guest=guest, uploaded_by=self.request.user)
 
 
@@ -101,19 +118,29 @@ class GuestDocumentDetailView(generics.RetrieveDestroyAPIView):
     """Retrieve or delete a specific guest document."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestDocumentSerializer
-    queryset = GuestDocument.objects.all()
     lookup_url_kwarg = 'document_id'
+    
+    def get_queryset(self):
+        qs = GuestDocument.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class CompanyListCreateView(generics.ListCreateAPIView):
     """List all companies or create a new company."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
-    queryset = Company.objects.all()
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['company_type', 'is_active']
     search_fields = ['name', 'code', 'contact_person', 'email']
     ordering_fields = ['name', 'created_at', 'credit_limit']
     ordering = ['name']
+    
+    def get_queryset(self):
+        qs = Company.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(guests__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
     
     def get_serializer_class(self):
         if self.request.method == 'GET':
@@ -125,8 +152,13 @@ class CompanyDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a company."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = CompanySerializer
-    queryset = Company.objects.all()
     lookup_url_kwarg = 'pk'
+    
+    def get_queryset(self):
+        qs = Company.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(guests__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 # ============= Loyalty Program Views =============
@@ -203,7 +235,11 @@ class LoyaltyTransactionListCreateView(generics.ListCreateAPIView):
     ordering = ['-created_at']
     
     def get_queryset(self):
-        return LoyaltyTransaction.objects.select_related('guest')
+        qs = LoyaltyTransaction.objects.select_related('guest')
+        # Multi-tenancy: filter by guest's property
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -215,7 +251,13 @@ class LoyaltyTransactionDetailView(generics.RetrieveAPIView):
     """Retrieve a loyalty transaction."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = LoyaltyTransactionSerializer
-    queryset = LoyaltyTransaction.objects.select_related('guest')
+    
+    def get_queryset(self):
+        qs = LoyaltyTransaction.objects.select_related('guest')
+        # Multi-tenancy: filter by guest's property
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class GuestLoyaltyBalanceView(APIView):
@@ -223,7 +265,12 @@ class GuestLoyaltyBalanceView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request, guest_id):
-        guest = get_object_or_404(Guest, pk=guest_id)
+        prop = request.user.assigned_property
+        if prop:
+            guest_qs = Guest.objects.filter(reservations__hotel=prop).distinct()
+        else:
+            guest_qs = Guest.objects.all()
+        guest = get_object_or_404(guest_qs, pk=guest_id)
         
         # Get last transaction for current balance
         last_transaction = LoyaltyTransaction.objects.filter(
@@ -278,7 +325,10 @@ class GuestPreferenceListCreateView(generics.ListCreateAPIView):
     ordering = ['category', 'guest__last_name']
     
     def get_queryset(self):
-        return GuestPreference.objects.select_related('guest')
+        qs = GuestPreference.objects.select_related('guest')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -304,5 +354,8 @@ class GuestPreferencesByGuestView(generics.ListAPIView):
     
     def get_queryset(self):
         guest_id = self.kwargs.get('guest_id')
-        return GuestPreference.objects.filter(guest_id=guest_id).select_related('guest')
+        qs = GuestPreference.objects.filter(guest_id=guest_id).select_related('guest')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 

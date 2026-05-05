@@ -12,15 +12,27 @@ class DailyStatisticsSerializer(serializers.ModelSerializer):
     property_name = serializers.CharField(source='property.name', read_only=True)
     
     class Meta:
+        ref_name = 'DailyStatisticsSerializerExtended'
         model = DailyStatistics
         fields = [
-            'id', 'property', 'property_name', 'date', 'total_rooms',
-            'occupied_rooms', 'available_rooms', 'out_of_order_rooms',
-            'reserved_rooms', 'complimentary_rooms', 'occupancy_percentage',
-            'room_revenue', 'food_revenue', 'other_revenue', 'total_revenue',
-            'adr', 'revpar', 'total_guests', 'arrivals', 'departures',
-            'created_at'
+            'id',
+            'property',
+            'date',
+            'total_rooms',
+            'available_rooms',
+            'complimentary_rooms',
+            'room_revenue',
+            'other_revenue',
+            'total_revenue',
+            'adr',
+            'revpar',
+            'arrivals',
+            'departures',
+            'created_at',
+            'property_name'
+        
         ]
+        
         read_only_fields = ['id', 'created_at']
 
 
@@ -29,13 +41,22 @@ class MonthlyStatisticsSerializer(serializers.ModelSerializer):
     property_name = serializers.CharField(source='property.name', read_only=True)
     
     class Meta:
+        ref_name = 'MonthlyStatisticsSerializerExtended'
         model = MonthlyStatistics
         fields = [
-            'id', 'property', 'property_name', 'year', 'month',
-            'avg_occupancy', 'avg_adr', 'avg_revpar', 'total_rooms_sold',
-            'total_room_revenue', 'total_food_revenue', 'total_other_revenue',
-            'total_revenue', 'created_at'
+            'id',
+            'property',
+            'year',
+            'month',
+            'avg_occupancy',
+            'avg_adr',
+            'avg_revpar',
+            'total_revenue',
+            'created_at',
+            'property_name'
+        
         ]
+        
         read_only_fields = ['id', 'created_at']
 
 
@@ -48,11 +69,20 @@ class ReportTemplateSerializer(serializers.ModelSerializer):
     class Meta:
         model = ReportTemplate
         fields = [
-            'id', 'property', 'property_name', 'name', 'report_type',
-            'report_type_display', 'description', 'config', 'is_scheduled',
-            'schedule_frequency', 'schedule_time', 'created_by',
-            'created_by_name', 'created_at'
+            'id',
+            'property',
+            'name',
+            'report_type',
+            'description',
+            'config',
+            'is_scheduled',
+            'schedule_time',
+            'created_by',
+            'created_at',
+            'property_name', 'created_by_name', 'report_type_display'
+        
         ]
+        
         read_only_fields = ['id', 'created_by', 'created_at']
     
     def validate_config(self, value):
@@ -66,8 +96,12 @@ class AuditLogSerializer(serializers.ModelSerializer):
     """Serializer for audit log entries."""
     
     class Meta:
+        ref_name = 'AuditLogSerializerExtended'
         model = AuditLog
-        fields = ['id', 'night_audit', 'action', 'details', 'success', 'timestamp']
+        fields = [
+            'id',
+            'night_audit'
+        ]
         read_only_fields = ['id', 'timestamp']
 
 
@@ -82,17 +116,25 @@ class NightAuditSerializer(serializers.ModelSerializer):
     duration_minutes = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'NightAuditSerializerExtended'
         model = NightAudit
         fields = [
-            'id', 'property', 'property_name', 'audit_date', 'status',
-            'status_display', 'rooms_posted', 'reservations_updated',
-            'folios_closed', 'no_shows_processed', 'room_revenue',
-            'tax_amount', 'total_revenue', 'payment_received',
-            'account_receivable', 'cash_variance', 'check_ins_today',
-            'check_outs_today', 'in_house_guests', 'started_at',
-            'completed_at', 'duration_minutes', 'completed_by',
-            'completed_by_name', 'notes', 'logs'
+            'id',
+            'property',
+            'business_date',
+            'status',
+            'no_shows_processed',
+            'room_revenue',
+            'tax_amount',
+            'total_revenue',
+            'started_at',
+            'completed_at',
+            'completed_by',
+            'notes',
+            'logs',
+            'property_name', 'completed_by_name', 'status_display', 'duration_minutes'
         ]
+        
         read_only_fields = ['id', 'completed_at', 'completed_by']
     
     def get_duration_minutes(self, obj):

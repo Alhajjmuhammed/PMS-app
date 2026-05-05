@@ -11,11 +11,23 @@ class OutletSerializer(serializers.ModelSerializer):
     outlet_type_display = serializers.CharField(source='get_outlet_type_display', read_only=True)
     
     class Meta:
+        ref_name = 'OutletSerializerExtended'
         model = Outlet
         fields = [
-            'id', 'property', 'name', 'code', 'outlet_type', 'outlet_type_display',
-            'location', 'capacity', 'opening_time', 'closing_time', 'is_active'
+            'id',
+            'property',
+            'name',
+            'code',
+            'outlet_type',
+            'location',
+            'capacity',
+            'opening_time',
+            'closing_time',
+            'is_active',
+            'outlet_type_display'
+        
         ]
+        
         read_only_fields = ['id']
 
 
@@ -25,11 +37,19 @@ class MenuCategorySerializer(serializers.ModelSerializer):
     items_count = serializers.IntegerField(source='items.count', read_only=True)
     
     class Meta:
+        ref_name = 'MenuCategorySerializerExtended'
         model = MenuCategory
         fields = [
-            'id', 'outlet', 'outlet_name', 'name', 'description',
-            'sort_order', 'is_active', 'items_count'
+            'id',
+            'outlet',
+            'name',
+            'description',
+            'sort_order',
+            'is_active',
+            'outlet_name', 'items_count'
+        
         ]
+        
         read_only_fields = ['id']
 
 
@@ -40,12 +60,22 @@ class MenuItemSerializer(serializers.ModelSerializer):
     profit_margin = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'MenuItemSerializerExtended'
         model = MenuItem
         fields = [
-            'id', 'category', 'category_name', 'outlet_name', 'name',
-            'description', 'price', 'cost', 'profit_margin', 'is_available',
-            'is_taxable', 'image'
+            'id',
+            'category',
+            'name',
+            'description',
+            'price',
+            'cost',
+            'is_available',
+            'is_taxable',
+            'image',
+            'category_name', 'outlet_name', 'profit_margin'
+        
         ]
+        
         read_only_fields = ['id']
     
     def get_profit_margin(self, obj):
@@ -73,11 +103,21 @@ class POSOrderItemSerializer(serializers.ModelSerializer):
     menu_item_name = serializers.CharField(source='menu_item.name', read_only=True)
     
     class Meta:
+        ref_name = 'POSOrderItemSerializerExtended'
         model = POSOrderItem
         fields = [
-            'id', 'order', 'menu_item', 'menu_item_name', 'quantity',
-            'unit_price', 'amount', 'notes', 'is_voided'
+            'id',
+            'order',
+            'menu_item',
+            'quantity',
+            'unit_price',
+            'amount',
+            'notes',
+            'is_voided',
+            'menu_item_name'
+        
         ]
+        
         read_only_fields = ['id', 'amount']
     
     def validate_quantity(self, value):
@@ -95,14 +135,33 @@ class POSOrderSerializer(serializers.ModelSerializer):
     items_count = serializers.IntegerField(source='items.count', read_only=True)
     
     class Meta:
+        ref_name = 'POSOrderSerializerExtended'
         model = POSOrder
         fields = [
-            'id', 'order_number', 'outlet', 'outlet_name', 'check_in',
-            'room_number', 'guest_name', 'table_number', 'covers',
-            'subtotal', 'tax_amount', 'discount', 'total', 'status',
-            'is_posted_to_room', 'posted_at', 'notes', 'server',
-            'server_name', 'created_at', 'updated_at', 'items', 'items_count'
+            'id',
+            'order_number',
+            'outlet',
+            'check_in',
+            'room_number',
+            'guest_name',
+            'table_number',
+            'covers',
+            'subtotal',
+            'tax_amount',
+            'discount',
+            'total',
+            'status',
+            'is_posted_to_room',
+            'posted_at',
+            'notes',
+            'server',
+            'created_at',
+            'updated_at',
+            'items',
+            'outlet_name', 'server_name', 'items_count'
+        
         ]
+        
         read_only_fields = ['id', 'order_number', 'posted_at', 'created_at', 'updated_at']
     
     def validate(self, data):

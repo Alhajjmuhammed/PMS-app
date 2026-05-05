@@ -123,12 +123,12 @@ class IsReadOnly(BasePermission):
 class CanManageUsers(BasePermission):
     """
     Permission class for user management.
-    Superusers and Admins can manage users.
+    Superusers, Admins, and Managers can manage users.
     """
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
             return False
-        allowed_roles = ['ADMIN']
+        allowed_roles = ['ADMIN', 'MANAGER']
         return request.user.is_superuser or request.user.role in allowed_roles
 
 

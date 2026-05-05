@@ -6,7 +6,12 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.utils.decorators import method_decorator
+from django.core.exceptions import ValidationError
+from django_ratelimit.decorators import ratelimit
 from datetime import date, datetime
+import logging
+
 from apps.reservations.models import Reservation, ReservationRoom, GroupBooking
 from apps.reservations.services import AvailabilityService
 from apps.rates.services import PricingService
@@ -18,8 +23,52 @@ from .serializers import (
     GroupBookingSerializer, GroupBookingCreateSerializer, GroupBookingUpdateSerializer
 )
 
+logger = logging.getLogger(__name__)
 
+
+@method_decorator(ratelimit(key='user', rate='100/m', method='GET', block=False), name='dispatch')
 class ReservationListView(generics.ListCreateAPIView):
+    """
+    List all reservations or create a new reservation.
+    
+    GET:
+    Returns a paginated list of reservations with filtering, search, and ordering capabilities.
+    
+    Query Parameters:
+    - status: Filter by reservation status (PENDING, CONFIRMED, CHECKED_IN, CHECKED_OUT, CANCELLED, NO_SHOW)
+    - source: Filter by booking source (WALK_IN, PHONE, WEBSITE, OTA, CORPORATE)
+    - check_in_date: Filter by check-in date
+    - check_out_date: Filter by check-out date
+    - start_date: Filter reservations checking in after this date
+    - end_date: Filter reservations checking out before this date
+    - search: Search by confirmation number, guest name, or email
+    - ordering: Sort results (check_in_date, created_at, total_amount)
+    - page: Page number for pagination
+    - page_size: Number of results per page
+    
+    POST:
+    Create a new reservation. Requires room type, dates, and guest information.
+    
+    Example GET:
+    ```
+    GET /api/v1/reservations/?status=CONFIRMED&start_date=2026-04-15&ordering=-check_in_date
+    ```
+    
+    Example POST:
+    ```
+    POST /api/v1/reservations/
+    {
+      "guest_id": 1,
+      "room_type_id": 2,
+      "check_in_date": "2026-04-15",
+      "check_out_date": "2026-04-20",
+      "adults": 2,
+      "children": 1,
+      "room_rate": 150.00,
+      "special_requests": "Late check-out if possible"
+    }
+    ```
+    """
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = ReservationSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
@@ -35,11 +84,11 @@ class ReservationListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         qs = Reservation.objects.select_related('guest', 'hotel').prefetch_related('rooms')
-        
-        # Filter by user's property if staff user has property assigned
-        # Note: User model doesn't have property field by default
-        # This would need to be customized based on your User model
-        
+
+        # Filter by property to enforce data isolation
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
+
         # Date range filter
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
@@ -57,11 +106,14 @@ class ReservationDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = ReservationSerializer
     
     def get_queryset(self):
-        return Reservation.objects.select_related(
+        qs = Reservation.objects.select_related(
             'guest', 'hotel', 'created_by'
         ).prefetch_related(
             'rooms__room__room_type'
         )
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
+        return qs
 
 
 class ReservationCreateView(APIView):
@@ -74,7 +126,9 @@ class ReservationCreateView(APIView):
         
         # Get or create guest
         if 'guest_id' in data:
-            guest = Guest.objects.get(pk=data['guest_id'])
+            prop = request.user.assigned_property
+            guest_qs = Guest.objects.filter(reservations__hotel=prop).distinct() if prop else Guest.objects.all()
+            guest = get_object_or_404(guest_qs, pk=data['guest_id'])
         else:
             guest, created = Guest.objects.get_or_create(
                 email=data.get('guest_email'),
@@ -93,20 +147,22 @@ class ReservationCreateView(APIView):
         
         # Create reservation
         reservation = Reservation.objects.create(
-            property=data['property'],
+            hotel=data.get('hotel') or data.get('property') or request.user.assigned_property,
             guest=guest,
             check_in_date=check_in,
             check_out_date=check_out,
             adults=data.get('adults', 1),
             children=data.get('children', 0),
-            room_rate=data['room_rate'],
             total_amount=total,
             special_requests=data.get('special_requests', ''),
             created_by=request.user
         )
         
         # Create reservation room
-        room_type = RoomType.objects.get(pk=data['room_type_id'])
+        room_type_qs = RoomType.objects.all()
+        if request.user.assigned_property:
+            room_type_qs = room_type_qs.filter(hotel=request.user.assigned_property)
+        room_type = get_object_or_404(room_type_qs, pk=data['room_type_id'])
         ReservationRoom.objects.create(
             reservation=reservation,
             room_type=room_type,
@@ -121,12 +177,48 @@ class ReservationCreateView(APIView):
         )
 
 
+@method_decorator(ratelimit(key='user', rate='30/m', method='POST', block=False), name='dispatch')
 class CancelReservationView(APIView):
+    """
+    Cancel an existing reservation.
+    
+    Cancels a reservation and updates its status. Cannot cancel reservations
+    that are already checked in.
+    
+    POST Parameters:
+    - reason (optional): Cancellation reason
+    
+    Returns:
+    - Updated reservation with CANCELLED status
+    
+    Errors:
+    - 404: Reservation not found
+    - 400: Cannot cancel checked-in reservation
+    - 429: Rate limit exceeded
+    
+    Example:
+    ```
+    POST /api/v1/reservations/123/cancel/
+    {
+      "reason": "Guest changed travel plans"
+    }
+    ```
+    """
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            return Response(
+                {'error': 'Rate limit exceeded. Please try again later.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
+        
         try:
-            reservation = Reservation.objects.get(pk=pk)
+            qs = Reservation.objects.all()
+            if request.user.assigned_property:
+                qs = qs.filter(hotel=request.user.assigned_property)
+            reservation = qs.get(pk=pk)
         except Reservation.DoesNotExist:
             return Response({'error': 'Reservation not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -148,30 +240,30 @@ class CancelReservationView(APIView):
 class ArrivalsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = ReservationSerializer
-    
+
     def get_queryset(self):
         arrival_date = self.request.query_params.get('date', date.today().isoformat())
-        
         qs = Reservation.objects.filter(
             check_in_date=arrival_date,
             status__in=['CONFIRMED', 'PENDING']
         )
-        
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
         return qs
 
 
 class DeparturesView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = ReservationSerializer
-    
+
     def get_queryset(self):
         departure_date = self.request.query_params.get('date', date.today().isoformat())
-        
         qs = Reservation.objects.filter(
             check_out_date=departure_date,
             status='CHECKED_IN'
         )
-        
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
         return qs
 
 
@@ -211,7 +303,8 @@ class CheckAvailabilityView(APIView):
             
             return Response(result)
             
-        except Exception as e:
+        except (ValidationError, ValueError, TypeError) as e:
+            logger.error(f"Availability check error: {str(e)}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -239,7 +332,8 @@ class AvailabilityCalendarView(APIView):
                 'calendar': calendar
             })
             
-        except Exception as e:
+        except (ValidationError, ValueError) as e:
+            logger.error(f"Availability calendar error: {str(e)}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -268,7 +362,8 @@ class CalculatePriceView(APIView):
             
             return Response(pricing)
             
-        except Exception as e:
+        except (ValidationError, ValueError, KeyError) as e:
+            logger.error(f"Pricing calculation error: {str(e)}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -297,7 +392,8 @@ class CompareRatesView(APIView):
                 'rate_plans': comparisons
             })
             
-        except Exception as e:
+        except (ValidationError, ValueError, KeyError) as e:
+            logger.error(f"Rate plan comparison error: {str(e)}")
             return Response(
                 {'error': str(e)},
                 status=status.HTTP_400_BAD_REQUEST
@@ -329,9 +425,9 @@ class GroupBookingListCreateView(generics.ListCreateAPIView):
         return GroupBookingSerializer
     
     def perform_create(self, serializer):
-        # Auto-assign property if user has one and hotel not specified
-        if self.request.user.assigned_property and 'hotel' not in serializer.validated_data:
-            serializer.save(created_by=self.request.user, hotel=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(created_by=self.request.user, hotel=prop)
         else:
             serializer.save(created_by=self.request.user)
 
@@ -359,15 +455,9 @@ class GroupBookingRoomPickupView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
-        group_booking = get_object_or_404(GroupBooking, pk=pk)
-        
-        # Check access
-        if request.user.assigned_property:
-            if group_booking.hotel != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        gb_qs = GroupBooking.objects.filter(hotel=prop) if prop else GroupBooking.objects.all()
+        group_booking = get_object_or_404(gb_qs, pk=pk)
         
         # Get pickup count from request
         pickup_count = request.data.get('rooms_picked_up')
@@ -410,15 +500,9 @@ class GroupBookingConfirmView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
-        group_booking = get_object_or_404(GroupBooking, pk=pk)
-        
-        # Check access
-        if request.user.assigned_property:
-            if group_booking.hotel != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        gb_qs = GroupBooking.objects.filter(hotel=prop) if prop else GroupBooking.objects.all()
+        group_booking = get_object_or_404(gb_qs, pk=pk)
         
         # Check if already confirmed
         if group_booking.status == GroupBooking.Status.CONFIRMED:
@@ -446,15 +530,9 @@ class GroupBookingCancelView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
-        group_booking = get_object_or_404(GroupBooking, pk=pk)
-        
-        # Check access
-        if request.user.assigned_property:
-            if group_booking.hotel != request.user.assigned_property:
-                return Response(
-                    {'error': 'You do not have access to this resource'},
-                    status=status.HTTP_403_FORBIDDEN
-                )
+        prop = request.user.assigned_property
+        gb_qs = GroupBooking.objects.filter(hotel=prop) if prop else GroupBooking.objects.all()
+        group_booking = get_object_or_404(gb_qs, pk=pk)
         
         # Check if already cancelled
         if group_booking.status == GroupBooking.Status.CANCELLED:

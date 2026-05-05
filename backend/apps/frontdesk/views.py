@@ -222,7 +222,10 @@ class CheckOutView(LoginRequiredMixin, View):
             total_charges = folio.total_charges
             total_payments = folio.total_payments
             balance = folio.balance
-        except:
+        except (AttributeError, TypeError) as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.warning(f"Failed to retrieve folio details for check-in {check_in.id}: {str(e)}")
             total_charges = 0
             total_payments = 0
             balance = 0

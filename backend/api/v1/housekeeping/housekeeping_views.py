@@ -9,7 +9,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
 from django.db.models import Q, Count
+from django.core.exceptions import ValidationError, ObjectDoesNotExist
+from django.db import DatabaseError
 from datetime import date
+import logging
 
 from apps.housekeeping.models import (
     HousekeepingTask,
@@ -33,6 +36,8 @@ from .housekeeping_serializers import (
 )
 from api.permissions import IsAdminOrManager
 
+logger = logging.getLogger(__name__)
+
 
 # ===== Housekeeping Tasks =====
 
@@ -42,7 +47,7 @@ class HousekeepingTaskListCreateView(generics.ListCreateAPIView):
     serializer_class = HousekeepingTaskSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'priority', 'task_type', 'assigned_to', 'room']
-    search_fields = ['room__number', 'description', 'notes']
+    search_fields = ['room__room_number', 'description', 'notes']
     ordering_fields = ['scheduled_date', 'priority', 'created_at']
     ordering = ['priority', 'scheduled_date']
     
@@ -87,7 +92,7 @@ class TodayTasksView(generics.ListAPIView):
         return HousekeepingTask.objects.filter(
             room__hotel=self.request.user.assigned_property,
             scheduled_date=today
-        ).select_related('room', 'assigned_to').order_by('priority', 'room__number')
+        ).select_related('room', 'assigned_to').order_by('priority', 'room__room_number')
 
 
 class MyTasksView(generics.ListAPIView):
@@ -96,10 +101,14 @@ class MyTasksView(generics.ListAPIView):
     serializer_class = HousekeepingTaskSerializer
     
     def get_queryset(self):
-        return HousekeepingTask.objects.filter(
+        qs = HousekeepingTask.objects.filter(
             assigned_to=self.request.user,
             status__in=['PENDING', 'IN_PROGRESS']
-        ).select_related('room').order_by('priority', 'scheduled_date')
+        )
+        # Multi-tenancy: defensive filter by property
+        if self.request.user.assigned_property:
+            qs = qs.filter(room__hotel=self.request.user.assigned_property)
+        return qs.select_related('room').order_by('priority', 'scheduled_date')
 
 
 class StartTaskView(APIView):
@@ -276,10 +285,10 @@ class LinenInventoryListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = LinenInventorySerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['item_type']
-    search_fields = ['item_name']
-    ordering_fields = ['item_name', 'total_quantity', 'last_counted_at']
-    ordering = ['item_type', 'item_name']
+    filterset_fields = ['linen_type']
+    search_fields = ['linen_type']
+    ordering_fields = ['linen_type', 'quantity_total']
+    ordering = ['linen_type']
     
     def get_queryset(self):
         return LinenInventory.objects.filter(
@@ -292,7 +301,7 @@ class LinenInventoryListCreateView(generics.ListCreateAPIView):
 
 class LinenInventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete linen inventory."""
-    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    permission_classes = [IsAuthenticated]
     serializer_class = LinenInventorySerializer
     
     def get_queryset(self):
@@ -321,10 +330,10 @@ class AmenityInventoryListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = AmenityInventorySerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['item_type']
-    search_fields = ['item_name', 'supplier']
-    ordering_fields = ['item_name', 'current_stock', 'last_restocked_at']
-    ordering = ['item_type', 'item_name']
+    filterset_fields = ['category']
+    search_fields = ['name', 'code']
+    ordering_fields = ['name', 'quantity']
+    ordering = ['name']
     
     def get_queryset(self):
         return AmenityInventory.objects.filter(
@@ -337,7 +346,7 @@ class AmenityInventoryListCreateView(generics.ListCreateAPIView):
 
 class AmenityInventoryDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete amenity inventory."""
-    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    permission_classes = [IsAuthenticated]
     serializer_class = AmenityInventorySerializer
     
     def get_queryset(self):
@@ -366,14 +375,14 @@ class HousekeepingScheduleListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = HousekeepingScheduleSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['staff', 'shift_type', 'is_active']
-    ordering_fields = ['shift_date', 'shift_start']
-    ordering = ['shift_date', 'shift_start']
+    filterset_fields = ['user', 'assigned_floor']
+    ordering_fields = ['date', 'shift_start']
+    ordering = ['date', 'shift_start']
     
     def get_queryset(self):
         queryset = HousekeepingSchedule.objects.filter(
-            staff__hotel=self.request.user.assigned_property
-        ).select_related('staff')
+            user__assigned_property=self.request.user.assigned_property
+        ).select_related('user')
         
         # Filter by date range
         start_date = self.request.query_params.get('start_date')
@@ -394,8 +403,8 @@ class HousekeepingScheduleDetailView(generics.RetrieveUpdateDestroyAPIView):
     
     def get_queryset(self):
         return HousekeepingSchedule.objects.filter(
-            staff__hotel=self.request.user.assigned_property
-        ).select_related('staff')
+            user__assigned_property=self.request.user.assigned_property
+        ).select_related('user')
 
 
 # ===== Stock Movements =====
@@ -483,8 +492,9 @@ class HousekeepingDashboardView(APIView):
                     'inspecting_rooms': room_stats.get('inspecting', 0),
                     'out_of_order_rooms': room_stats.get('out_of_order', 0),
                 })
-        except:
-            # Fall back to defaults if there's any error
+        except (DatabaseError, ValidationError, AttributeError) as e:
+            # Fall back to defaults if there's any error with room stats query
+            logger.warning(f"Failed to fetch room statistics: {str(e)}")
             pass
         
         return Response(data)

@@ -71,7 +71,13 @@ class ActiveRoomTypesView(generics.ListAPIView):
 # ===== Room Amenities =====
 
 class RoomAmenityListCreateView(generics.ListCreateAPIView):
-    """List all room amenities or create new amenity."""
+    """
+    List all room amenities or create new amenity.
+    
+    NOTE: Intentionally GLOBAL - Room amenities like WiFi, TV, Mini Bar, etc.
+    are master data shared across all properties. Properties then assign these
+    amenities to their room types via RoomTypeAmenity which IS property-scoped.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = RoomAmenitySerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
@@ -81,18 +87,27 @@ class RoomAmenityListCreateView(generics.ListCreateAPIView):
     ordering = ['category', 'name']
     
     def get_queryset(self):
+        # Intentionally global - master amenity catalog
         return RoomAmenity.objects.all()
 
 
 class RoomAmenityDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Retrieve, update or delete a room amenity."""
+    """
+    Retrieve, update or delete a room amenity.
+    
+    NOTE: Intentionally GLOBAL - Master amenity catalog.
+    """
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomAmenitySerializer
     queryset = RoomAmenity.objects.all()
 
 
 class ActiveRoomAmenitiesView(generics.ListAPIView):
-    """List only active amenities."""
+    """
+    List only active amenities.
+    
+    NOTE: Intentionally GLOBAL - Master amenity catalog.
+    """
     permission_classes = [IsAuthenticated]
     serializer_class = RoomAmenitySerializer
     
@@ -111,7 +126,7 @@ class RoomTypeAmenityListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         return RoomTypeAmenity.objects.filter(
-            room_type__property=self.request.user.assigned_property
+            room_type__hotel=self.request.user.assigned_property
         ).select_related('room_type', 'amenity')
 
 
@@ -155,7 +170,7 @@ class BulkAmenityAssignView(APIView):
         quantity = data.get('quantity', 1)
         
         # Verify room type belongs to user's property
-        if room_type.property != request.user.assigned_property:
+        if room_type.hotel != request.user.assigned_property:
             return Response(
                 {'error': 'Room type not found'},
                 status=status.HTTP_404_NOT_FOUND

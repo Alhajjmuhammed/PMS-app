@@ -17,6 +17,7 @@ class PropertyChannelSerializer(serializers.ModelSerializer):
     channel_name = serializers.CharField(source='channel.name', read_only=True)
     
     class Meta:
+        ref_name = 'PropertyChannelSerializer'
         model = PropertyChannel
         fields = [
             'id', 'property', 'property_name', 'channel', 'channel_name',
@@ -31,6 +32,7 @@ class RoomTypeMappingSerializer(serializers.ModelSerializer):
     room_type_name = serializers.CharField(source='room_type.name', read_only=True)
     
     class Meta:
+        ref_name = 'RoomTypeMappingSerializer'
         model = RoomTypeMapping
         fields = [
             'id', 'property_channel', 'property_channel_info',
@@ -46,6 +48,7 @@ class RatePlanMappingSerializer(serializers.ModelSerializer):
     rate_plan_code = serializers.CharField(source='rate_plan.code', read_only=True)
     
     class Meta:
+        ref_name = 'RatePlanMappingSerializer'
         model = RatePlanMapping
         fields = [
             'id', 'property_channel', 'property_channel_info',
@@ -84,6 +87,7 @@ class AvailabilityUpdateSerializer(serializers.ModelSerializer):
     channel_name = serializers.CharField(source='property_channel.channel.name', read_only=True)
     
     class Meta:
+        ref_name = 'AvailabilityUpdateSerializer'
         model = AvailabilityUpdate
         fields = [
             'id', 'property_channel', 'property_channel_info', 'channel_name',
@@ -120,6 +124,7 @@ class RateUpdateSerializer(serializers.ModelSerializer):
     channel_name = serializers.CharField(source='property_channel.channel.name', read_only=True)
     
     class Meta:
+        ref_name = 'RateUpdateSerializer'
         model = RateUpdate
         fields = [
             'id', 'property_channel', 'property_channel_info', 'channel_name',
@@ -156,6 +161,7 @@ class ChannelReservationSerializer(serializers.ModelSerializer):
     reservation_number = serializers.CharField(source='reservation.reservation_number', read_only=True)
     
     class Meta:
+        ref_name = 'ChannelReservationSerializer'
         model = ChannelReservation
         fields = [
             'id', 'property_channel', 'property_channel_info', 'channel_name',

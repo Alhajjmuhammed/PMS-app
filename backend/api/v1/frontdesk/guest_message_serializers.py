@@ -13,11 +13,20 @@ class GuestMessageSerializer(serializers.ModelSerializer):
     class Meta:
         model = GuestMessage
         fields = [
-            'id', 'check_in', 'guest_name', 'room_number',
-            'message_type', 'message_type_display', 'message',
-            'from_name', 'from_contact', 'is_delivered',
-            'delivered_at', 'taken_by', 'taken_by_name', 'created_at'
+            'id',
+            'check_in',
+            'message_type',
+            'message',
+            'from_name',
+            'from_contact',
+            'is_delivered',
+            'delivered_at',
+            'taken_by',
+            'created_at',
+            'guest_name', 'room_number', 'taken_by_name', 'message_type_display'
+        
         ]
+        
         read_only_fields = ['id', 'created_at', 'delivered_at']
     
     def get_guest_name(self, obj):

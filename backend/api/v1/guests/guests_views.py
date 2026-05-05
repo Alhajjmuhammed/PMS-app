@@ -36,7 +36,10 @@ class GuestPreferenceListCreateView(generics.ListCreateAPIView):
     search_fields = ['preference', 'notes']
     
     def get_queryset(self):
-        return GuestPreference.objects.all().select_related('guest')
+        qs = GuestPreference.objects.all().select_related('guest')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class GuestPreferenceDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -45,7 +48,10 @@ class GuestPreferenceDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = GuestPreferenceSerializer
     
     def get_queryset(self):
-        return GuestPreference.objects.all().select_related('guest')
+        qs = GuestPreference.objects.all().select_related('guest')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class GuestPreferencesByGuestView(generics.ListAPIView):
@@ -71,7 +77,10 @@ class GuestDocumentListCreateView(generics.ListCreateAPIView):
     ordering = ['-issue_date']
     
     def get_queryset(self):
-        return GuestDocument.objects.all().select_related('guest')
+        qs = GuestDocument.objects.all().select_related('guest')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class GuestDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -80,7 +89,10 @@ class GuestDocumentDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = GuestDocumentSerializer
     
     def get_queryset(self):
-        return GuestDocument.objects.all().select_related('guest')
+        qs = GuestDocument.objects.all().select_related('guest')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class GuestDocumentsByGuestView(generics.ListAPIView):
@@ -106,7 +118,10 @@ class CompanyListCreateView(generics.ListCreateAPIView):
     ordering = ['name']
     
     def get_queryset(self):
-        return Company.objects.all().prefetch_related('guests')
+        qs = Company.objects.all().prefetch_related('guests')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guests__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class CompanyDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -115,7 +130,10 @@ class CompanyDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = CompanySerializer
     
     def get_queryset(self):
-        return Company.objects.all()
+        qs = Company.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(guests__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 class ActiveCompaniesView(generics.ListAPIView):
@@ -126,7 +144,10 @@ class ActiveCompaniesView(generics.ListAPIView):
     search_fields = ['name', 'code']
     
     def get_queryset(self):
-        return Company.objects.filter(is_active=True).order_by('name')
+        qs = Company.objects.filter(is_active=True).order_by('name')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guests__reservations__hotel=self.request.user.assigned_property).distinct()
+        return qs
 
 
 # ===== Loyalty Programs =====

@@ -77,6 +77,33 @@ class User(AbstractUser):
         null=True
     )
     is_active = models.BooleanField(_('active'), default=True)
+    
+    # Multi-Factor Authentication fields
+    mfa_enabled = models.BooleanField(_('MFA enabled'), default=False)
+    mfa_secret = models.CharField(
+        _('MFA secret'),
+        max_length=32,
+        blank=True,
+        help_text=_('TOTP secret for Google Authenticator')
+    )
+    backup_codes = models.JSONField(
+        _('backup codes'),
+        default=list,
+        blank=True,
+        help_text=_('One-time recovery codes')
+    )
+    mfa_method = models.CharField(
+        _('MFA method'),
+        max_length=10,
+        choices=[
+            ('TOTP', _('Authenticator App')),
+            ('EMAIL', _('Email Code')),
+            ('SMS', _('SMS Code'))
+        ],
+        default='TOTP',
+        blank=True
+    )
+    
     created_at = models.DateTimeField(_('created at'), auto_now_add=True)
     updated_at = models.DateTimeField(_('updated at'), auto_now=True)
     

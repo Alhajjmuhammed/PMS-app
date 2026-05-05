@@ -80,7 +80,7 @@ export default function ProfileScreen() {
             
             <List.Item
               title="Property"
-              description={user?.property_name || 'All Properties'}
+              description={user?.assigned_property?.name || 'All Properties'}
               left={props => <List.Icon {...props} icon="office-building" />}
             />
           </List.Section>

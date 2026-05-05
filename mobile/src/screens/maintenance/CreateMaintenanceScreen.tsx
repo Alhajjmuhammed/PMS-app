@@ -4,6 +4,7 @@ import { TextInput, Button, SegmentedButtons, Text } from 'react-native-paper';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { maintenanceApi } from '../../services/api';
 import { useNavigation } from '@react-navigation/native';
+import { validators, sanitizeInput } from '../../utils/validation';
 
 export default function CreateMaintenanceScreen() {
   const navigation = useNavigation();
@@ -19,9 +20,9 @@ export default function CreateMaintenanceScreen() {
   const createMutation = useMutation({
     mutationFn: () =>
       maintenanceApi.createRequest({
-        title,
-        description,
-        location: roomNumber ? '' : location,
+        title: sanitizeInput.trim(title),
+        description: sanitizeInput.trim(description),
+        location: roomNumber ? '' : sanitizeInput.trim(location),
         room: roomNumber || null,
         category,
         priority,
@@ -38,18 +39,38 @@ export default function CreateMaintenanceScreen() {
   });
 
   const handleSubmit = () => {
-    if (!title.trim()) {
-      Alert.alert('Error', 'Please enter a title');
+    // Validate title
+    const titleValidation = validators.required(title, 'Title');
+    if (!titleValidation.isValid) {
+      Alert.alert('Validation Error', titleValidation.error);
       return;
     }
-    if (!description.trim()) {
-      Alert.alert('Error', 'Please enter a description');
+
+    const titleLengthValidation = validators.minLength(title, 5, 'Title');
+    if (!titleLengthValidation.isValid) {
+      Alert.alert('Validation Error', titleLengthValidation.error);
       return;
     }
+
+    // Validate description
+    const descValidation = validators.required(description, 'Description');
+    if (!descValidation.isValid) {
+      Alert.alert('Validation Error', descValidation.error);
+      return;
+    }
+
+    const descLengthValidation = validators.minLength(description, 10, 'Description');
+    if (!descLengthValidation.isValid) {
+      Alert.alert('Validation Error', descLengthValidation.error);
+      return;
+    }
+
+    // Validate location or room number
     if (!location.trim() && !roomNumber.trim()) {
-      Alert.alert('Error', 'Please enter a location or room number');
+      Alert.alert('Validation Error', 'Please enter a location or room number');
       return;
     }
+
     createMutation.mutate();
   };
 

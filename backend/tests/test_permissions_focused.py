@@ -336,22 +336,22 @@ def test_suite_summary():
     """
     This test suite covers:
     
-    ✅ Property Management Permissions (5 tests)
+    [OK] Property Management Permissions (5 tests)
        - Superuser, Admin, Manager can access
        - Front Desk, Housekeeping cannot create
     
-    ✅ Reservation Permissions (4 tests)
+    [OK] Reservation Permissions (4 tests)
        - Front Desk, Manager can access
        - Housekeeping, POS cannot access
     
-    ✅ Guest Permissions (4 tests)
+    [OK] Guest Permissions (4 tests)
        - Front Desk, Manager can access
        - Housekeeping, Maintenance cannot access
     
-    ✅ Cross-Property Access (1 test)
+    [OK] Cross-Property Access (1 test)
        - Managers see only their property
     
-    ✅ Role Hierarchy (3 tests)
+    [OK] Role Hierarchy (3 tests)
        - Admin > Manager > Front Desk > Housekeeping
     
     Total: 17 core permission tests

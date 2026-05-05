@@ -29,6 +29,12 @@ class ExpiringTokenAuthentication(TokenAuthentication):
         if not token.user.is_active:
             raise AuthenticationFailed('User inactive or deleted.')
 
+        if (
+            token.user.assigned_property is not None
+            and not token.user.assigned_property.is_active
+        ):
+            raise AuthenticationFailed('Your property is inactive. Please contact the administrator.')
+
         # Get token expiration hours from settings (default: 24, 0 = disabled)
         expiration_hours = getattr(settings, 'TOKEN_EXPIRATION_HOURS', 24)
         

@@ -40,14 +40,26 @@ class PropertyChannelSerializer(serializers.ModelSerializer):
     )
     
     class Meta:
+        ref_name = 'PropertyChannelSerializerExtended'
         model = PropertyChannel
         fields = [
-            'id', 'property', 'channel', 'channel_name', 'channel_code',
-            'channel_type', 'property_code', 'rate_plan', 'rate_plan_name',
-            'rate_markup', 'min_availability', 'max_availability',
-            'sync_rates', 'sync_availability', 'sync_restrictions',
-            'last_sync', 'is_active', 'room_mappings_count', 'rate_mappings_count'
+            'id',
+            'property',
+            'channel',
+            'property_code',
+            'rate_plan',
+            'rate_markup',
+            'min_availability',
+            'max_availability',
+            'sync_rates',
+            'sync_availability',
+            'sync_restrictions',
+            'last_sync',
+            'is_active',
+            'channel_name', 'channel_code', 'channel_type', 'rate_plan_name', 'room_mappings_count', 'rate_mappings_count'
+        
         ]
+        
         read_only_fields = ['id', 'last_sync']
     
     def validate_rate_markup(self, value):
@@ -68,12 +80,19 @@ class RoomTypeMappingSerializer(serializers.ModelSerializer):
     )
     
     class Meta:
+        ref_name = 'RoomTypeMappingSerializerExtended'
         model = RoomTypeMapping
         fields = [
-            'id', 'property_channel', 'channel_name', 'room_type',
-            'room_type_name', 'room_type_code', 'channel_room_code',
-            'channel_room_name', 'is_active'
+            'id',
+            'property_channel',
+            'room_type',
+            'channel_room_code',
+            'channel_room_name',
+            'is_active',
+            'room_type_name', 'room_type_code', 'channel_name'
+        
         ]
+        
         read_only_fields = ['id']
     
     def validate(self, data):
@@ -100,12 +119,19 @@ class RatePlanMappingSerializer(serializers.ModelSerializer):
     )
     
     class Meta:
+        ref_name = 'RatePlanMappingSerializerExtended'
         model = RatePlanMapping
         fields = [
-            'id', 'property_channel', 'channel_name', 'rate_plan',
-            'rate_plan_name', 'rate_plan_code', 'channel_rate_code',
-            'channel_rate_name', 'is_active'
+            'id',
+            'property_channel',
+            'rate_plan',
+            'channel_rate_code',
+            'channel_rate_name',
+            'is_active',
+            'rate_plan_name', 'rate_plan_code', 'channel_name'
+        
         ]
+        
         read_only_fields = ['id']
     
     def validate(self, data):
@@ -131,12 +157,22 @@ class AvailabilityUpdateSerializer(serializers.ModelSerializer):
     room_type_name = serializers.CharField(source='room_type.name', read_only=True)
     
     class Meta:
+        ref_name = 'AvailabilityUpdateSerializerExtended'
         model = AvailabilityUpdate
         fields = [
-            'id', 'property_channel', 'channel_name', 'room_type',
-            'room_type_name', 'date', 'availability', 'status',
-            'error_message', 'created_at', 'sent_at'
+            'id',
+            'property_channel',
+            'room_type',
+            'date',
+            'availability',
+            'status',
+            'error_message',
+            'created_at',
+            'sent_at',
+            'channel_name', 'room_type_name'
+        
         ]
+        
         read_only_fields = ['id', 'created_at', 'sent_at']
     
     def validate_availability(self, value):
@@ -162,12 +198,23 @@ class RateUpdateSerializer(serializers.ModelSerializer):
     rate_plan_name = serializers.CharField(source='rate_plan.name', read_only=True)
     
     class Meta:
+        ref_name = 'RateUpdateSerializerExtended'
         model = RateUpdate
         fields = [
-            'id', 'property_channel', 'channel_name', 'room_type',
-            'room_type_name', 'rate_plan', 'rate_plan_name', 'date',
-            'rate', 'status', 'error_message', 'created_at', 'sent_at'
+            'id',
+            'property_channel',
+            'room_type',
+            'rate_plan',
+            'date',
+            'rate',
+            'status',
+            'error_message',
+            'created_at',
+            'sent_at',
+            'channel_name', 'room_type_name', 'rate_plan_name'
+        
         ]
+        
         read_only_fields = ['id', 'created_at', 'sent_at']
     
     def validate_rate(self, value):
@@ -198,14 +245,28 @@ class ChannelReservationSerializer(serializers.ModelSerializer):
     nights = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'ChannelReservationSerializerExtended'
         model = ChannelReservation
         fields = [
-            'id', 'property_channel', 'channel_name', 'property_name',
-            'channel_booking_id', 'reservation', 'reservation_number',
-            'guest_name', 'check_in_date', 'check_out_date', 'nights',
-            'room_type_code', 'rate_amount', 'total_amount', 'status',
-            'error_message', 'received_at', 'processed_at', 'raw_data'
+            'id',
+            'property_channel',
+            'channel_booking_id',
+            'reservation',
+            'guest_name',
+            'check_in_date',
+            'check_out_date',
+            'room_type_code',
+            'rate_amount',
+            'total_amount',
+            'status',
+            'error_message',
+            'received_at',
+            'processed_at',
+            'raw_data',
+            'channel_name', 'property_name', 'reservation_number', 'nights'
+        
         ]
+        
         read_only_fields = ['id', 'received_at', 'processed_at']
     
     def get_nights(self, obj):

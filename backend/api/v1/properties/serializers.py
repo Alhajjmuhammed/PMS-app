@@ -108,7 +108,7 @@ class PropertySerializer(serializers.ModelSerializer):
             'id', 'name', 'code', 'property_type', 'address', 'city',
             'state', 'country', 'postal_code', 'phone', 'email',
             'website', 'check_in_time', 'check_out_time', 'currency',
-            'timezone', 'is_active', 'buildings', 'total_rooms'
+            'timezone', 'star_rating', 'is_active', 'buildings', 'total_rooms'
         ]
 
 

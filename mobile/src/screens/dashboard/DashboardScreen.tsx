@@ -35,13 +35,21 @@ export default function DashboardScreen() {
       }
     >
       <View style={styles.header}>
-        <Text variant="headlineSmall">Welcome, {user?.first_name}!</Text>
-        <Chip icon="office-building">{user?.property_name || 'All Properties'}</Chip>
+        <Text variant="headlineSmall" accessible={true} accessibilityLabel={`Welcome, ${user?.first_name}`}>
+          Welcome, {user?.first_name}!
+        </Text>
+        <Chip 
+          icon="office-building"
+          accessible={true}
+          accessibilityLabel={`Current property: ${user?.assigned_property?.name || 'All Properties'}`}
+        >
+          {user?.assigned_property?.name || 'All Properties'}
+        </Chip>
       </View>
 
       {/* Stats Cards */}
       <View style={styles.statsRow}>
-        <Card style={styles.statCard}>
+        <Card style={styles.statCard} accessible={true} accessibilityLabel={`Occupancy rate: ${dashboardData?.occupancy_percent?.toFixed(1) || 0} percent`}>
           <Card.Content>
             <Title style={styles.statNumber}>
               {dashboardData?.occupancy_percent?.toFixed(1) || 0}%
@@ -50,7 +58,7 @@ export default function DashboardScreen() {
           </Card.Content>
         </Card>
 
-        <Card style={styles.statCard}>
+        <Card style={styles.statCard} accessible={true} accessibilityLabel={`Occupied rooms: ${dashboardData?.rooms_sold || dashboardData?.occupied || 0}`}>
           <Card.Content>
             <Title style={styles.statNumber}>
               {dashboardData?.rooms_sold || dashboardData?.occupied || 0}
@@ -61,7 +69,7 @@ export default function DashboardScreen() {
       </View>
 
       <View style={styles.statsRow}>
-        <Card style={styles.statCard}>
+        <Card style={styles.statCard} accessible={true} accessibilityLabel={`Today's arrivals: ${dashboardData?.arrivals || 0}`}>
           <Card.Content>
             <Title style={styles.statNumber}>
               {dashboardData?.arrivals || 0}
@@ -70,7 +78,7 @@ export default function DashboardScreen() {
           </Card.Content>
         </Card>
 
-        <Card style={styles.statCard}>
+        <Card style={styles.statCard} accessible={true} accessibilityLabel={`Today's departures: ${dashboardData?.departures || 0}`}>
           <Card.Content>
             <Title style={styles.statNumber}>
               {dashboardData?.departures || 0}

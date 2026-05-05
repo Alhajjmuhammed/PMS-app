@@ -8,7 +8,8 @@ urlpatterns = [
     # Folio endpoints
     path('folios/', views.FolioListCreateView.as_view(), name='folio_list'),
     path('folios/<int:pk>/', views.FolioDetailView.as_view(), name='folio_detail'),
-    path('folios/<int:pk>/charges/', views.AddChargeView.as_view(), name='add_charge'),
+    path('folios/<int:pk>/charges/', views.FolioChargesView.as_view(), name='folio_charges'),
+    path('folios/<int:pk>/add-charge/', views.AddChargeView.as_view(), name='add_charge'),
     path('folios/<int:pk>/payments/', views.AddPaymentView.as_view(), name='add_payment'),
     path('folios/<int:pk>/close/', views.CloseFolioView.as_view(), name='close_folio'),
     path('folios/<int:pk>/export/', views.FolioExportView.as_view(), name='export_folio'),

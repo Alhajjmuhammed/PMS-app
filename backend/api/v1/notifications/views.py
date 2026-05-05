@@ -9,6 +9,7 @@ from apps.notifications.models import (
     Notification, PushDeviceToken, NotificationTemplate,
     EmailLog, SMSLog
 )
+from apps.notifications.services import PushNotificationService
 from apps.accounts.models import User
 from api.permissions import IsAdminOrManager
 from .serializers import (
@@ -145,7 +146,13 @@ class NotificationTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 
 class EmailLogListCreateView(generics.ListCreateAPIView):
-    """List all email logs or create a new one."""
+    """
+    List all email logs or create a new one.
+    
+    NOTE: Intentionally SYSTEM-WIDE - EmailLog model has no property field.
+    Email logs are tracked globally for system auditing. To make property-scoped,
+    would need to add a 'property' ForeignKey to the EmailLog model.
+    """
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['template', 'status']
@@ -153,6 +160,7 @@ class EmailLogListCreateView(generics.ListCreateAPIView):
     ordering = ['-created_at']
     
     def get_queryset(self):
+        # Intentionally system-wide - no property field in model
         return EmailLog.objects.select_related('template')
     
     def get_serializer_class(self):
@@ -162,14 +170,24 @@ class EmailLogListCreateView(generics.ListCreateAPIView):
 
 
 class EmailLogDetailView(generics.RetrieveAPIView):
-    """Retrieve an email log."""
+    """
+    Retrieve an email log.
+    
+    NOTE: Intentionally SYSTEM-WIDE - EmailLog model has no property field.
+    """
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = EmailLogSerializer
     queryset = EmailLog.objects.select_related('template')
 
 
 class SMSLogListCreateView(generics.ListCreateAPIView):
-    """List all SMS logs or create a new one."""
+    """
+    List all SMS logs or create a new one.
+    
+    NOTE: Intentionally SYSTEM-WIDE - SMSLog model has no property field.
+    SMS logs are tracked globally for system auditing and billing. To make
+    property-scoped, would need to add a 'property' ForeignKey to SMSLog model.
+    """
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status']
@@ -177,6 +195,7 @@ class SMSLogListCreateView(generics.ListCreateAPIView):
     ordering = ['-created_at']
     
     def get_queryset(self):
+        # Intentionally system-wide - no property field in model
         return SMSLog.objects.all()
     
     def get_serializer_class(self):
@@ -186,10 +205,19 @@ class SMSLogListCreateView(generics.ListCreateAPIView):
 
 
 class SMSLogDetailView(generics.RetrieveAPIView):
-    """Retrieve an SMS log."""
+    """
+    Retrieve an SMS log.
+    
+    NOTE: Intentionally SYSTEM-WIDE - SMSLog model has no property field.
+    SMS logs are system-wide. To make this multi-tenant, would need to
+    add a property ForeignKey to SMSLog model.
+    """
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = SMSLogSerializer
-    queryset = SMSLog.objects.all()
+    
+    def get_queryset(self):
+        # Intentionally system-wide - no property field in model
+        return SMSLog.objects.all()
 
 
 class SendPushNotificationView(APIView):
@@ -225,8 +253,9 @@ class SendPushNotificationView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Create in-app notifications
+        # Create in-app notifications and collect device tokens
         notifications_created = 0
+        all_device_tokens = []
         for user in target_users:
             Notification.objects.create(
                 user=user,
@@ -235,12 +264,27 @@ class SendPushNotificationView(APIView):
                 priority=priority
             )
             notifications_created += 1
-        
-        # TODO: Integrate with actual push notification service (FCM, APNs, etc.)
-        # For now, we're just creating in-app notifications
-        
+            # Collect active device tokens for this user
+            tokens = list(
+                PushDeviceToken.objects.filter(user=user, is_active=True)
+                .values_list('token', flat=True)
+            )
+            all_device_tokens.extend(tokens)
+
+        # Send push notification via FCM if tokens available
+        push_result = {'success': False, 'error': 'No device tokens registered'}
+        if all_device_tokens:
+            push_service = PushNotificationService()
+            push_result = push_service.send_notification(
+                device_tokens=all_device_tokens,
+                title=title,
+                body=message,
+                data=extra_data
+            )
+
         return Response({
-            'message': 'Push notifications sent',
+            'message': 'Notifications sent',
             'recipients': notifications_created,
-            'note': 'In-app notifications created. Push notification service integration pending.'
+            'device_tokens_targeted': len(all_device_tokens),
+            'push_delivery': push_result,
         }, status=status.HTTP_200_OK)

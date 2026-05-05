@@ -45,7 +45,12 @@ class RequestListView(generics.ListCreateAPIView):
 class RequestDetailView(generics.RetrieveUpdateAPIView):
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
-    queryset = MaintenanceRequest.objects.all()
+    
+    def get_queryset(self):
+        qs = MaintenanceRequest.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs
     
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
@@ -88,8 +93,12 @@ class AssignRequestView(APIView):
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            maintenance_request = MaintenanceRequest.objects.get(pk=pk)
+            req_qs = MaintenanceRequest.objects.all()
+            if prop:
+                req_qs = req_qs.filter(property=prop)
+            maintenance_request = req_qs.get(pk=pk)
         except MaintenanceRequest.DoesNotExist:
             return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -123,8 +132,12 @@ class StartRequestView(APIView):
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            maintenance_request = MaintenanceRequest.objects.get(pk=pk)
+            req_qs = MaintenanceRequest.objects.all()
+            if prop:
+                req_qs = req_qs.filter(property=prop)
+            maintenance_request = req_qs.get(pk=pk)
         except MaintenanceRequest.DoesNotExist:
             return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -151,8 +164,12 @@ class CompleteRequestView(APIView):
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            maintenance_request = MaintenanceRequest.objects.get(pk=pk)
+            req_qs = MaintenanceRequest.objects.all()
+            if prop:
+                req_qs = req_qs.filter(property=prop)
+            maintenance_request = req_qs.get(pk=pk)
         except MaintenanceRequest.DoesNotExist:
             return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -187,7 +204,12 @@ class RequestDetailViewAPI(generics.RetrieveAPIView):
     """Maintenance request detail view for /maintenance/{id}/ endpoint."""
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
-    queryset = MaintenanceRequest.objects.all()
+    
+    def get_queryset(self):
+        qs = MaintenanceRequest.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs
 
 
 class ResolveRequestView(APIView):
@@ -195,8 +217,12 @@ class ResolveRequestView(APIView):
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            maintenance_request = MaintenanceRequest.objects.get(pk=pk)
+            req_qs = MaintenanceRequest.objects.all()
+            if prop:
+                req_qs = req_qs.filter(property=prop)
+            maintenance_request = req_qs.get(pk=pk)
         except MaintenanceRequest.DoesNotExist:
             return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
         

@@ -6,11 +6,12 @@ from apps.housekeeping.models import (
 
 
 class HousekeepingTaskSerializer(serializers.ModelSerializer):
-    room_number = serializers.CharField(source='room.room_number', read_only=True)
-    room_type = serializers.CharField(source='room.room_type.name', read_only=True)
-    assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
+    room_number = serializers.SerializerMethodField()
+    room_type = serializers.SerializerMethodField()
+    assigned_to_name = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'HousekeepingTaskSerializer'
         model = HousekeepingTask
         fields = [
             'id', 'room', 'room_number', 'room_type', 'task_type', 'status',
@@ -18,6 +19,26 @@ class HousekeepingTaskSerializer(serializers.ModelSerializer):
             'scheduled_date', 'started_at', 'completed_at',
             'notes', 'special_instructions'
         ]
+    
+    def get_room_number(self, obj):
+        try:
+            return obj.room.room_number if obj.room else None
+        except AttributeError:
+            return None
+    
+    def get_room_type(self, obj):
+        try:
+            if obj.room and hasattr(obj.room, 'room_type') and obj.room.room_type:
+                return obj.room.room_type.name
+        except AttributeError:
+            pass
+        return None
+    
+    def get_assigned_to_name(self, obj):
+        try:
+            return obj.assigned_to.get_full_name() if obj.assigned_to else None
+        except AttributeError:
+            return None
 
 
 class TaskUpdateSerializer(serializers.Serializer):
@@ -26,6 +47,7 @@ class TaskUpdateSerializer(serializers.Serializer):
 
 class RoomInspectionSerializer(serializers.ModelSerializer):
     class Meta:
+        ref_name = 'RoomInspectionSerializer'
         model = RoomInspection
         fields = [
             'id', 'task', 'inspected_by', 'inspection_time',
@@ -42,6 +64,7 @@ class AmenityInventorySerializer(serializers.ModelSerializer):
     is_low_stock = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'AmenityInventorySerializer'
         model = AmenityInventory
         fields = [
             'id', 'hotel', 'property_name', 'name', 'code', 'category',
@@ -110,6 +133,7 @@ class LinenInventorySerializer(serializers.ModelSerializer):
     is_low_stock = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'LinenInventorySerializer'
         model = LinenInventory
         fields = [
             'id', 'hotel', 'property_name', 'linen_type', 'linen_type_display',
@@ -170,6 +194,7 @@ class StockMovementSerializer(serializers.ModelSerializer):
     item_type = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'StockMovementSerializer'
         model = StockMovement
         fields = [
             'id', 'property', 'property_name', 'amenity_inventory', 'linen_inventory',

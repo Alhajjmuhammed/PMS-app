@@ -66,6 +66,7 @@ class GuestSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'GuestSerializer'
         model = Guest
         fields = [
             'id', 'first_name', 'last_name', 'full_name', 'email', 'phone',
@@ -177,6 +178,7 @@ class CompanySerializer(serializers.ModelSerializer):
     """Serializer for Company model with all fields."""
     
     class Meta:
+        ref_name = 'CompanySerializer'
         model = Company
         fields = [
             'id', 'name', 'code', 'company_type', 'contact_person',
@@ -264,6 +266,7 @@ class LoyaltyTierSerializer(serializers.ModelSerializer):
     """Serializer for loyalty tiers."""
     
     class Meta:
+        ref_name = 'LoyaltyTierSerializer'
         model = LoyaltyTier
         fields = [
             'id', 'program', 'name', 'min_points', 'benefits',
@@ -280,6 +283,7 @@ class LoyaltyProgramSerializer(serializers.ModelSerializer):
     tier_count = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'LoyaltyProgramSerializer'
         model = LoyaltyProgram
         fields = [
             'id', 'property', 'property_name', 'name', 'description',
@@ -314,6 +318,7 @@ class LoyaltyTransactionSerializer(serializers.ModelSerializer):
     guest_email = serializers.CharField(source='guest.email', read_only=True)
     
     class Meta:
+        ref_name = 'LoyaltyTransactionSerializer'
         model = LoyaltyTransaction
         fields = [
             'id', 'guest', 'guest_name', 'guest_email', 'transaction_type',

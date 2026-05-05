@@ -104,10 +104,14 @@ class MyMaintenanceTasksView(generics.ListAPIView):
     serializer_class = MaintenanceRequestSerializer
     
     def get_queryset(self):
-        return MaintenanceRequest.objects.filter(
+        qs = MaintenanceRequest.objects.filter(
             assigned_to=self.request.user,
             status__in=['ASSIGNED', 'IN_PROGRESS']
-        ).select_related('room').order_by('-priority', 'created_at')
+        )
+        # Multi-tenancy: defensive filter by property
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs.select_related('room').order_by('-priority', 'created_at')
 
 
 class EmergencyMaintenanceView(generics.ListAPIView):

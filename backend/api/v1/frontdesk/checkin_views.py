@@ -9,11 +9,16 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
 from django.db.models import Q, Count
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from datetime import date
+import logging
 
 from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
 from apps.rooms.models import Room
-from apps.reservations.models import Reservation
+from apps.reservations.models import Reservation, ReservationRoom
+from apps.guests.models import Guest
+from apps.billing.models import Folio
+import uuid
 from .checkin_serializers import (
     CheckInSerializer,
     CheckOutSerializer,
@@ -21,6 +26,9 @@ from .checkin_serializers import (
     WalkInSerializer,
     CheckInDashboardSerializer
 )
+
+logger = logging.getLogger(__name__)
+
 from api.permissions import IsAdminOrManager
 
 
@@ -30,7 +38,7 @@ class CheckInListCreateView(generics.ListCreateAPIView):
     serializer_class = CheckInSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['room', 'guest', 'reservation']
-    search_fields = ['guest__first_name', 'guest__last_name', 'registration_number', 'room__number']
+    search_fields = ['guest__first_name', 'guest__last_name', 'registration_number', 'room__room_number']
     ordering_fields = ['check_in_time', 'created_at']
     ordering = ['-check_in_time']
     
@@ -54,14 +62,29 @@ class CheckInListCreateView(generics.ListCreateAPIView):
     def perform_create(self, serializer):
         check_in = serializer.save(checked_in_by=self.request.user)
         
-        # Update room status to occupied
-        check_in.room.status = 'OCCUPIED'
+        # Update room status to occupied clean
+        check_in.room.status = 'OC'
         check_in.room.save()
         
         # Update reservation status if exists
         if check_in.reservation:
             check_in.reservation.status = 'CHECKED_IN'
             check_in.reservation.save()
+
+        # Auto-create a guest folio if one doesn't exist for the reservation
+        folio_exists = (
+            check_in.reservation
+            and hasattr(check_in.reservation, 'folio')
+            and check_in.reservation.folio is not None
+        )
+        if not folio_exists:
+            folio_number = f"F-{uuid.uuid4().hex[:8].upper()}"
+            Folio.objects.create(
+                folio_number=folio_number,
+                folio_type=Folio.FolioType.GUEST,
+                reservation=check_in.reservation if check_in.reservation else None,
+                guest=check_in.guest,
+            )
 
 
 class CheckInDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -97,7 +120,7 @@ class CheckOutListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = CheckOutSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['payment_status', 'check_in__room', 'check_in__guest']
+    filterset_fields = ['check_in__room', 'check_in__guest']
     ordering_fields = ['check_out_time', 'created_at']
     ordering = ['-check_out_time']
     
@@ -127,14 +150,28 @@ class CheckOutListCreateView(generics.ListCreateAPIView):
             check_out_time=timezone.now()
         )
         
-        # Update room status to dirty
-        check_out.check_in.room.status = 'DIRTY'
+        # Update room status to vacant dirty
+        check_out.check_in.room.status = 'VD'
         check_out.check_in.room.save()
         
         # Update reservation status if exists
         if check_out.check_in.reservation:
             check_out.check_in.reservation.status = 'CHECKED_OUT'
             check_out.check_in.reservation.save()
+
+        # Close the folio if it's still open
+        try:
+            folio = check_out.check_in.reservation.folio
+            if folio.status == 'OPEN':
+                folio.status = 'CLOSED'
+                folio.closed_at = timezone.now()
+                folio.closed_by = self.request.user
+                folio.close_date = timezone.now().date()
+                folio.save()
+        except (ObjectDoesNotExist, AttributeError) as e:
+            # No folio or no reservation - non-fatal but log for monitoring
+            logger.info(f"Could not close folio during checkout: {str(e)}")
+            pass
 
 
 class CheckOutDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -194,10 +231,10 @@ class RoomMoveListCreateView(generics.ListCreateAPIView):
         room_move = serializer.save(moved_by=self.request.user)
         
         # Update room statuses
-        room_move.from_room.status = 'DIRTY'
+        room_move.from_room.status = 'VD'
         room_move.from_room.save()
-        
-        room_move.to_room.status = 'OCCUPIED'
+
+        room_move.to_room.status = 'OC'
         room_move.to_room.save()
         
         # Update check-in room
@@ -226,39 +263,37 @@ class WalkInListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated]
     serializer_class = WalkInSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['status', 'source', 'room', 'guest']
-    search_fields = ['guest__first_name', 'guest__last_name', 'room__number']
-    ordering_fields = ['arrival_date', 'created_at']
+    filterset_fields = ['is_converted']
+    search_fields = ['first_name', 'last_name', 'phone']
+    ordering_fields = ['check_in_date', 'created_at']
     ordering = ['-created_at']
-    
+
     def get_queryset(self):
-        return WalkIn.objects.select_related(
-            'guest',
-            'room',
-            'room_type',
-            'created_by'
-        ).filter(
-            room__hotel=self.request.user.assigned_property
-        )
-    
+        prop = self.request.user.assigned_property
+        qs = WalkIn.objects.select_related('room_type', 'property', 'created_by')
+        if prop:
+            qs = qs.filter(property=prop)
+        return qs
+
     def perform_create(self, serializer):
-        serializer.save(created_by=self.request.user)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop, created_by=self.request.user)
+        else:
+            serializer.save(created_by=self.request.user)
 
 
 class WalkInDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a walk-in."""
     permission_classes = [IsAuthenticated]
     serializer_class = WalkInSerializer
-    
+
     def get_queryset(self):
-        return WalkIn.objects.select_related(
-            'guest',
-            'room',
-            'room_type',
-            'created_by'
-        ).filter(
-            room__hotel=self.request.user.assigned_property
-        )
+        prop = self.request.user.assigned_property
+        qs = WalkIn.objects.select_related('room_type', 'property', 'created_by')
+        if prop:
+            qs = qs.filter(property=prop)
+        return qs
 
 
 class ConvertWalkInView(APIView):
@@ -272,29 +307,58 @@ class ConvertWalkInView(APIView):
                 room__hotel=request.user.assigned_property
             )
             
-            if walk_in.status == 'CONVERTED':
+            if walk_in.is_converted:
                 return Response(
                     {'error': 'Walk-in already converted to reservation'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
-            
+
+            # Get or create a Guest record from the walk-in contact info
+            guest = None
+            if walk_in.email:
+                guest = Guest.objects.filter(
+                    email=walk_in.email
+                ).first()
+            if guest is None:
+                guest = Guest.objects.filter(
+                    phone=walk_in.phone,
+                    first_name=walk_in.first_name,
+                    last_name=walk_in.last_name,
+                ).first()
+            if guest is None:
+                guest = Guest.objects.create(
+                    first_name=walk_in.first_name,
+                    last_name=walk_in.last_name,
+                    email=walk_in.email,
+                    phone=walk_in.phone,
+                )
+
             # Create reservation from walk-in
             reservation = Reservation.objects.create(
-                property=request.user.assigned_property,
-                guest=walk_in.guest,
-                check_in=walk_in.arrival_date,
-                check_out=walk_in.departure_date,
+                hotel=request.user.assigned_property,
+                guest=guest,
+                check_in_date=walk_in.check_in_date,
+                check_out_date=walk_in.check_out_date,
                 adults=walk_in.adults,
                 children=walk_in.children,
                 status='CONFIRMED',
                 source='WALK_IN',
-                notes=walk_in.notes,
-                created_by=request.user
+                internal_notes=walk_in.notes,
+                created_by=request.user,
             )
-            
+
+            # Link the requested room type to the reservation
+            ReservationRoom.objects.create(
+                reservation=reservation,
+                room_type=walk_in.room_type,
+                rate_per_night=walk_in.rate_per_night,
+                adults=walk_in.adults,
+                children=walk_in.children,
+            )
+
             # Mark walk-in as converted
-            walk_in.status = 'CONVERTED'
-            walk_in.converted_to_reservation = reservation
+            walk_in.is_converted = True
+            walk_in.reservation = reservation
             walk_in.save()
             
             return Response({
@@ -355,11 +419,11 @@ class FrontDeskDashboardView(APIView):
         
         # Room statistics
         room_stats = Room.objects.filter(
-            property=property_obj
+            hotel=property_obj
         ).aggregate(
-            available=Count('id', filter=Q(status='CLEAN')),
-            occupied=Count('id', filter=Q(status='OCCUPIED')),
-            dirty=Count('id', filter=Q(status='DIRTY'))
+            available=Count('id', filter=Q(status='VC')),
+            occupied=Count('id', filter=Q(fo_status='OCCUPIED')),
+            dirty=Count('id', filter=Q(status__in=['VD', 'OD']))
         )
         
         walk_ins_today = WalkIn.objects.filter(

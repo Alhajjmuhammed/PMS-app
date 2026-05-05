@@ -14,13 +14,30 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     amenities_count = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'RoomTypeSerializerExtended'
         model = RoomType
         fields = [
-            'id', 'hotel', 'hotel_name', 'name', 'code', 'description',
-            'max_occupancy', 'max_adults', 'max_children',
-            'size_sqm', 'bed_type', 'base_rate', 'extra_adult_rate', 'extra_child_rate',
-            'is_active', 'sort_order', 'total_rooms', 'amenities_count', 'created_at', 'updated_at'
+            'id',
+            'hotel',
+            'name',
+            'code',
+            'description',
+            'max_occupancy',
+            'max_adults',
+            'max_children',
+            'size_sqm',
+            'bed_type',
+            'base_rate',
+            'extra_adult_rate',
+            'extra_child_rate',
+            'is_active',
+            'sort_order',
+            'created_at',
+            'updated_at',
+            'hotel_name', 'total_rooms', 'amenities_count'
+        
         ]
+        
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_total_rooms(self, obj):
@@ -48,10 +65,14 @@ class RoomAmenitySerializer(serializers.ModelSerializer):
     """Serializer for room amenities."""
     
     class Meta:
+        ref_name = 'RoomAmenitySerializerExtended'
         model = RoomAmenity
         fields = [
-            'id', 'name', 'description', 'icon', 'category',
-            'is_active', 'created_at', 'updated_at'
+            'id',
+            'name',
+            'description',
+            'icon',
+            'category'
         ]
         read_only_fields = ['id', 'created_at', 'updated_at']
 
@@ -64,11 +85,16 @@ class RoomTypeAmenitySerializer(serializers.ModelSerializer):
     amenity_icon = serializers.CharField(source='amenity.icon', read_only=True)
     
     class Meta:
+        ref_name = 'RoomTypeAmenitySerializerExtended'
         model = RoomTypeAmenity
         fields = [
-            'id', 'room_type', 'room_type_name', 'amenity', 'amenity_name',
-            'amenity_icon', 'quantity', 'is_complimentary', 'notes'
+            'id',
+            'room_type',
+            'amenity',
+            'room_type_name', 'amenity_name', 'amenity_icon'
+        
         ]
+        
         read_only_fields = ['id']
     
     def validate(self, data):
@@ -87,11 +113,18 @@ class RoomImageSerializer(serializers.ModelSerializer):
     image_url = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'RoomImageSerializerExtended'
         model = RoomImage
         fields = [
-            'id', 'room', 'room_number', 'image', 'image_url',
-            'caption', 'is_primary', 'display_order', 'created_at'
+            'id',
+            'room',
+            'image',
+            'caption',
+            'is_primary',
+            'room_number', 'image_url'
+        
         ]
+        
         read_only_fields = ['id', 'created_at']
     
     def get_image_url(self, obj):
@@ -112,10 +145,15 @@ class RoomStatusLogSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomStatusLog
         fields = [
-            'id', 'room', 'room_number', 'old_status', 'new_status',
-            'reason', 'notes', 'changed_by', 'changed_by_name',
-            'changed_at', 'created_at'
+            'id',
+            'room',
+            'new_status',
+            'notes',
+            'changed_by',
+            'room_number', 'changed_by_name'
+        
         ]
+        
         read_only_fields = ['id', 'changed_by', 'created_at']
 
 

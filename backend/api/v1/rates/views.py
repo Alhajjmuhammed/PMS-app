@@ -24,8 +24,9 @@ class RatePlanListView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
-            serializer.save(property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
         else:
             serializer.save()
 
@@ -33,7 +34,12 @@ class RatePlanListView(generics.ListCreateAPIView):
 class RatePlanDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RatePlanSerializer
-    queryset = RatePlan.objects.all()
+    
+    def get_queryset(self):
+        qs = RatePlan.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs
 
 
 class SeasonListView(generics.ListCreateAPIView):
@@ -47,8 +53,9 @@ class SeasonListView(generics.ListCreateAPIView):
         return queryset.order_by('start_date')
     
     def perform_create(self, serializer):
-        if self.request.user.assigned_property and 'property' not in serializer.validated_data:
-            serializer.save(property=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(property=prop)
         else:
             serializer.save()
 
@@ -62,6 +69,9 @@ class RoomRateListCreateView(generics.ListCreateAPIView):
         queryset = RoomRate.objects.select_related(
             'rate_plan', 'room_type', 'season'
         ).filter(is_active=True)
+        
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(rate_plan__property=self.request.user.assigned_property)
         
         rate_plan_id = self.request.query_params.get('rate_plan')
         room_type_id = self.request.query_params.get('room_type')
@@ -81,7 +91,12 @@ class RoomRateDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a room rate."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomRateSerializer
-    queryset = RoomRate.objects.select_related('rate_plan', 'room_type', 'season')
+    
+    def get_queryset(self):
+        qs = RoomRate.objects.select_related('rate_plan', 'room_type', 'season')
+        if self.request.user.assigned_property:
+            qs = qs.filter(rate_plan__property=self.request.user.assigned_property)
+        return qs
 
 
 class DateRateListCreateView(generics.ListCreateAPIView):
@@ -91,6 +106,8 @@ class DateRateListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         queryset = DateRate.objects.select_related('room_type', 'rate_plan')
+        if self.request.user.assigned_property:
+            queryset = queryset.filter(rate_plan__property=self.request.user.assigned_property)
         
         room_type_id = self.request.query_params.get('room_type')
         date_from = self.request.query_params.get('date_from')
@@ -110,13 +127,23 @@ class DateRateDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a date rate."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = DateRateSerializer
-    queryset = DateRate.objects.select_related('room_type', 'rate_plan')
+    
+    def get_queryset(self):
+        qs = DateRate.objects.select_related('room_type', 'rate_plan')
+        if self.request.user.assigned_property:
+            qs = qs.filter(rate_plan__property=self.request.user.assigned_property)
+        return qs
 
 
 class SeasonDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = SeasonSerializer
-    queryset = Season.objects.all()
+    
+    def get_queryset(self):
+        qs = Season.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs
 
 
 # ============= Revenue Management Views =============

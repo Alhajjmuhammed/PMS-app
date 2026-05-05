@@ -27,10 +27,11 @@ CSRF_COOKIE_SAMESITE = 'Strict'
 
 SECRET_KEY = os.environ.get('DJANGO_SECRET_KEY')
 if not SECRET_KEY:
-    # Allow fallback for testing, but warn
-    SECRET_KEY = 'django-insecure-production-fallback-key-change-in-production'
-    import warnings
-    warnings.warn('DJANGO_SECRET_KEY not set - using fallback key. Set environment variable for production!')
+    from django.core.exceptions import ImproperlyConfigured
+    raise ImproperlyConfigured(
+        'DJANGO_SECRET_KEY environment variable is not set. '
+        'This is required for production.'
+    )
 
 ALLOWED_HOSTS = [host.strip() for host in os.environ.get('ALLOWED_HOSTS', '').split(',') if host.strip()]
 if not ALLOWED_HOSTS:
@@ -169,18 +170,18 @@ LOGGING = {
     },
 }
 
-# Disable browsable API in production
-REST_FRAMEWORK = {
+# Production overrides for REST framework - merge on top of base settings
+REST_FRAMEWORK.update({
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ],
     'DEFAULT_THROTTLE_RATES': {
-        'anon': '50/hour',      # More restrictive for production
-        'user': '500/hour',     # More restrictive for production
-        'login': '10/hour',     # Login attempts
-        'admin': '2000/hour',   # Admin users
+        'anon': '50/hour',
+        'user': '500/hour',
+        'login': '10/hour',
+        'admin': '2000/hour',
     },
-}
+})
 
 # Static files configuration
 STATIC_URL = '/static/'

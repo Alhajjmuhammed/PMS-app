@@ -6,6 +6,7 @@ class MenuItemSerializer(serializers.ModelSerializer):
     category_name = serializers.CharField(source='category.name', read_only=True)
     
     class Meta:
+        ref_name = 'MenuItemSerializer'
         model = MenuItem
         fields = ['id', 'name', 'description', 'price', 'cost', 'category', 'category_name', 'is_available', 'is_taxable', 'image']
 
@@ -15,12 +16,14 @@ class MenuCategorySerializer(serializers.ModelSerializer):
     outlet_name = serializers.CharField(source='outlet.name', read_only=True)
     
     class Meta:
+        ref_name = 'MenuCategorySerializer'
         model = MenuCategory
         fields = ['id', 'name', 'description', 'outlet', 'outlet_name', 'sort_order', 'is_active', 'items']
 
 
 class OutletSerializer(serializers.ModelSerializer):
     class Meta:
+        ref_name = 'OutletSerializer'
         model = Outlet
         fields = ['id', 'name', 'code', 'outlet_type', 'location', 'opening_time', 'closing_time']
 
@@ -29,6 +32,7 @@ class POSOrderItemSerializer(serializers.ModelSerializer):
     item_name = serializers.CharField(source='menu_item.name', read_only=True)
     
     class Meta:
+        ref_name = 'POSOrderItemSerializer'
         model = POSOrderItem
         fields = ['id', 'menu_item', 'item_name', 'quantity', 'unit_price', 'amount', 'notes']
 
@@ -38,6 +42,7 @@ class POSOrderSerializer(serializers.ModelSerializer):
     outlet_name = serializers.CharField(source='outlet.name', read_only=True)
     
     class Meta:
+        ref_name = 'POSOrderSerializer'
         model = POSOrder
         fields = [
             'id', 'order_number', 'outlet', 'outlet_name',

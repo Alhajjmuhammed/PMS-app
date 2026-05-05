@@ -6,9 +6,14 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count
 from django.shortcuts import get_object_or_404
+from django.core.cache import cache
+from django.utils.decorators import method_decorator
+from django.views.decorators.cache import cache_page
+from django_ratelimit.decorators import ratelimit
 from datetime import date, timedelta
 from apps.rooms.models import Room, RoomType, RoomStatusLog, RoomImage, RoomAmenity, RoomTypeAmenity
 from apps.reservations.models import Reservation
+from apps.core.cache_utils import CacheManager
 from api.permissions import IsHousekeepingStaff, IsAdminOrManager, IsFrontDeskOrAbove
 from .serializers import (
     RoomSerializer, RoomTypeSerializer, RoomStatusUpdateSerializer, 
@@ -42,19 +47,29 @@ class RoomListView(generics.ListAPIView):
 class RoomDetailView(generics.RetrieveUpdateDestroyAPIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomSerializer
-    queryset = Room.objects.all()
+    
+    def get_queryset(self):
+        qs = Room.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
+        return qs
 
 
 class RoomCreateView(generics.CreateAPIView):
     """Create a new room."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomSerializer
-    queryset = Room.objects.all()
+    
+    def get_queryset(self):
+        qs = Room.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
+        return qs
     
     def perform_create(self, serializer):
-        # Auto-assign property if user has one
-        if self.request.user.assigned_property and 'hotel' not in serializer.validated_data:
-            serializer.save(hotel=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(hotel=prop)
         else:
             serializer.save()
 
@@ -63,8 +78,12 @@ class UpdateRoomStatusView(APIView):
     permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            room = Room.objects.get(pk=pk)
+            room_qs = Room.objects.all()
+            if prop:
+                room_qs = room_qs.filter(hotel=prop)
+            room = room_qs.get(pk=pk)
         except Room.DoesNotExist:
             return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -110,9 +129,9 @@ class RoomTypeListView(generics.ListCreateAPIView):
         return qs
     
     def perform_create(self, serializer):
-        """Auto-assign property if user has one."""
-        if self.request.user.assigned_property and 'hotel' not in serializer.validated_data:
-            serializer.save(hotel=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            serializer.save(hotel=prop)
         else:
             serializer.save()
 
@@ -129,15 +148,81 @@ class RoomTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
         return qs
 
 
+@method_decorator(ratelimit(key='user', rate='100/m', method='GET', block=False), name='dispatch')
 class AvailabilityView(APIView):
+    """
+    Check room availability for a date range.
+    
+    Returns available rooms by room type for the specified date range.
+    Results are cached for 10 minutes to improve performance.
+    
+    Query Parameters:
+    - check_in (date): Check-in date in ISO format (default: today)
+    - check_out (date): Check-out date in ISO format (default: tomorrow)
+    
+    Returns:
+    - check_in: Check-in date
+    - check_out: Check-out date 
+    - availability: List of room types with availability info
+      - room_type: Room type details
+      - total: Total rooms of this type
+      - occupied: Number of occupied rooms
+      - available: Number of available rooms
+    
+    Example:
+    ```
+    GET /api/v1/rooms/availability/?check_in=2026-04-15&check_out=2026-04-20
+    ```
+    """
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
-        check_in = request.query_params.get('check_in', date.today().isoformat())
-        check_out = request.query_params.get('check_out', (date.today() + timedelta(days=1)).isoformat())
+        # Check if rate limited
+        if getattr(request, 'limited', False):
+            return Response(
+                {'error': 'Rate limit exceeded. Please try again later.'},
+                status=status.HTTP_429_TOO_MANY_REQUESTS
+            )
         
-        check_in = date.fromisoformat(check_in)
-        check_out = date.fromisoformat(check_out)
+        check_in_str = request.query_params.get('check_in')
+        check_out_str = request.query_params.get('check_out')
+        
+        # Set defaults if not provided
+        if not check_in_str:
+            check_in = date.today()
+        else:
+            try:
+                check_in = date.fromisoformat(str(check_in_str))
+            except (ValueError, AttributeError) as e:
+                return Response(
+                    {'error': f'Invalid check_in date format. Use ISO format (YYYY-MM-DD)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        if not check_out_str:
+            check_out = date.today() + timedelta(days=1)
+        else:
+            try:
+                check_out = date.fromisoformat(str(check_out_str))
+            except (ValueError, AttributeError) as e:
+                return Response(
+                    {'error': f'Invalid check_out date format. Use ISO format (YYYY-MM-DD)'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        
+        if check_out <= check_in:
+            return Response(
+                {'error': 'Check-out date must be after check-in date'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        property_id = request.user.assigned_property.id if request.user.assigned_property else 'all'
+        cache_key = f'availability_{property_id}_{check_in}_{check_out}'
+        
+        # Try to get from cache first
+        cached_result = cache.get(cache_key)
+        if cached_result:
+            return Response(cached_result)
         
         # Get all room types
         room_types = RoomType.objects.filter(is_active=True)
@@ -167,11 +252,16 @@ class AvailabilityView(APIView):
                 'available': max(0, total_rooms - occupied)
             })
         
-        return Response({
+        result = {
             'check_in': check_in,
             'check_out': check_out,
             'availability': availability
-        })
+        }
+        
+        # Cache result for 10 minutes
+        cache.set(cache_key, result, 600)
+        
+        return Response(result)
 
 
 class RoomImageListView(generics.ListCreateAPIView):
@@ -185,7 +275,9 @@ class RoomImageListView(generics.ListCreateAPIView):
     
     def perform_create(self, serializer):
         room_id = self.kwargs.get('room_id')
-        room = get_object_or_404(Room, pk=room_id)
+        prop = self.request.user.assigned_property
+        room_qs = Room.objects.filter(hotel=prop) if prop else Room.objects.all()
+        room = get_object_or_404(room_qs, pk=room_id)
         serializer.save(room=room, uploaded_by=self.request.user)
 
 
@@ -193,8 +285,13 @@ class RoomImageDetailView(generics.RetrieveDestroyAPIView):
     """Retrieve or delete a specific room image."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomImageSerializer
-    queryset = RoomImage.objects.all()
     lookup_url_kwarg = 'image_id'
+    
+    def get_queryset(self):
+        qs = RoomImage.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(room__hotel=self.request.user.assigned_property)
+        return qs
 
 
 class AvailableRoomsView(generics.ListAPIView):
@@ -207,6 +304,8 @@ class AvailableRoomsView(generics.ListAPIView):
         check_out = self.request.query_params.get('check_out')
         
         qs = Room.objects.filter(is_active=True, status__in=['CLEAN', 'INSPECTED'])
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
         
         return qs
 
@@ -248,5 +347,10 @@ class RoomTypeAmenityDetailView(generics.DestroyAPIView):
     """Remove an amenity from a room type."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeAmenitySerializer
-    queryset = RoomTypeAmenity.objects.all()
     lookup_url_kwarg = 'amenity_assignment_id'
+    
+    def get_queryset(self):
+        qs = RoomTypeAmenity.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(room_type__hotel=self.request.user.assigned_property)
+        return qs

@@ -146,6 +146,18 @@ class Reservation(models.Model):
         null=True,
         related_name='modified_reservations'
     )
+
+    # Cancellation tracking
+    cancelled_at = models.DateTimeField(_('cancelled at'), null=True, blank=True)
+    cancelled_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='cancelled_reservations'
+    )
+    cancellation_reason = models.TextField(_('cancellation reason'), blank=True)
+
     created_at = models.DateTimeField(_('created at'), auto_now_add=True)
     updated_at = models.DateTimeField(_('updated at'), auto_now=True)
     

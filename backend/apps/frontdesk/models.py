@@ -1,4 +1,4 @@
-"""
+﻿"""
 Front Desk Operations Models for Hotel PMS
 """
 
@@ -150,7 +150,7 @@ class RoomMove(models.Model):
         ordering = ['-move_time']
     
     def __str__(self):
-        return f"{self.check_in.guest}: {self.from_room} → {self.to_room}"
+        return f"{self.check_in.guest}: {self.from_room} -> {self.to_room}"
 
 
 class WalkIn(models.Model):

@@ -7,6 +7,10 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from apps.billing.models import Folio, FolioCharge, Payment, ChargeCode
+from apps.billing.services import (
+    BillingService, InvoiceService, PDFService,
+    BillingServiceError, FolioClosedError, InsufficientBalanceError
+)
 from api.permissions import IsAccountantOrAbove
 from .serializers import (
     FolioSerializer, FolioListSerializer, FolioCreateSerializer,
@@ -25,7 +29,11 @@ class FolioListCreateView(generics.ListCreateAPIView):
     ordering = ['-open_date']
     
     def get_queryset(self):
-        return Folio.objects.select_related('guest', 'reservation', 'company').all()
+        qs = Folio.objects.select_related('guest', 'reservation', 'company')
+        prop = self.request.user.assigned_property
+        if prop:
+            qs = qs.filter(reservation__hotel=prop)
+        return qs
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
@@ -39,18 +47,29 @@ class FolioDetailView(generics.RetrieveUpdateAPIView):
     serializer_class = FolioSerializer
     
     def get_queryset(self):
-        return Folio.objects.select_related('guest', 'reservation', 'company') \
-                           .prefetch_related('charges', 'payments')
+        qs = Folio.objects.select_related('guest', 'reservation', 'company') \
+                          .prefetch_related('charges', 'payments')
+        prop = self.request.user.assigned_property
+        if prop:
+            qs = qs.filter(reservation__hotel=prop)
+        return qs
 
 
 class ChargeCodeListCreateView(generics.ListCreateAPIView):
-    """List all charge codes or create a new one."""
+    """
+    List all charge codes or create a new one.
+    
+    NOTE: Intentionally GLOBAL - ChargeCode is master data (Room Charge, Food,
+    Minibar, Laundry, etc.) shared across all properties. These are standard
+    billing categories used system-wide.
+    """
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     filter_backends = [DjangoFilterBackend, SearchFilter]
     filterset_fields = ['category', 'is_active']
     search_fields = ['code', 'name']
     
     def get_queryset(self):
+        # Intentionally global - master billing codes
         qs = ChargeCode.objects.all()
         
         # Filter active only by default
@@ -67,18 +86,42 @@ class ChargeCodeListCreateView(generics.ListCreateAPIView):
 
 
 class ChargeCodeDetailView(generics.RetrieveUpdateDestroyAPIView):
-    """Retrieve, update or delete a charge code."""
+    """
+    Retrieve, update or delete a charge code.
+    
+    NOTE: Intentionally GLOBAL - ChargeCode is master data shared system-wide.
+    """
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = ChargeCodeCreateSerializer
     queryset = ChargeCode.objects.all()
+
+
+class FolioChargesView(generics.ListAPIView):
+    """List all charges for a specific folio."""
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    
+    def get_serializer_class(self):
+        from .serializers import FolioChargeSerializer
+        return FolioChargeSerializer
+    
+    def get_queryset(self):
+        folio_id = self.kwargs.get('pk')
+        qs = FolioCharge.objects.filter(folio_id=folio_id).select_related('charge_code', 'folio')
+        if self.request.user.assigned_property:
+            qs = qs.filter(folio__reservation__hotel=self.request.user.assigned_property)
+        return qs.order_by('-charge_date')
 
 
 class AddChargeView(APIView):
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            folio = Folio.objects.get(pk=pk)
+            folio_qs = Folio.objects.all()
+            if prop:
+                folio_qs = folio_qs.filter(reservation__hotel=prop)
+            folio = folio_qs.get(pk=pk)
         except Folio.DoesNotExist:
             return Response({'error': 'Folio not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -91,17 +134,18 @@ class AddChargeView(APIView):
         except ChargeCode.DoesNotExist:
             return Response({'error': 'Charge code not found'}, status=status.HTTP_404_NOT_FOUND)
         
-        charge = FolioCharge.objects.create(
-            folio=folio,
-            charge_code=charge_code,
-            description=data.get('description', charge_code.name),
-            quantity=data.get('quantity', 1),
-            unit_price=data['unit_price'],
-            posted_by=request.user
-        )
-        
-        # Recalculate folio totals
-        folio.recalculate_totals()
+        # Use service layer
+        try:
+            BillingService.add_charge_to_folio(
+                folio=folio,
+                charge_code=charge_code,
+                unit_price=data['unit_price'],
+                quantity=data.get('quantity', 1),
+                description=data.get('description'),
+                posted_by=request.user
+            )
+        except FolioClosedError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(FolioSerializer(folio).data)
 
@@ -110,8 +154,12 @@ class AddPaymentView(APIView):
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
+        prop = request.user.assigned_property
         try:
-            folio = Folio.objects.get(pk=pk)
+            folio_qs = Folio.objects.all()
+            if prop:
+                folio_qs = folio_qs.filter(reservation__hotel=prop)
+            folio = folio_qs.get(pk=pk)
         except Folio.DoesNotExist:
             return Response({'error': 'Folio not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -119,17 +167,18 @@ class AddPaymentView(APIView):
         serializer.is_valid(raise_exception=True)
         data = serializer.validated_data
         
-        payment = Payment.objects.create(
-            folio=folio,
-            payment_method=data['payment_method'],
-            amount=data['amount'],
-            reference_number=data.get('reference_number', ''),
-            card_last_four=data.get('card_last_four', ''),
-            received_by=request.user
-        )
-        
-        # Recalculate folio totals
-        folio.recalculate_totals()
+        # Use service layer
+        try:
+            BillingService.add_payment_to_folio(
+                folio=folio,
+                amount=data['amount'],
+                payment_method=data['payment_method'],
+                reference_number=data.get('reference_number', ''),
+                card_last_four=data.get('card_last_four', ''),
+                received_by=request.user
+            )
+        except (FolioClosedError, ValueError) as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(FolioSerializer(folio).data)
 
@@ -139,22 +188,15 @@ class CloseFolioView(APIView):
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
-        from django.utils import timezone
+        prop = request.user.assigned_property
+        folio_qs = Folio.objects.filter(reservation__hotel=prop) if prop else Folio.objects.all()
+        folio = get_object_or_404(folio_qs, pk=pk)
         
-        folio = get_object_or_404(Folio, pk=pk)
-        
-        # Check if folio balance is zero
-        if folio.balance > 0:
-            return Response(
-                {'error': 'Cannot close folio with outstanding balance'},
-                status=status.HTTP_400_BAD_REQUEST
-            )
-        
-        # Close the folio
-        folio.status = 'CLOSED'
-        folio.closed_at = timezone.now()
-        folio.closed_by = request.user
-        folio.save()
+        # Use service layer
+        try:
+            BillingService.close_folio(folio, closed_by=request.user)
+        except (InsufficientBalanceError, FolioClosedError) as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         return Response(FolioSerializer(folio).data)
 
@@ -165,19 +207,22 @@ class FolioExportView(APIView):
     
     def get(self, request, pk):
         from django.http import HttpResponse
-        from io import BytesIO
+        import json
         
-        folio = get_object_or_404(Folio.objects.select_related(
+        prop = request.user.assigned_property
+        folio_qs = Folio.objects.select_related(
             'reservation__guest',
             'reservation__hotel'
         ).prefetch_related(
             'charges__charge_code',
             'payments'
-        ), pk=pk)
+        )
+        if prop:
+            folio_qs = folio_qs.filter(reservation__hotel=prop)
+        folio = get_object_or_404(folio_qs, pk=pk)
         
-        # Generate PDF
+        # Generate PDF using service layer
         try:
-            from reportlab.lib import colors
             from reportlab.lib.pagesizes import letter, A4
             from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
@@ -202,12 +247,21 @@ class FolioExportView(APIView):
             elements.append(Spacer(1, 0.3*inch))
             
             # Guest Info
-            guest_data = [
-                ['Guest:', f"{folio.reservation.guest.first_name} {folio.reservation.guest.last_name}"],
-                ['Email:', folio.reservation.guest.email or 'N/A'],
-                ['Check-in:', folio.reservation.check_in_date.strftime('%Y-%m-%d')],
-                ['Check-out:', folio.reservation.check_out_date.strftime('%Y-%m-%d')],
-            ]
+            reservation = folio.reservation
+            if reservation and reservation.guest:
+                guest_data = [
+                    ['Guest:', f"{reservation.guest.first_name} {reservation.guest.last_name}"],
+                    ['Email:', reservation.guest.email or 'N/A'],
+                    ['Check-in:', reservation.check_in_date.strftime('%Y-%m-%d')],
+                    ['Check-out:', reservation.check_out_date.strftime('%Y-%m-%d')],
+                ]
+            else:
+                g = folio.guest
+                guest_data = [
+                    ['Guest:', f"{g.first_name} {g.last_name}"],
+                    ['Email:', g.email or 'N/A'],
+                    ['Folio:', folio.folio_number],
+                ]
             guest_table = Table(guest_data, colWidths=[1.5*inch, 4*inch])
             guest_table.setStyle(TableStyle([
                 ('ALIGN', (0, 0), (-1, -1), 'LEFT'),
@@ -222,7 +276,7 @@ class FolioExportView(APIView):
             charge_data = [['Date', 'Description', 'Quantity', 'Amount']]
             for charge in folio.charges.all():
                 charge_data.append([
-                    charge.date.strftime('%Y-%m-%d'),
+                    charge.charge_date.strftime('%Y-%m-%d'),
                     charge.description,
                     str(charge.quantity),
                     f"${charge.amount:.2f}"
@@ -245,9 +299,9 @@ class FolioExportView(APIView):
             # Totals
             totals_data = [
                 ['Subtotal:', f"${folio.total_charges:.2f}"],
-                ['Taxes:', f"${folio.total_tax:.2f}"],
-                ['Total:', f"${folio.total_amount:.2f}"],
-                ['Paid:', f"${folio.paid_amount:.2f}"],
+                ['Taxes:', f"${folio.total_taxes:.2f}"],
+                ['Total:', f"${folio.total_charges + folio.total_taxes:.2f}"],
+                ['Paid:', f"${folio.total_payments:.2f}"],
                 ['Balance:', f"${folio.balance:.2f}"]
             ]
             totals_table = Table(totals_data, colWidths=[4.5*inch, 1.5*inch])
@@ -296,9 +350,12 @@ class InvoiceDetailView(generics.RetrieveAPIView):
     def get(self, request, pk):
         from apps.billing.models import Invoice
         from .serializers import InvoiceSerializer
-        
+        prop = request.user.assigned_property
+        invoice_qs = Invoice.objects.all()
+        if prop:
+            invoice_qs = invoice_qs.filter(folio__reservation__hotel=prop)
         try:
-            invoice = Invoice.objects.get(pk=pk)
+            invoice = invoice_qs.get(pk=pk)
         except Invoice.DoesNotExist:
             return Response({'error': 'Invoice not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -311,9 +368,13 @@ class InvoicePayView(APIView):
     
     def post(self, request, pk):
         from apps.billing.models import Invoice
-        
+        from decimal import Decimal
+        prop = request.user.assigned_property
+        invoice_qs = Invoice.objects.all()
+        if prop:
+            invoice_qs = invoice_qs.filter(folio__reservation__hotel=prop)
         try:
-            invoice = Invoice.objects.get(pk=pk)
+            invoice = invoice_qs.get(pk=pk)
         except Invoice.DoesNotExist:
             return Response({'error': 'Invoice not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -323,23 +384,17 @@ class InvoicePayView(APIView):
         if not amount:
             return Response({'error': 'Amount is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Create payment record
-        payment = Payment.objects.create(
-            folio=invoice.folio if hasattr(invoice, 'folio') else None,
-            payment_method=payment_method,
-            amount=amount,
-            reference_number=request.data.get('reference_number', ''),
-            processed_by=request.user,
-            status='COMPLETED'
-        )
-        
-        # Update invoice
-        invoice.paid_amount = (invoice.paid_amount or 0) + float(amount)
-        if invoice.paid_amount >= invoice.total_amount:
-            invoice.status = 'PAID'
-        else:
-            invoice.status = 'PARTIAL'
-        invoice.save()
+        # Use service layer
+        try:
+            payment, invoice = InvoiceService.process_invoice_payment(
+                invoice=invoice,
+                amount=Decimal(str(amount)),
+                payment_method=payment_method,
+                reference_number=request.data.get('reference_number', ''),
+                received_by=request.user
+            )
+        except ValueError as e:
+            return Response({'error': str(e)}, status=status.HTTP_400_BAD_REQUEST)
         
         from .serializers import InvoiceSerializer
         return Response(InvoiceSerializer(invoice).data)
@@ -348,7 +403,12 @@ class InvoicePayView(APIView):
 class PaymentDetailView(generics.RetrieveAPIView):
     """Get payment detail."""
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
-    queryset = Payment.objects.all()
+    
+    def get_queryset(self):
+        qs = Payment.objects.all()
+        if self.request.user.assigned_property:
+            qs = qs.filter(folio__reservation__hotel=self.request.user.assigned_property)
+        return qs
     
     def get_serializer_class(self):
         from .serializers import PaymentSerializer
@@ -356,9 +416,12 @@ class PaymentDetailView(generics.RetrieveAPIView):
     
     def get(self, request, pk):
         from .serializers import PaymentSerializer
-        
+        prop = request.user.assigned_property
+        payment_qs = Payment.objects.all()
+        if prop:
+            payment_qs = payment_qs.filter(folio__reservation__hotel=prop)
         try:
-            payment = Payment.objects.get(pk=pk)
+            payment = payment_qs.get(pk=pk)
         except Payment.DoesNotExist:
             return Response({'error': 'Payment not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -378,6 +441,8 @@ class InvoiceListView(generics.ListCreateAPIView):
         from .serializers import InvoiceSerializer
         
         invoices = Invoice.objects.all().order_by('-created_at')
+        if request.user.assigned_property:
+            invoices = invoices.filter(folio__reservation__hotel=request.user.assigned_property)
         
         # Apply filters
         status_filter = request.query_params.get('status')
@@ -399,7 +464,7 @@ class InvoiceListView(generics.ListCreateAPIView):
 
 class PaymentListView(generics.ListAPIView):
     """List all payments."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def get_serializer_class(self):
         from .serializers import PaymentSerializer
@@ -410,7 +475,11 @@ class PaymentListView(generics.ListAPIView):
         
         payments = Payment.objects.all().order_by('-payment_date')
         
-        # Apply filters
+        # Filter by assigned property for multi-tenancy
+        if request.user.assigned_property:
+            payments = payments.filter(folio__reservation__hotel=request.user.assigned_property)
+        
+        # Apply additional filters
         folio_id = request.query_params.get('folio')
         if folio_id:
             payments = payments.filter(folio_id=folio_id)
@@ -432,4 +501,7 @@ class FolioChargeListView(generics.ListAPIView):
         return FolioChargeSerializer
     
     def get_queryset(self):
-        return FolioCharge.objects.select_related('folio', 'charge_code').all()
+        qs = FolioCharge.objects.select_related('folio', 'charge_code')
+        if self.request.user.assigned_property:
+            qs = qs.filter(folio__reservation__hotel=self.request.user.assigned_property)
+        return qs

@@ -6,6 +6,7 @@ class RoomAmenitySerializer(serializers.ModelSerializer):
     """Full serializer for RoomAmenity CRUD operations."""
     
     class Meta:
+        ref_name = 'RoomAmenitySerializer'
         model = RoomAmenity
         fields = ['id', 'name', 'code', 'category', 'description', 'icon']
         read_only_fields = ['id']
@@ -51,6 +52,7 @@ class RoomTypeAmenitySerializer(serializers.ModelSerializer):
     amenity_category = serializers.CharField(source='amenity.category', read_only=True)
     
     class Meta:
+        ref_name = 'RoomTypeAmenitySerializer'
         model = RoomTypeAmenity
         fields = ['id', 'room_type', 'amenity', 'amenity_name', 'amenity_category']
         read_only_fields = ['id']
@@ -83,6 +85,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     )
     
     class Meta:
+        ref_name = 'RoomTypeSerializer'
         model = RoomType
         fields = [
             'id', 'name', 'code', 'description', 'base_rate',
@@ -183,6 +186,7 @@ class RoomImageSerializer(serializers.ModelSerializer):
     uploaded_by_name = serializers.CharField(source='uploaded_by.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'RoomImageSerializer'
         model = RoomImage
         fields = ['id', 'image', 'caption', 'is_primary', 'sort_order', 'uploaded_at', 'uploaded_by', 'uploaded_by_name']
         read_only_fields = ['uploaded_at', 'uploaded_by', 'uploaded_by_name']

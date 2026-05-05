@@ -43,6 +43,16 @@ class Folio(models.Model):
     # Billing
     billing_address = models.TextField(_('billing address'), blank=True)
     
+    # Closure tracking
+    closed_at = models.DateTimeField(_('closed at'), null=True, blank=True)
+    closed_by = models.ForeignKey(
+        'accounts.User',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='closed_folios'
+    )
+
     notes = models.TextField(_('notes'), blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

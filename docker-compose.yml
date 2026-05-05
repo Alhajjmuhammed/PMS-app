@@ -84,7 +84,6 @@ services:
       - ./backend/staticfiles:/app/staticfiles:ro
       - ./backend/media:/app/media:ro
       - ./nginx/ssl:/etc/nginx/ssl:ro
-      - ./web/out:/usr/share/nginx/html:ro
     depends_on:
       - backend
     networks:
@@ -112,6 +111,55 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+
+  # Celery Worker
+  celery_worker:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pms_celery_worker
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+    volumes:
+      - ./backend/media:/app/media
+      - ./backend/logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pms_network
+    command: celery -A config.celery worker --loglevel=info --concurrency=4
+
+  # Celery Beat (scheduler)
+  celery_beat:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: pms_celery_beat
+    restart: unless-stopped
+    env_file:
+      - ./backend/.env
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DJANGO_SETTINGS_MODULE=config.settings.production
+    volumes:
+      - ./backend/logs:/app/logs
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - pms_network
+    command: celery -A config.celery beat --loglevel=info --scheduler django_celery_beat.schedulers:DatabaseScheduler
 
 volumes:
   postgres_data:

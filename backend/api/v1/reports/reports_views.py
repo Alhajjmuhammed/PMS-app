@@ -13,6 +13,7 @@ from datetime import date, timedelta
 from apps.reports.models import (
     DailyStatistics, MonthlyStatistics, ReportTemplate, NightAudit, AuditLog
 )
+from apps.reservations.models import Reservation
 from .reports_serializers import (
     DailyStatisticsSerializer,
     MonthlyStatisticsSerializer,
@@ -154,17 +155,146 @@ class GenerateReportView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         data = serializer.validated_data
-        
-        # In real implementation, this would generate actual report data
-        # based on report type and parameters
+        report_type = data['report_type']
+        start_date = data['start_date']
+        end_date = data['end_date']
+        prop = request.user.assigned_property
+
         report_data = {
-            'report_type': data['report_type'],
-            'start_date': data['start_date'],
-            'end_date': data['end_date'],
+            'report_type': report_type,
+            'start_date': start_date,
+            'end_date': end_date,
             'generated_at': date.today(),
-            'message': 'Report generated successfully'
         }
-        
+
+        if report_type in ('DAILY', 'OCCUPANCY', 'REVENUE'):
+            stats = DailyStatistics.objects.filter(
+                property=prop,
+                date__range=[start_date, end_date]
+            ).order_by('date')
+            report_data['data'] = DailyStatisticsSerializer(stats, many=True).data
+            report_data['summary'] = stats.aggregate(
+                total_revenue=Sum('total_revenue'),
+                total_room_revenue=Sum('room_revenue'),
+                avg_occupancy=Avg('occupancy_percent'),
+                avg_adr=Avg('adr'),
+            )
+
+        elif report_type == 'ARRIVAL':
+            reservations = Reservation.objects.filter(
+                hotel=prop,
+                check_in_date__range=[start_date, end_date]
+            ).select_related('guest').order_by('check_in_date')
+            report_data['data'] = [
+                {
+                    'confirmation_number': r.confirmation_number,
+                    'guest': f"{r.guest.first_name} {r.guest.last_name}",
+                    'check_in_date': r.check_in_date,
+                    'check_out_date': r.check_out_date,
+                    'status': r.status,
+                    'adults': r.adults,
+                }
+                for r in reservations
+            ]
+            report_data['summary'] = {'total_arrivals': reservations.count()}
+
+        elif report_type == 'DEPARTURE':
+            reservations = Reservation.objects.filter(
+                hotel=prop,
+                check_out_date__range=[start_date, end_date]
+            ).select_related('guest').order_by('check_out_date')
+            report_data['data'] = [
+                {
+                    'confirmation_number': r.confirmation_number,
+                    'guest': f"{r.guest.first_name} {r.guest.last_name}",
+                    'check_in_date': r.check_in_date,
+                    'check_out_date': r.check_out_date,
+                    'status': r.status,
+                }
+                for r in reservations
+            ]
+            report_data['summary'] = {'total_departures': reservations.count()}
+
+        elif report_type == 'IN_HOUSE':
+            reservations = Reservation.objects.filter(
+                hotel=prop,
+                status=Reservation.Status.CHECKED_IN,
+                check_in_date__lte=end_date,
+                check_out_date__gte=start_date,
+            ).select_related('guest').order_by('check_in_date')
+            report_data['data'] = [
+                {
+                    'confirmation_number': r.confirmation_number,
+                    'guest': f"{r.guest.first_name} {r.guest.last_name}",
+                    'check_in_date': r.check_in_date,
+                    'check_out_date': r.check_out_date,
+                    'nights': r.number_of_nights,
+                }
+                for r in reservations
+            ]
+            report_data['summary'] = {'total_in_house': reservations.count()}
+
+        elif report_type in ('RESERVATION', 'FORECAST'):
+            reservations = Reservation.objects.filter(
+                hotel=prop,
+                check_in_date__range=[start_date, end_date]
+            ).select_related('guest').order_by('check_in_date')
+            report_data['data'] = [
+                {
+                    'confirmation_number': r.confirmation_number,
+                    'guest': f"{r.guest.first_name} {r.guest.last_name}",
+                    'check_in_date': r.check_in_date,
+                    'check_out_date': r.check_out_date,
+                    'status': r.status,
+                    'source': r.source,
+                    'total_amount': str(r.total_amount),
+                }
+                for r in reservations
+            ]
+            report_data['summary'] = {
+                'total_reservations': reservations.count(),
+                'total_revenue': reservations.aggregate(
+                    total=Sum('total_amount')
+                )['total'],
+            }
+
+        elif report_type == 'PRODUCTION':
+            reservations = Reservation.objects.filter(
+                hotel=prop,
+                check_in_date__range=[start_date, end_date]
+            )
+            report_data['data'] = list(
+                reservations.values('source').annotate(
+                    count=Count('id'),
+                    revenue=Sum('total_amount')
+                ).order_by('-revenue')
+            )
+            report_data['summary'] = {
+                'total_reservations': reservations.count(),
+                'total_revenue': reservations.aggregate(
+                    total=Sum('total_amount')
+                )['total'],
+            }
+
+        elif report_type == 'AUDIT':
+            audits = NightAudit.objects.filter(
+                property=prop,
+                business_date__range=[start_date, end_date]
+            ).order_by('business_date')
+            report_data['data'] = NightAuditSerializer(audits, many=True).data
+            report_data['summary'] = audits.aggregate(
+                total_revenue=Sum('total_revenue'),
+                total_payments=Sum('payments_collected'),
+            )
+
+        else:
+            # HOUSEKEEPING, CUSTOM
+            stats = DailyStatistics.objects.filter(
+                property=prop,
+                date__range=[start_date, end_date]
+            ).order_by('date')
+            report_data['data'] = DailyStatisticsSerializer(stats, many=True).data
+
         return Response(report_data)
 
 

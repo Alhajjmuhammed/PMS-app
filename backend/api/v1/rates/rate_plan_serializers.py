@@ -13,15 +13,31 @@ class RatePlanSerializer(serializers.ModelSerializer):
     room_rates_count = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'RatePlanSerializerExtended'
         model = RatePlan
         fields = [
-            'id', 'property', 'property_name', 'name', 'code', 'description',
-            'is_default', 'is_active', 'valid_from', 'valid_to',
-            'min_nights', 'max_nights', 'min_advance_booking',
-            'max_advance_booking', 'cancellation_policy', 'meal_plan',
-            'rate_type', 'requires_approval', 'priority', 'room_rates_count',
-            'created_at', 'updated_at'
+            'id',
+            'property',
+            'name',
+            'code',
+            'description',
+            'rate_type',
+            'is_active',
+            'is_refundable',
+            'valid_from',
+            'valid_to',
+            'min_nights',
+            'max_nights',
+            'min_advance_booking',
+            'max_advance_booking',
+            'cancellation_policy',
+            'cancellation_hours',
+            'created_at',
+            'updated_at',
+            'property_name', 'room_rates_count'
+        
         ]
+        
         read_only_fields = ['id', 'created_at', 'updated_at']
     
     def get_room_rates_count(self, obj):
@@ -49,17 +65,33 @@ class RoomRateSerializer(serializers.ModelSerializer):
     
     rate_plan_name = serializers.CharField(source='rate_plan.name', read_only=True)
     room_type_name = serializers.CharField(source='room_type.name', read_only=True)
-    property_name = serializers.CharField(source='property.name', read_only=True)
+    season_name = serializers.CharField(source='season.name', read_only=True, allow_null=True)
     
     class Meta:
+        ref_name = 'RoomRateSerializerExtended'
         model = RoomRate
         fields = [
-            'id', 'property', 'property_name', 'rate_plan', 'rate_plan_name',
-            'room_type', 'room_type_name', 'base_rate', 'extra_adult_rate',
-            'extra_child_rate', 'weekend_rate', 'currency', 'is_active',
-            'effective_from', 'effective_to', 'notes', 'created_at', 'updated_at'
+            'id',
+            'rate_plan',
+            'room_type',
+            'season',
+            'single_rate',
+            'double_rate',
+            'extra_adult',
+            'extra_child',
+            'sunday_rate',
+            'monday_rate',
+            'tuesday_rate',
+            'wednesday_rate',
+            'thursday_rate',
+            'friday_rate',
+            'saturday_rate',
+            'is_active',
+            'rate_plan_name', 'room_type_name', 'season_name'
+        
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+        read_only_fields = ['id']
     
     def validate(self, data):
         """Validate room rate."""
@@ -80,16 +112,23 @@ class DateRateSerializer(serializers.ModelSerializer):
     """Serializer for date-specific rate overrides."""
     
     room_type_name = serializers.CharField(source='room_type.name', read_only=True)
-    property_name = serializers.CharField(source='property.name', read_only=True)
+    rate_plan_name = serializers.CharField(source='rate_plan.name', read_only=True, allow_null=True)
     
     class Meta:
+        ref_name = 'DateRateSerializerExtended'
         model = DateRate
         fields = [
-            'id', 'property', 'property_name', 'room_type', 'room_type_name',
-            'date', 'rate', 'min_nights', 'is_closed', 'notes',
-            'created_at', 'updated_at'
+            'id',
+            'room_type',
+            'rate_plan',
+            'date',
+            'rate',
+            'min_stay',
+            'is_closed',
+            'room_type_name', 'rate_plan_name'
+        
+    
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
     
     def validate(self, data):
         """Validate date rate."""
@@ -103,18 +142,26 @@ class DateRateSerializer(serializers.ModelSerializer):
 class YieldRuleSerializer(serializers.ModelSerializer):
     """Serializer for yield management rules."""
     
-    room_type_name = serializers.CharField(source='room_type.name', read_only=True)
     property_name = serializers.CharField(source='property.name', read_only=True)
     
     class Meta:
+        ref_name = 'YieldRuleSerializerExtended'
         model = YieldRule
         fields = [
-            'id', 'property', 'property_name', 'name', 'room_type', 'room_type_name',
-            'min_occupancy_percent', 'max_occupancy_percent', 'adjustment_type',
-            'adjustment_value', 'priority', 'is_active', 'valid_from', 'valid_to',
-            'days_of_week', 'notes', 'created_at', 'updated_at'
+            'id',
+            'property',
+            'name',
+            'trigger_type',
+            'min_threshold',
+            'max_threshold',
+            'adjustment_percent',
+            'priority',
+            'is_active',
+            'property_name'
+        
         ]
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        
+        read_only_fields = ['id']
     
     def validate(self, data):
         """Validate yield rule."""

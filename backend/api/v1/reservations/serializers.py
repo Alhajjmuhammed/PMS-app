@@ -8,6 +8,7 @@ from apps.guests.models import Guest
 
 class GuestSerializer(serializers.ModelSerializer):
     class Meta:
+        ref_name = 'GuestSerializerEmbedded'
         model = Guest
         fields = [
             'id', 'first_name', 'last_name', 'email', 'phone',
@@ -16,12 +17,26 @@ class GuestSerializer(serializers.ModelSerializer):
 
 
 class ReservationRoomSerializer(serializers.ModelSerializer):
-    room_number = serializers.CharField(source='room.room_number', read_only=True)
-    room_type_name = serializers.CharField(source='room_type.name', read_only=True)
+    room_number = serializers.SerializerMethodField()
+    room_type_name = serializers.SerializerMethodField()
     
     class Meta:
         model = ReservationRoom
         fields = ['id', 'room', 'room_number', 'room_type', 'room_type_name', 'rate_per_night', 'total_rate', 'adults', 'children', 'guest_name']
+    
+    def get_room_number(self, obj):
+        """Get room number, handling None values"""
+        try:
+            return obj.room.room_number if obj.room else None
+        except AttributeError:
+            return None
+    
+    def get_room_type_name(self, obj):
+        """Get room type name, handling None values"""
+        try:
+            return obj.room_type.name if obj.room_type else None
+        except AttributeError:
+            return None
 
 
 class ReservationSerializer(serializers.ModelSerializer):
@@ -51,8 +66,8 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Reservation
         fields = [
-            'property', 'check_in_date', 'check_out_date',
-            'adults', 'children', 'room_rate', 'special_requests',
+            'hotel', 'check_in_date', 'check_out_date',
+            'adults', 'children', 'special_requests',
             'guest_id', 'guest_first_name', 'guest_last_name',
             'guest_email', 'guest_phone', 'room_type_id'
         ]

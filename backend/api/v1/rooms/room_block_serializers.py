@@ -15,11 +15,18 @@ class RoomBlockSerializer(serializers.ModelSerializer):
     class Meta:
         model = RoomBlock
         fields = [
-            'id', 'room', 'room_number', 'room_type_name',
-            'reason', 'reason_display', 'start_date', 'end_date',
-            'duration_days', 'is_active', 'notes',
-            'created_by', 'created_by_name', 'created_at'
+            'id',
+            'room',
+            'reason',
+            'start_date',
+            'end_date',
+            'notes',
+            'created_by',
+            'created_at',
+            'room_number', 'room_type_name', 'created_by_name', 'reason_display', 'duration_days', 'is_active'
+        
         ]
+        
         read_only_fields = ['id', 'created_by', 'created_at']
     
     def get_created_by_name(self, obj):

@@ -17,15 +17,32 @@ class CheckInSerializer(serializers.ModelSerializer):
     checked_in_by_name = serializers.CharField(source='checked_in_by.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'CheckInSerializerExtended'
         model = CheckIn
         fields = [
-            'id', 'reservation', 'reservation_number', 'room', 'room_number',
-            'guest', 'guest_name', 'check_in_time', 'expected_check_out',
-            'id_type', 'id_number', 'id_expiry', 'registration_number',
-            'registration_card', 'signature', 'key_card_number', 'keys_issued',
-            'deposit_amount', 'deposit_method', 'notes', 'checked_in_by',
-            'checked_in_by_name', 'created_at'
+            'id',
+            'reservation',
+            'room',
+            'guest',
+            'check_in_time',
+            'expected_check_out',
+            'id_type',
+            'id_number',
+            'id_expiry',
+            'registration_number',
+            'registration_card',
+            'signature',
+            'key_card_number',
+            'keys_issued',
+            'deposit_amount',
+            'deposit_method',
+            'notes',
+            'checked_in_by',
+            'created_at',
+            'guest_name', 'room_number', 'reservation_number', 'checked_in_by_name'
+        
         ]
+        
         read_only_fields = ['id', 'registration_number', 'checked_in_by', 'created_at']
     
     def validate(self, data):
@@ -58,11 +75,21 @@ class CheckOutSerializer(serializers.ModelSerializer):
         model = CheckOut
         ref_name = 'CheckOutDetail'
         fields = [
-            'id', 'check_in', 'guest_name', 'room_number', 'check_in_time',
-            'check_out_time', 'nights_stayed', 'keys_returned',
-            'total_charges', 'total_payments', 'balance',
-            'is_express', 'rating', 'feedback', 'notes'
+            'id',
+            'check_in',
+            'check_out_time',
+            'keys_returned',
+            'total_charges',
+            'total_payments',
+            'balance',
+            'is_express',
+            'rating',
+            'feedback',
+            'notes',
+            'guest_name', 'room_number', 'check_in_time', 'nights_stayed'
+        
         ]
+        
         read_only_fields = ['id', 'check_out_time']
     
     def get_nights_stayed(self, obj):
@@ -97,12 +124,21 @@ class RoomMoveSerializer(serializers.ModelSerializer):
     moved_by_name = serializers.CharField(source='moved_by.get_full_name', read_only=True)
     
     class Meta:
+        ref_name = 'RoomMoveSerializerExtended'
         model = RoomMove
         fields = [
-            'id', 'check_in', 'guest_name', 'from_room', 'from_room_number',
-            'to_room', 'to_room_number', 'move_time', 'reason', 'notes',
-            'moved_by', 'moved_by_name'
+            'id',
+            'check_in',
+            'from_room',
+            'to_room',
+            'move_time',
+            'reason',
+            'notes',
+            'moved_by',
+            'guest_name', 'from_room_number', 'to_room_number', 'moved_by_name'
+        
         ]
+        
         read_only_fields = ['id', 'moved_by', 'move_time']
     
     def validate(self, data):
@@ -131,13 +167,30 @@ class WalkInSerializer(serializers.ModelSerializer):
     full_name = serializers.SerializerMethodField()
     
     class Meta:
+        ref_name = 'WalkInSerializerExtended'
         model = WalkIn
         fields = [
-            'id', 'property', 'first_name', 'last_name', 'full_name', 'email', 'phone',
-            'room_type', 'room_type_name', 'check_in_date', 'check_out_date',
-            'adults', 'children', 'rate_per_night', 'is_converted', 'reservation',
-            'notes', 'created_by', 'created_by_name', 'created_at'
+            'id',
+            'property',
+            'first_name',
+            'last_name',
+            'email',
+            'phone',
+            'room_type',
+            'check_in_date',
+            'check_out_date',
+            'adults',
+            'children',
+            'rate_per_night',
+            'is_converted',
+            'reservation',
+            'notes',
+            'created_by',
+            'created_at',
+            'room_type_name', 'created_by_name', 'full_name'
+        
         ]
+        
         read_only_fields = ['id', 'created_by', 'created_at', 'is_converted']
     
     def get_full_name(self, obj):

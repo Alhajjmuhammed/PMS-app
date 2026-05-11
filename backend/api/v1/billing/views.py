@@ -56,6 +56,14 @@ class FolioListCreateView(generics.ListCreateAPIView):
                 raise ValidationError({'reservation': 'Reservation does not belong to your property.'})
         serializer.save()
 
+    def create(self, request, *args, **kwargs):
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+        self.perform_create(serializer)
+        # Return full folio data (including id and folio_number) after creation
+        full = FolioSerializer(serializer.instance, context={'request': request})
+        return Response(full.data, status=status.HTTP_201_CREATED)
+
 
 class FolioDetailView(generics.RetrieveUpdateAPIView):
     """Retrieve or update a folio."""
@@ -126,8 +134,12 @@ class FolioChargesView(generics.ListAPIView):
     def get_queryset(self):
         folio_id = self.kwargs.get('pk')
         qs = FolioCharge.objects.filter(folio_id=folio_id).select_related('charge_code', 'folio')
-        if self.request.user.assigned_property:
-            qs = qs.filter(folio__reservation__hotel=self.request.user.assigned_property)
+        prop = self.request.user.assigned_property
+        if prop:
+            qs = qs.filter(
+                Q(folio__reservation__hotel=prop) |
+                Q(folio__reservation__isnull=True, folio__guest__home_property=prop)
+            )
         return qs.order_by('-charge_date')
 
 
@@ -139,7 +151,10 @@ class AddChargeView(APIView):
         try:
             folio_qs = Folio.objects.all()
             if prop:
-                folio_qs = folio_qs.filter(reservation__hotel=prop)
+                folio_qs = folio_qs.filter(
+                    Q(reservation__hotel=prop) |
+                    Q(reservation__isnull=True, guest__home_property=prop)
+                )
             folio = folio_qs.get(pk=pk)
         except Folio.DoesNotExist:
             return Response({'error': 'Folio not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -177,7 +192,10 @@ class AddPaymentView(APIView):
         try:
             folio_qs = Folio.objects.all()
             if prop:
-                folio_qs = folio_qs.filter(reservation__hotel=prop)
+                folio_qs = folio_qs.filter(
+                    Q(reservation__hotel=prop) |
+                    Q(reservation__isnull=True, guest__home_property=prop)
+                )
             folio = folio_qs.get(pk=pk)
         except Folio.DoesNotExist:
             return Response({'error': 'Folio not found'}, status=status.HTTP_404_NOT_FOUND)
@@ -208,7 +226,13 @@ class CloseFolioView(APIView):
     
     def post(self, request, pk):
         prop = request.user.assigned_property
-        folio_qs = Folio.objects.filter(reservation__hotel=prop) if prop else Folio.objects.all()
+        if prop:
+            folio_qs = Folio.objects.filter(
+                Q(reservation__hotel=prop) |
+                Q(reservation__isnull=True, guest__home_property=prop)
+            )
+        else:
+            folio_qs = Folio.objects.all()
         folio = get_object_or_404(folio_qs, pk=pk)
         
         # Use service layer
@@ -237,7 +261,10 @@ class FolioExportView(APIView):
             'payments'
         )
         if prop:
-            folio_qs = folio_qs.filter(reservation__hotel=prop)
+            folio_qs = folio_qs.filter(
+                Q(reservation__hotel=prop) |
+                Q(reservation__isnull=True, guest__home_property=prop)
+            )
         folio = get_object_or_404(folio_qs, pk=pk)
         
         # Generate PDF using service layer

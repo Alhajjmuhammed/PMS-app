@@ -84,6 +84,19 @@ class IsPOSStaff(BasePermission):
         return request.user.is_superuser or request.user.role in allowed_roles
 
 
+class IsAccountantOrPOS(BasePermission):
+    """
+    Permission class for Accountants and POS staff.
+    Used for: Cashier shifts — both POS staff (open/close drawer) and
+    Accountants (reconciliation) need access.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        allowed_roles = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'POS_STAFF']
+        return request.user.is_superuser or request.user.role in allowed_roles
+
+
 class IsGuest(BasePermission):
     """
     Permission class for Guest users.
@@ -144,3 +157,31 @@ class CanManageProperties(BasePermission):
         # Superusers, Admins, Managers can do everything
         allowed_roles = ['ADMIN', 'MANAGER']
         return request.user.is_superuser or request.user.role in allowed_roles
+
+
+class IsFrontDeskOrHousekeeping(BasePermission):
+    """
+    Permission class for rooms listing.
+    ADMIN, MANAGER, FRONT_DESK can do all operations.
+    HOUSEKEEPING can read (list/retrieve) rooms.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        allowed_roles = ['ADMIN', 'MANAGER', 'FRONT_DESK', 'HOUSEKEEPING']
+        return request.user.is_superuser or request.user.role in allowed_roles
+
+
+class CanViewBilling(BasePermission):
+    """
+    ADMIN, MANAGER, ACCOUNTANT: full access.
+    FRONT_DESK: read-only (GET/HEAD/OPTIONS).
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        if request.user.is_superuser or request.user.role in ('ADMIN', 'MANAGER', 'ACCOUNTANT'):
+            return True
+        if request.user.role == 'FRONT_DESK':
+            return request.method in ('GET', 'HEAD', 'OPTIONS')
+        return False

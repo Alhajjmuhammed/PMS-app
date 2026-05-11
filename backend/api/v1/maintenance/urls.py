@@ -15,9 +15,12 @@ urlpatterns = [
     path('requests/my-tasks/', maintenance_views.MyMaintenanceTasksView.as_view(), name='my_tasks'),
     path('requests/emergency/', maintenance_views.EmergencyMaintenanceView.as_view(), name='emergency_requests'),
     path('requests/<int:pk>/assign/', maintenance_views.AssignMaintenanceView.as_view(), name='assign_request'),
+    path('requests/<int:pk>/claim/', maintenance_views.ClaimMaintenanceView.as_view(), name='claim_request'),
     path('requests/bulk-assign/', maintenance_views.BulkAssignMaintenanceView.as_view(), name='bulk_assign'),
     path('requests/<int:pk>/start/', maintenance_views.StartMaintenanceView.as_view(), name='start_request'),
     path('requests/<int:pk>/complete/', maintenance_views.CompleteMaintenanceView.as_view(), name='complete_request'),
+    path('requests/<int:pk>/on-hold/', maintenance_views.OnHoldMaintenanceView.as_view(), name='on_hold_request'),
+    path('requests/<int:pk>/resume/', maintenance_views.ResumeMaintenanceView.as_view(), name='resume_request'),
     
     # ===== Assets =====
     path('assets/', maintenance_views.AssetListCreateView.as_view(), name='asset_list'),

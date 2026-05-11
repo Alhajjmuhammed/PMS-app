@@ -38,7 +38,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         
         ]
         
-        read_only_fields = ['id', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'hotel', 'created_at', 'updated_at']
     
     def get_total_rooms(self, obj):
         return obj.rooms.count() if hasattr(obj, 'rooms') else 0
@@ -46,18 +46,28 @@ class RoomTypeSerializer(serializers.ModelSerializer):
     def get_amenities_count(self, obj):
         return obj.amenities.count() if hasattr(obj, 'amenities') else 0
     
+    def validate_code(self, value):
+        """Validate room type code uniqueness within the same hotel."""
+        if not value or len(value.strip()) < 2:
+            raise serializers.ValidationError("Room type code must be at least 2 characters.")
+        value = value.strip().upper()
+        # Uniqueness is enforced per (hotel, code) at DB level.
+        # We do a best-effort check here; hotel is not yet known at field-level
+        # validation, so full uniqueness is caught by perform_create.
+        return value
+
     def validate(self, data):
         """Validate room type."""
         max_occ = data.get('max_occupancy')
         max_adults = data.get('max_adults', 0)
         max_children = data.get('max_children', 0)
-        
+
         if max_occ and max_occ < 1:
             raise serializers.ValidationError("Max occupancy must be at least 1.")
-            
+
         if max_adults and max_adults < 1:
             raise serializers.ValidationError("Max adults must be at least 1.")
-        
+
         return data
 
 
@@ -109,7 +119,7 @@ class RoomTypeAmenitySerializer(serializers.ModelSerializer):
 class RoomImageSerializer(serializers.ModelSerializer):
     """Serializer for room images."""
     
-    room_number = serializers.CharField(source='room.number', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
     image_url = serializers.SerializerMethodField()
     
     class Meta:
@@ -139,8 +149,13 @@ class RoomImageSerializer(serializers.ModelSerializer):
 class RoomStatusLogSerializer(serializers.ModelSerializer):
     """Serializer for room status change logs."""
     
-    room_number = serializers.CharField(source='room.number', read_only=True)
-    changed_by_name = serializers.CharField(source='changed_by.get_full_name', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
+    changed_by_name = serializers.SerializerMethodField()
+    
+    def get_changed_by_name(self, obj):
+        if obj.changed_by:
+            return obj.changed_by.get_full_name() or obj.changed_by.email
+        return None
     
     class Meta:
         model = RoomStatusLog
@@ -184,7 +199,7 @@ class RoomTypeDetailSerializer(RoomTypeSerializer):
         """Get rooms of this type."""
         from apps.rooms.models import Room
         rooms = Room.objects.filter(room_type=obj).values(
-            'id', 'number', 'status', 'floor__name'
+            'id', 'room_number', 'status', 'floor__name'
         )
         return list(rooms)
 

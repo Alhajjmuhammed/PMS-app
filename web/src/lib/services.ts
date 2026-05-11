@@ -26,15 +26,18 @@ export interface Reservation {
 
 export interface Room {
   id: number;
-  number: string;
-  floor: number;
+  room_number: string;
   status: string;
-  room_type: {
+  room_type?: number;
+  room_type_name?: string;
+  room_type_detail?: {
     id: number;
     name: string;
-    base_price: number;
+    base_rate: number;
+    max_occupancy?: number;
+    bed_type?: string;
   };
-  is_clean: boolean;
+  floor_name?: string;
 }
 
 export interface Guest {
@@ -61,7 +64,7 @@ export const reservationService = {
   },
 
   async create(data: any) {
-    const response = await api.post('/api/v1/reservations/', data);
+    const response = await api.post('/api/v1/reservations/create/', data);
     return response.data;
   },
 
@@ -74,13 +77,31 @@ export const reservationService = {
     await api.delete(`/api/v1/reservations/${id}/`);
   },
 
-  async checkIn(id: number) {
-    const response = await api.post(`/api/v1/reservations/${id}/checkin/`);
+  async cancel(id: number, reason?: string) {
+    const response = await api.post(`/api/v1/reservations/${id}/cancel/`, { reason: reason ?? '' });
+    return response.data;
+  },
+
+  async checkIn(reservationId: number, roomId: number) {
+    const response = await api.post('/api/v1/frontdesk/check-in/', {
+      reservation_id: reservationId,
+      room_id: roomId,
+    });
     return response.data;
   },
 
   async checkOut(id: number) {
     const response = await api.post(`/api/v1/reservations/${id}/checkout/`);
+    return response.data;
+  },
+
+  async confirm(id: number) {
+    const response = await api.post(`/api/v1/reservations/${id}/confirm/`);
+    return response.data;
+  },
+
+  async noShow(id: number) {
+    const response = await api.post(`/api/v1/reservations/${id}/no-show/`);
     return response.data;
   },
 };
@@ -101,6 +122,63 @@ export const roomService = {
   async getById(id: number) {
     const response = await api.get(`/api/v1/rooms/${id}/`);
     return response.data;
+  },
+
+  async create(data: any) {
+    const response = await api.post('/api/v1/rooms/create/', data);
+    return response.data;
+  },
+
+  async update(id: number, data: any) {
+    const response = await api.patch(`/api/v1/rooms/${id}/`, data);
+    return response.data;
+  },
+
+  async delete(id: number) {
+    await api.delete(`/api/v1/rooms/${id}/`);
+  },
+
+  async updateStatus(id: number, status: string) {
+    const response = await api.post(`/api/v1/rooms/${id}/status/`, { status });
+    return response.data;
+  },
+};
+
+export const floorService = {
+  async getAll(params?: any) {
+    const response = await api.get('/api/v1/properties/floors/', { params });
+    return response.data;
+  },
+};
+
+export const roomTypeService = {
+  async getAll(params?: any) {
+    const response = await api.get('/api/v1/rooms/types/', { params });
+    return response.data;
+  },
+
+  async getActive() {
+    const response = await api.get('/api/v1/rooms/types/active/');
+    return response.data;
+  },
+
+  async getById(id: number) {
+    const response = await api.get(`/api/v1/rooms/types/${id}/`);
+    return response.data;
+  },
+
+  async create(data: any) {
+    const response = await api.post('/api/v1/rooms/types/', data);
+    return response.data;
+  },
+
+  async update(id: number, data: any) {
+    const response = await api.patch(`/api/v1/rooms/types/${id}/`, data);
+    return response.data;
+  },
+
+  async delete(id: number) {
+    await api.delete(`/api/v1/rooms/types/${id}/`);
   },
 };
 
@@ -123,5 +201,9 @@ export const guestService = {
   async update(id: number, data: any) {
     const response = await api.patch(`/api/v1/guests/${id}/`, data);
     return response.data;
+  },
+
+  async delete(id: number) {
+    await api.delete(`/api/v1/guests/${id}/`);
   },
 };

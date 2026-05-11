@@ -12,12 +12,16 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
         ref_name = 'MaintenanceRequest'
         model = MaintenanceRequest
         fields = [
-            'id', 'request_number', 'room', 'room_number', 'location',
+            'id', 'request_number', 'property', 'room', 'room_number', 'location',
             'request_type', 'category', 'priority', 'status', 'title', 'description',
             'assigned_to', 'assigned_to_name', 'reported_by', 'reported_by_name',
             'assigned_at', 'started_at', 'completed_at',
             'parts_cost', 'labor_hours', 'resolution_notes',
             'created_at'
+        ]
+        read_only_fields = [
+            'id', 'request_number', 'property', 'reported_by', 'reported_by_name',
+            'assigned_at', 'started_at', 'completed_at', 'created_at',
         ]
 
 

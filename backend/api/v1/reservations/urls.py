@@ -9,6 +9,9 @@ urlpatterns = [
     path('create/', views.ReservationCreateView.as_view(), name='reservation_create'),
     path('<int:pk>/', views.ReservationDetailView.as_view(), name='reservation_detail'),
     path('<int:pk>/cancel/', views.CancelReservationView.as_view(), name='cancel'),
+    path('<int:pk>/confirm/', views.ConfirmReservationView.as_view(), name='confirm'),
+    path('<int:pk>/no-show/', views.NoShowView.as_view(), name='no_show'),
+    path('<int:pk>/checkout/', views.ReservationCheckoutView.as_view(), name='checkout'),
     path('arrivals/', views.ArrivalsView.as_view(), name='arrivals'),
     path('departures/', views.DeparturesView.as_view(), name='departures'),
     

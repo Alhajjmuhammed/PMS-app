@@ -5,7 +5,7 @@ from django.utils import timezone
 
 class RoomBlockSerializer(serializers.ModelSerializer):
     """Serializer for room blocks."""
-    room_number = serializers.CharField(source='room.number', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
     room_type_name = serializers.CharField(source='room.room_type.name', read_only=True)
     created_by_name = serializers.SerializerMethodField()
     reason_display = serializers.CharField(source='get_reason_display', read_only=True)

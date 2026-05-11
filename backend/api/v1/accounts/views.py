@@ -411,7 +411,7 @@ class StaffProfileDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class StaffProfileByDepartmentView(generics.ListAPIView):
     """Get staff profiles by department."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = StaffProfileSerializer
     
     def get_queryset(self):
@@ -426,7 +426,7 @@ class StaffProfileByDepartmentView(generics.ListAPIView):
 
 class StaffProfileByRoleView(generics.ListAPIView):
     """Get staff profiles by role."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = StaffProfileSerializer
     
     def get_queryset(self):

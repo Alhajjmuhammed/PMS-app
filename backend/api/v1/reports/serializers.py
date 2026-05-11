@@ -151,16 +151,22 @@ class NightAuditCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = NightAudit
         fields = ['property', 'business_date', 'notes']
+        extra_kwargs = {
+            'property': {'required': False},
+        }
     
     def validate(self, data):
-        # Check for duplicate audit for same business date
-        if NightAudit.objects.filter(
-            property=data['property'],
-            business_date=data['business_date']
-        ).exclude(status=NightAudit.Status.ROLLED_BACK).exists():
-            raise serializers.ValidationError(
-                "Night audit for this business date already exists"
-            )
+        # Property may be injected by the view after validation; skip unique check if missing
+        prop = data.get('property')
+        business_date = data.get('business_date')
+        if prop and business_date:
+            if NightAudit.objects.filter(
+                property=prop,
+                business_date=business_date
+            ).exclude(status=NightAudit.Status.ROLLED_BACK).exists():
+                raise serializers.ValidationError(
+                    "Night audit for this business date already exists"
+                )
         return data
 
 

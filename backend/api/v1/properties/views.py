@@ -6,7 +6,7 @@ from rest_framework import status
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from apps.properties.models import Property, SystemSetting, Building, Floor, Department, PropertyAmenity, TaxConfiguration
-from api.permissions import CanManageProperties, IsAdminOrManager
+from api.permissions import CanManageProperties, IsAdminOrManager, IsFrontDeskOrAbove
 from .serializers import (
     PropertySerializer, SystemSettingSerializer,
     BuildingSerializer, BuildingListSerializer, FloorSerializer,
@@ -40,7 +40,7 @@ class PropertyDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class SystemSettingView(APIView):
     """Get or update system settings."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         # Get settings for user's property or global settings
@@ -119,8 +119,14 @@ class BuildingDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class FloorListCreateView(generics.ListCreateAPIView):
     """List all floors or create a new floor."""
-    permission_classes = [IsAuthenticated, CanManageProperties]
     serializer_class = FloorSerializer
+
+    def get_permissions(self):
+        # Anyone with front-desk access or above can READ floors (needed for room form dropdowns)
+        # Only managers/admins can CREATE floors
+        if self.request.method in ('GET', 'HEAD', 'OPTIONS'):
+            return [IsAuthenticated(), IsFrontDeskOrAbove()]
+        return [IsAuthenticated(), CanManageProperties()]
     filter_backends = [DjangoFilterBackend, OrderingFilter]
     filterset_fields = ['building']
     ordering_fields = ['number', 'building']
@@ -189,7 +195,7 @@ class DepartmentDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class DepartmentStaffView(generics.ListAPIView):
     """Get all staff in a department."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request, pk):
         from django.contrib.auth import get_user_model
@@ -279,7 +285,7 @@ class TaxConfigurationDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class ActiveTaxesView(generics.ListAPIView):
     """Get all active tax configurations for the property."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = TaxConfigurationSerializer
     
     def get_queryset(self):

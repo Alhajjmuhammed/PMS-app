@@ -368,7 +368,7 @@ function PropertiesManager() {
         <div className="text-center py-20 text-slate-400">
           <BuildingOfficeIcon className="w-14 h-14 mx-auto mb-3 opacity-30" />
           <p className="font-medium">No properties yet</p>
-          <p className="text-sm mt-1">Click "Add Property" to create the first one.</p>
+          <p className="text-sm mt-1">Click &ldquo;Add Property&rdquo; to create the first one.</p>
         </div>
       ) : viewMode === 'card' ? (
         <>

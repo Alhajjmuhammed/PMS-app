@@ -31,10 +31,11 @@ class OutletDetailView(generics.RetrieveAPIView):
     serializer_class = OutletSerializer
     
     def get_queryset(self):
-        qs = Outlet.objects.filter(is_active=True)
-        if self.request.user.assigned_property:
-            qs = qs.filter(property=self.request.user.assigned_property)
-        return qs
+        prop = self.request.user.assigned_property
+        if not prop:
+            from apps.pos.models import Outlet as O
+            return O.objects.none()
+        return Outlet.objects.filter(is_active=True, property=prop)
 
 
 class MenuView(APIView):
@@ -42,11 +43,10 @@ class MenuView(APIView):
     
     def get(self, request, pk):
         prop = request.user.assigned_property
+        if not prop:
+            return Response({'error': 'No property assigned'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            outlet_qs = Outlet.objects.all()
-            if prop:
-                outlet_qs = outlet_qs.filter(property=prop)
-            outlet = outlet_qs.get(pk=pk)
+            outlet = Outlet.objects.get(pk=pk, property=prop, is_active=True)
         except Outlet.DoesNotExist:
             return Response({'error': 'Outlet not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -102,11 +102,10 @@ class OrderCreateView(APIView):
         data = serializer.validated_data
         
         prop = request.user.assigned_property
+        if not prop:
+            return Response({'error': 'No property assigned'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            outlet_qs = Outlet.objects.all()
-            if prop:
-                outlet_qs = outlet_qs.filter(property=prop)
-            outlet = outlet_qs.get(pk=data['outlet_id'])
+            outlet = Outlet.objects.get(pk=data['outlet_id'], property=prop)
         except Outlet.DoesNotExist:
             return Response({'error': 'Outlet not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -127,11 +126,10 @@ class AddItemView(APIView):
     
     def post(self, request, pk):
         prop = request.user.assigned_property
+        if not prop:
+            return Response({'error': 'No property assigned'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            order_qs = POSOrder.objects.all()
-            if prop:
-                order_qs = order_qs.filter(outlet__property=prop)
-            order = order_qs.get(pk=pk)
+            order = POSOrder.objects.get(pk=pk, outlet__property=prop)
         except POSOrder.DoesNotExist:
             return Response({'error': 'Order not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -143,10 +141,10 @@ class AddItemView(APIView):
         data = serializer.validated_data
         
         try:
-            item_qs = MenuItem.objects.all()
-            if prop:
-                item_qs = item_qs.filter(category__outlet__property=prop)
-            menu_item = item_qs.get(pk=data['menu_item_id'])
+            menu_item = MenuItem.objects.get(
+                pk=data['menu_item_id'],
+                category__outlet__property=prop
+            )
         except MenuItem.DoesNotExist:
             return Response({'error': 'Menu item not found'}, status=status.HTTP_404_NOT_FOUND)
         

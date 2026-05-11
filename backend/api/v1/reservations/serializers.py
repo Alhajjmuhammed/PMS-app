@@ -43,7 +43,49 @@ class ReservationSerializer(serializers.ModelSerializer):
     guest = GuestSerializer(read_only=True)
     rooms = ReservationRoomSerializer(many=True, read_only=True)
     nights = serializers.IntegerField(read_only=True)
-    
+
+    created_by_name   = serializers.SerializerMethodField()
+    modified_by_name  = serializers.SerializerMethodField()
+    cancelled_by_name = serializers.SerializerMethodField()
+    checked_in_by_name    = serializers.SerializerMethodField()
+    checked_out_by_name   = serializers.SerializerMethodField()
+    assigned_room_number  = serializers.SerializerMethodField()
+
+    def _user_name(self, user):
+        if not user:
+            return None
+        name = ('%s %s' % (user.first_name or '', user.last_name or '')).strip()
+        return name or user.email
+
+    def get_created_by_name(self, obj):
+        return self._user_name(obj.created_by)
+
+    def get_modified_by_name(self, obj):
+        return self._user_name(obj.modified_by)
+
+    def get_cancelled_by_name(self, obj):
+        return self._user_name(obj.cancelled_by)
+
+    def get_checked_in_by_name(self, obj):
+        from apps.frontdesk.models import CheckIn
+        ci = CheckIn.objects.filter(reservation=obj).first()
+        return self._user_name(ci.checked_in_by) if ci else None
+
+    def get_checked_out_by_name(self, obj):
+        from apps.frontdesk.models import CheckIn, CheckOut
+        ci = CheckIn.objects.filter(reservation=obj).first()
+        if not ci:
+            return None
+        co = CheckOut.objects.filter(check_in=ci).first()
+        return self._user_name(co.checked_out_by) if co else None
+
+    def get_assigned_room_number(self, obj):
+        from apps.frontdesk.models import CheckIn
+        ci = CheckIn.objects.filter(reservation=obj).select_related('room').first()
+        if ci and ci.room:
+            return ci.room.room_number
+        return None
+
     class Meta:
         model = Reservation
         fields = [
@@ -51,7 +93,9 @@ class ReservationSerializer(serializers.ModelSerializer):
             'check_in_date', 'check_out_date', 'nights',
             'adults', 'children', 'status', 'source',
             'rate_plan', 'total_amount',
-            'special_requests', 'rooms', 'created_at'
+            'special_requests', 'rooms', 'created_at',
+            'created_by_name', 'modified_by_name', 'cancelled_by_name',
+            'checked_in_by_name', 'checked_out_by_name', 'assigned_room_number',
         ]
 
 
@@ -62,15 +106,20 @@ class ReservationCreateSerializer(serializers.ModelSerializer):
     guest_email = serializers.EmailField(required=False)
     guest_phone = serializers.CharField(required=False, max_length=20)
     room_type_id = serializers.IntegerField()
+    room_rate = serializers.DecimalField(max_digits=10, decimal_places=2, required=False)
     
     class Meta:
         model = Reservation
         fields = [
             'hotel', 'check_in_date', 'check_out_date',
-            'adults', 'children', 'special_requests',
+            'adults', 'children', 'special_requests', 'source',
             'guest_id', 'guest_first_name', 'guest_last_name',
-            'guest_email', 'guest_phone', 'room_type_id'
+            'guest_email', 'guest_phone', 'room_type_id', 'room_rate'
         ]
+        extra_kwargs = {
+            'hotel': {'required': False},
+            'source': {'required': False},
+        }
     
     def validate_check_in_date(self, value):
         """Validate check-in date is not in the past."""

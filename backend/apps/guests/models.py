@@ -49,6 +49,16 @@ class Guest(models.Model):
     id_issuing_country = models.CharField(_('ID issuing country'), max_length=100, blank=True)
     passport_number = models.CharField(_('passport number'), max_length=50, blank=True)
     
+    # Property (which hotel this guest belongs to)
+    home_property = models.ForeignKey(
+        'properties.Property',
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='guests',
+        verbose_name=_('property'),
+    )
+
     # Guest Type & Company
     guest_type = models.CharField(
         _('guest type'),

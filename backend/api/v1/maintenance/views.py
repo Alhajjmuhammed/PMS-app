@@ -27,6 +27,14 @@ class RequestListView(generics.ListCreateAPIView):
         if self.request.user.assigned_property:
             qs = qs.filter(property=self.request.user.assigned_property)
         
+        # MAINTENANCE role only sees their own tasks + unassigned pool
+        from django.db.models import Q
+        if self.request.user.role == 'MAINTENANCE':
+            qs = qs.filter(
+                Q(assigned_to=self.request.user) |
+                Q(assigned_to__isnull=True, status='PENDING')
+            )
+
         status_filter = self.request.query_params.get('status')
         if status_filter:
             qs = qs.filter(status=status_filter)
@@ -81,12 +89,15 @@ class RequestCreateView(generics.CreateAPIView):
 class MyRequestsView(generics.ListAPIView):
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
-    
+
     def get_queryset(self):
-        return MaintenanceRequest.objects.filter(
+        qs = MaintenanceRequest.objects.filter(
             assigned_to=self.request.user,
             status__in=['OPEN', 'ASSIGNED', 'IN_PROGRESS']
-        ).order_by('-priority', '-created_at')
+        )
+        if self.request.user.assigned_property:
+            qs = qs.filter(property=self.request.user.assigned_property)
+        return qs.order_by('-priority', '-created_at')
 
 
 class AssignRequestView(APIView):
@@ -133,11 +144,10 @@ class StartRequestView(APIView):
     
     def post(self, request, pk):
         prop = request.user.assigned_property
+        if not prop:
+            return Response({'error': 'No property assigned'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            req_qs = MaintenanceRequest.objects.all()
-            if prop:
-                req_qs = req_qs.filter(property=prop)
-            maintenance_request = req_qs.get(pk=pk)
+            maintenance_request = MaintenanceRequest.objects.get(pk=pk, property=prop)
         except MaintenanceRequest.DoesNotExist:
             return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -165,11 +175,10 @@ class CompleteRequestView(APIView):
     
     def post(self, request, pk):
         prop = request.user.assigned_property
+        if not prop:
+            return Response({'error': 'No property assigned'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            req_qs = MaintenanceRequest.objects.all()
-            if prop:
-                req_qs = req_qs.filter(property=prop)
-            maintenance_request = req_qs.get(pk=pk)
+            maintenance_request = MaintenanceRequest.objects.get(pk=pk, property=prop)
         except MaintenanceRequest.DoesNotExist:
             return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
         
@@ -218,11 +227,10 @@ class ResolveRequestView(APIView):
     
     def post(self, request, pk):
         prop = request.user.assigned_property
+        if not prop:
+            return Response({'error': 'No property assigned'}, status=status.HTTP_403_FORBIDDEN)
         try:
-            req_qs = MaintenanceRequest.objects.all()
-            if prop:
-                req_qs = req_qs.filter(property=prop)
-            maintenance_request = req_qs.get(pk=pk)
+            maintenance_request = MaintenanceRequest.objects.get(pk=pk, property=prop)
         except MaintenanceRequest.DoesNotExist:
             return Response({'error': 'Request not found'}, status=status.HTTP_404_NOT_FOUND)
         

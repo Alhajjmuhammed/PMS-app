@@ -308,18 +308,32 @@ function HousekeepingDashboard({ stats }: { stats: DashboardStats | null }) {
 }
 
 /* --- MAINTENANCE ------------------------------------------- */
-function MaintenanceDashboard({ stats }: { stats: DashboardStats | null }) {
+function MaintenanceDashboard() {
+  const [mStats, setMStats] = useState<{
+    assigned_requests: number;
+    in_progress_requests: number;
+    completed_today: number;
+    overdue_requests: number;
+  } | null>(null);
+
+  useEffect(() => {
+    api.get('/api/v1/maintenance/dashboard/')
+      .then((r) => setMStats(r.data))
+      .catch(() => {});
+  }, []);
+
   return (
     <>
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 max-w-2xl">
-        <StatCard label="Pending Tasks" value={stats?.pending_maintenance ?? 0} sub="Awaiting completion" icon={ExclamationTriangleIcon} gradient="bg-gradient-to-br from-red-500 to-rose-600" />
-        <StatCard label="Total Rooms"   value={stats?.total_rooms ?? 0}         sub="In this property"    icon={BuildingOfficeIcon}       gradient="bg-gradient-to-br from-blue-500 to-blue-600" />
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <StatCard label="In Pool"        value={mStats?.pool_requests        ?? '…'} sub="Unclaimed — grab one"  icon={WrenchScrewdriverIcon}    gradient="bg-gradient-to-br from-violet-500 to-purple-600" />
+        <StatCard label="Assigned to Me" value={mStats?.assigned_requests    ?? '…'} sub="Waiting to start"      icon={WrenchScrewdriverIcon}    gradient="bg-gradient-to-br from-blue-500 to-blue-600" />
+        <StatCard label="In Progress"    value={mStats?.in_progress_requests ?? '…'} sub="Currently working"    icon={ExclamationTriangleIcon}  gradient="bg-gradient-to-br from-amber-500 to-orange-500" />
+        <StatCard label="Done Today"     value={mStats?.completed_today      ?? '…'} sub="Completed tasks"       icon={CheckCircleIcon}          gradient="bg-gradient-to-br from-emerald-500 to-teal-500" />
       </div>
       <div className="bg-white rounded-2xl p-5 shadow-sm border border-slate-100 max-w-sm">
         <SectionHeader title="Quick Actions" />
-        <div className="grid grid-cols-2 gap-3">
-          <QuickAction label="All Tasks"   href="/maintenance" icon={WrenchScrewdriverIcon} bg="bg-orange-50 hover:bg-orange-100 border-orange-100" iconColor="bg-orange-500" />
-          <QuickAction label="Room Status" href="/rooms"       icon={BuildingOfficeIcon}     bg="bg-blue-50 hover:bg-blue-100 border-blue-100"       iconColor="bg-blue-500" />
+        <div className="grid grid-cols-1 gap-3">
+          <QuickAction label="My Tasks" href="/maintenance" icon={WrenchScrewdriverIcon} bg="bg-orange-50 hover:bg-orange-100 border-orange-100" iconColor="bg-orange-500" />
         </div>
       </div>
     </>
@@ -523,10 +537,60 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (user && !isSuperAdmin) {
-      api.get<DashboardStats>('/api/v1/frontdesk/dashboard/stats/')
-        .then((r) => setStats(r.data))
-        .catch(() => {})
-        .finally(() => setLoading(false));
+      const role = user.role ?? '';
+
+      if (role === 'HOUSEKEEPING') {
+        // HK users can't access frontdesk stats; use housekeeping dashboard instead
+        api.get<any>('/api/v1/housekeeping/dashboard/')
+          .then((r) => {
+            const d = r.data;
+            const totalRooms = d.total_rooms ?? 0;
+            const cleanRooms = d.clean_rooms ?? 0;
+            const pendingTasks = d.pending_tasks ?? 0;
+            // occupied_rooms drives the "clean = total - pending - occupied" formula in HousekeepingDashboard.
+            // We want clean to equal cleanRooms, so: occupied = total - cleanRooms - pendingTasks
+            const occupied = Math.max(0, totalRooms - cleanRooms - pendingTasks);
+            setStats({
+              total_rooms: totalRooms,
+              occupied_rooms: occupied,
+              available_rooms: cleanRooms,
+              occupancy_rate: 0,
+              total_reservations_today: 0,
+              check_ins_today: 0,
+              check_outs_today: 0,
+              revenue_today: 0,
+              pending_maintenance: 0,
+              housekeeping_pending: pendingTasks,
+            });
+          })
+          .catch(() => {})
+          .finally(() => setLoading(false));
+      } else if (role === 'MAINTENANCE') {
+        // MAINTENANCE users can't access frontdesk stats; use maintenance dashboard instead
+        api.get<any>('/api/v1/maintenance/dashboard/')
+          .then((r) => {
+            const d = r.data;
+            setStats({
+              total_rooms: 0,
+              occupied_rooms: 0,
+              available_rooms: 0,
+              occupancy_rate: 0,
+              total_reservations_today: 0,
+              check_ins_today: 0,
+              check_outs_today: 0,
+              revenue_today: 0,
+              pending_maintenance: d.pending_requests ?? 0,
+              housekeeping_pending: 0,
+            });
+          })
+          .catch(() => {})
+          .finally(() => setLoading(false));
+      } else {
+        api.get<DashboardStats>('/api/v1/frontdesk/dashboard/stats/')
+          .then((r) => setStats(r.data))
+          .catch(() => {})
+          .finally(() => setLoading(false));
+      }
     } else if (user && isSuperAdmin) {
       setLoading(false);
     }
@@ -555,7 +619,7 @@ export default function DashboardPage() {
     if (isAdminOrManager)        return <AdminManagerDashboard stats={stats} />;
     if (role === 'FRONT_DESK')   return <FrontDeskDashboard stats={stats} />;
     if (role === 'HOUSEKEEPING') return <HousekeepingDashboard stats={stats} />;
-    if (role === 'MAINTENANCE')  return <MaintenanceDashboard stats={stats} />;
+    if (role === 'MAINTENANCE')  return <MaintenanceDashboard />;
     if (role === 'ACCOUNTANT')   return <AccountantDashboard stats={stats} />;
     if (role === 'POS_STAFF')    return <PosStaffDashboard stats={stats} />;
     if (role === 'GUEST')        return <GuestDashboard />;

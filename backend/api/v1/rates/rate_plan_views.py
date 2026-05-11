@@ -22,14 +22,14 @@ from .rate_plan_serializers import (
     BulkRoomRateSerializer,
     RateCalculationSerializer
 )
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsFrontDeskOrAbove
 
 
 # ===== Rate Plans =====
 
 class RatePlanListCreateView(generics.ListCreateAPIView):
     """List all rate plans or create new rate plan."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RatePlanSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active', 'rate_type']
@@ -65,7 +65,7 @@ class RatePlanDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class ActiveRatePlansView(generics.ListAPIView):
     """List only active rate plans."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RatePlanSerializer
     
     def get_queryset(self):
@@ -83,7 +83,7 @@ class ActiveRatePlansView(generics.ListAPIView):
 
 class RoomRateListCreateView(generics.ListCreateAPIView):
     """List all room rates or create new room rate."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomRateSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['rate_plan', 'room_type', 'is_active']
@@ -122,7 +122,7 @@ class RoomRateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class RoomRateByPlanView(generics.ListAPIView):
     """Get all room rates for a specific rate plan."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomRateSerializer
     
     def get_queryset(self):
@@ -176,7 +176,7 @@ class BulkRoomRateCreateView(APIView):
 
 class DateRateListCreateView(generics.ListCreateAPIView):
     """List all date rates or create new date rate."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = DateRateSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['room_type', 'is_closed']
@@ -225,7 +225,7 @@ class DateRateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class DateRateByDateView(generics.ListAPIView):
     """Get date rates for a specific date."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = DateRateSerializer
     
     def get_queryset(self):
@@ -244,9 +244,9 @@ class YieldRuleListCreateView(generics.ListCreateAPIView):
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = YieldRuleSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['room_type', 'is_active', 'adjustment_type']
+    filterset_fields = ['is_active', 'trigger_type']
     search_fields = ['name']
-    ordering_fields = ['priority', 'name', 'created_at']
+    ordering_fields = ['priority', 'name']
     ordering = ['priority', 'name']
     
     def get_queryset(self):
@@ -255,7 +255,7 @@ class YieldRuleListCreateView(generics.ListCreateAPIView):
        
         return YieldRule.objects.filter(
             property=self.request.user.assigned_property
-        ).select_related('room_type')
+        )
     
     def perform_create(self, serializer):
         serializer.save(property=self.request.user.assigned_property)
@@ -272,12 +272,12 @@ class YieldRuleDetailView(generics.RetrieveUpdateDestroyAPIView):
        
         return YieldRule.objects.filter(
             property=self.request.user.assigned_property
-        ).select_related('room_type')
+        )
 
 
 class ActiveYieldRulesView(generics.ListAPIView):
     """List only active yield rules."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = YieldRuleSerializer
     
     def get_queryset(self):
@@ -287,14 +287,14 @@ class ActiveYieldRulesView(generics.ListAPIView):
         return YieldRule.objects.filter(
             property=self.request.user.assigned_property,
             is_active=True
-        ).select_related('room_type').order_by('priority')
+        ).order_by('priority')
 
 
 # ===== Rate Calculation =====
 
 class CalculateRateView(APIView):
     """Calculate rate for given dates and room type."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request):
         serializer = RateCalculationSerializer(data=request.data)
@@ -417,18 +417,18 @@ class CalculateRateView(APIView):
 
 class RateStatsView(APIView):
     """Get rate statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         property_obj = request.user.assigned_property
         
         stats = RoomRate.objects.filter(
-            property=property_obj,
+            rate_plan__property=property_obj,
             is_active=True
         ).aggregate(
-            avg_rate=Avg('base_rate'),
-            min_rate=Min('base_rate'),
-            max_rate=Max('base_rate')
+            avg_rate=Avg('single_rate'),
+            min_rate=Min('single_rate'),
+            max_rate=Max('single_rate')
         )
         
         total_rate_plans = RatePlan.objects.filter(
@@ -437,7 +437,7 @@ class RateStatsView(APIView):
         ).count()
         
         total_room_rates = RoomRate.objects.filter(
-            property=property_obj,
+            rate_plan__property=property_obj,
             is_active=True
         ).count()
         

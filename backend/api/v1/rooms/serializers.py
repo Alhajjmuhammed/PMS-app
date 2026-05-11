@@ -160,20 +160,49 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         return instance
 
 
+class RoomTypeBasicSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = RoomType
+        fields = ['id', 'name', 'code', 'base_rate', 'max_occupancy', 'bed_type']
+
+
 class RoomSerializer(serializers.ModelSerializer):
     room_type_name = serializers.CharField(source='room_type.name', read_only=True)
+    room_type_detail = RoomTypeBasicSerializer(source='room_type', read_only=True)
     floor_name = serializers.CharField(source='floor.name', read_only=True)
     building_name = serializers.CharField(source='floor.building.name', read_only=True)
     
     class Meta:
         model = Room
         fields = [
-            'id', 'hotel', 'room_number', 'room_type', 'room_type_name',
+            'id', 'hotel', 'room_number', 'room_type', 'room_type_name', 'room_type_detail',
             'floor', 'floor_name', 'building', 'building_name',
             'status', 'fo_status', 'is_smoking', 'is_accessible',
             'is_active', 'notes', 'name', 'description'
         ]
-        read_only_fields = ['room_type_name', 'floor_name', 'building_name']
+        read_only_fields = ['hotel', 'room_type_name', 'room_type_detail', 'floor_name', 'building_name']
+
+    def validate_room_number(self, value):
+        if not value or not value.strip():
+            raise serializers.ValidationError("Room number is required.")
+        return value.strip()
+
+    def validate(self, data):
+        # Get the hotel from request context (set by perform_create/perform_update)
+        request = self.context.get('request')
+        hotel = request.user.assigned_property if request else None
+
+        room_number = data.get('room_number', getattr(self.instance, 'room_number', None))
+
+        if hotel and room_number:
+            qs = Room.objects.filter(hotel=hotel, room_number=room_number)
+            if self.instance:
+                qs = qs.exclude(pk=self.instance.pk)
+            if qs.exists():
+                raise serializers.ValidationError({
+                    'room_number': f"Room {room_number} already exists in this property."
+                })
+        return data
 
 
 class RoomStatusUpdateSerializer(serializers.Serializer):

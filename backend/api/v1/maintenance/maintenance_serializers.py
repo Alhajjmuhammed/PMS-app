@@ -29,7 +29,7 @@ class MaintenanceLogSerializer(serializers.ModelSerializer):
 
 class MaintenanceRequestSerializer(serializers.ModelSerializer):
     """Serializer for maintenance requests."""
-    room_number = serializers.CharField(source='room.number', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
     assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
     reported_by_name = serializers.CharField(source='reported_by.get_full_name', read_only=True)
     logs = MaintenanceLogSerializer(many=True, read_only=True)
@@ -66,7 +66,7 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
         
         ]
         
-        read_only_fields = ['id', 'request_number', 'reported_by', 'created_at', 'updated_at']
+        read_only_fields = ['id', 'request_number', 'property', 'reported_by', 'created_at', 'updated_at']
     
     def get_total_cost(self, obj):
         """Calculate total cost (parts + labor assuming $50/hour)."""
@@ -124,7 +124,7 @@ class MaintenanceRequestSerializer(serializers.ModelSerializer):
 
 class AssetSerializer(serializers.ModelSerializer):
     """Serializer for assets."""
-    room_number = serializers.CharField(source='room.number', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
     warranty_expired = serializers.SerializerMethodField()
     maintenance_due = serializers.SerializerMethodField()
     depreciation_value = serializers.SerializerMethodField()
@@ -183,15 +183,16 @@ class AssetSerializer(serializers.ModelSerializer):
         return 0
     
     def validate_code(self, value):
-        """Ensure asset code is unique."""
+        """Ensure asset code is unique within the same property."""
+        request = self.context.get('request')
+        prop = request.user.assigned_property if request else None
+        qs = Asset.objects.filter(code=value)
+        if prop:
+            qs = qs.filter(property=prop)
         if self.instance:
-            # For updates, exclude current instance
-            if Asset.objects.exclude(id=self.instance.id).filter(code=value).exists():
-                raise serializers.ValidationError("Asset code must be unique")
-        else:
-            # For creates
-            if Asset.objects.filter(code=value).exists():
-                raise serializers.ValidationError("Asset code must be unique")
+            qs = qs.exclude(id=self.instance.id)
+        if qs.exists():
+            raise serializers.ValidationError("Asset code must be unique within this property.")
         return value
     
     def validate(self, data):
@@ -221,6 +222,7 @@ class MaintenanceDashboardSerializer(serializers.Serializer):
     completed_today = serializers.IntegerField()
     emergency_requests = serializers.IntegerField()
     overdue_requests = serializers.IntegerField()
+    pool_requests = serializers.IntegerField()
     total_assets = serializers.IntegerField()
     assets_due_maintenance = serializers.IntegerField()
     assets_under_warranty = serializers.IntegerField()

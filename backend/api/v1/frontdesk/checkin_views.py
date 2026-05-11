@@ -29,12 +29,12 @@ from .checkin_serializers import (
 
 logger = logging.getLogger(__name__)
 
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsFrontDeskOrAbove
 
 
 class CheckInListCreateView(generics.ListCreateAPIView):
     """List all check-ins or create new check-in."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = CheckInSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['room', 'guest', 'reservation']
@@ -89,7 +89,7 @@ class CheckInListCreateView(generics.ListCreateAPIView):
 
 class CheckInDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a check-in."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = CheckInSerializer
     
     def get_queryset(self):
@@ -102,7 +102,7 @@ class CheckInDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class TodayCheckInsView(generics.ListAPIView):
     """List today's check-ins."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = CheckInSerializer
     
     def get_queryset(self):
@@ -117,7 +117,7 @@ class TodayCheckInsView(generics.ListAPIView):
 
 class CheckOutListCreateView(generics.ListCreateAPIView):
     """List all check-outs or create new check-out."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = CheckOutSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['check_in__room', 'check_in__guest']
@@ -159,24 +159,43 @@ class CheckOutListCreateView(generics.ListCreateAPIView):
             check_out.check_in.reservation.status = 'CHECKED_OUT'
             check_out.check_in.reservation.save()
 
-        # Close the folio if it's still open
+        # Close the folio (only if balance is zero) and auto-create invoice
         try:
             folio = check_out.check_in.reservation.folio
             if folio.status == 'OPEN':
-                folio.status = 'CLOSED'
-                folio.closed_at = timezone.now()
-                folio.closed_by = self.request.user
-                folio.close_date = timezone.now().date()
-                folio.save()
+                if folio.balance == 0:
+                    # Use service layer — enforces balance check properly
+                    from apps.billing.services import BillingService, InsufficientBalanceError
+                    BillingService.close_folio(folio, closed_by=self.request.user)
+                else:
+                    logger.warning(
+                        f"Folio {folio.folio_number} not closed at checkout — "
+                        f"outstanding balance ${folio.balance}"
+                    )
+
+            # Auto-create a DRAFT invoice from the folio if none exists
+            from apps.billing.models import Invoice
+            import uuid as _uuid
+            if not folio.invoices.exists():
+                invoice_number = f"INV-{_uuid.uuid4().hex[:8].upper()}"
+                Invoice.objects.create(
+                    invoice_number=invoice_number,
+                    folio=folio,
+                    status=Invoice.Status.DRAFT,
+                    subtotal=folio.total_charges,
+                    tax_amount=folio.total_taxes,
+                    total=folio.total_charges + folio.total_taxes,
+                    bill_to_name=check_out.check_in.guest.full_name,
+                )
         except (ObjectDoesNotExist, AttributeError) as e:
             # No folio or no reservation - non-fatal but log for monitoring
-            logger.info(f"Could not close folio during checkout: {str(e)}")
+            logger.info(f"Could not process folio/invoice during checkout: {str(e)}")
             pass
 
 
 class CheckOutDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a check-out."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = CheckOutSerializer
     
     def get_queryset(self):
@@ -192,7 +211,7 @@ class CheckOutDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class TodayCheckOutsView(generics.ListAPIView):
     """List today's check-outs."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = CheckOutSerializer
     
     def get_queryset(self):
@@ -214,8 +233,8 @@ class RoomMoveListCreateView(generics.ListCreateAPIView):
     serializer_class = RoomMoveSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['check_in', 'from_room', 'to_room', 'reason']
-    ordering_fields = ['move_date', 'created_at']
-    ordering = ['-move_date']
+    ordering_fields = ['move_time', 'created_at']
+    ordering = ['-move_time']
     
     def get_queryset(self):
         return RoomMove.objects.select_related(
@@ -260,7 +279,7 @@ class RoomMoveDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class WalkInListCreateView(generics.ListCreateAPIView):
     """List all walk-ins or create new walk-in."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = WalkInSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_converted']
@@ -285,7 +304,7 @@ class WalkInListCreateView(generics.ListCreateAPIView):
 
 class WalkInDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a walk-in."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = WalkInSerializer
 
     def get_queryset(self):
@@ -376,7 +395,7 @@ class ConvertWalkInView(APIView):
 
 class FrontDeskDashboardView(APIView):
     """Get front desk dashboard statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         today = date.today()
@@ -395,8 +414,8 @@ class FrontDeskDashboardView(APIView):
         
         # Expected arrivals (reservations with check-in today, not yet checked in)
         expected_arrivals = Reservation.objects.filter(
-            property=property_obj,
-            check_in=today,
+            hotel=property_obj,
+            check_in_date=today,
             status='CONFIRMED'
         ).exclude(
             check_in__isnull=False
@@ -427,13 +446,13 @@ class FrontDeskDashboardView(APIView):
         )
         
         walk_ins_today = WalkIn.objects.filter(
-            room__hotel=property_obj,
+            property=property_obj,
             created_at__date=today
         ).count()
         
         room_moves_today = RoomMove.objects.filter(
             from_room__hotel=property_obj,
-            move_date=today
+            move_time__date=today
         ).count()
         
         data = {

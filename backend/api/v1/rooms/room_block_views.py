@@ -9,7 +9,7 @@ from datetime import date
 
 from apps.rooms.models import RoomBlock
 from .room_block_serializers import RoomBlockSerializer, RoomBlockCreateSerializer
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsFrontDeskOrAbove
 
 
 class RoomBlockListCreateView(generics.ListCreateAPIView):
@@ -75,7 +75,7 @@ class RoomBlockDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class RoomBlocksByDateView(generics.ListAPIView):
     """Get all blocked rooms for a specific date."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomBlockSerializer
     
     def get_queryset(self):
@@ -103,7 +103,7 @@ class RoomBlocksByDateView(generics.ListAPIView):
 
 class ActiveRoomBlocksView(generics.ListAPIView):
     """Get all currently active room blocks."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomBlockSerializer
     
     def get_queryset(self):
@@ -122,7 +122,7 @@ class ActiveRoomBlocksView(generics.ListAPIView):
 
 class RoomBlockStatsView(APIView):
     """Get room block statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         today = timezone.now().date()

@@ -14,12 +14,12 @@ from .cashier_shift_serializers import (
     CashierShiftCloseSerializer,
     CashierShiftReconcileSerializer
 )
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsAccountantOrAbove, IsAccountantOrPOS
 
 
 class CashierShiftListView(generics.ListAPIView):
     """List all cashier shifts."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrPOS]
     serializer_class = CashierShiftSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['user', 'is_balanced']
@@ -53,7 +53,7 @@ class CashierShiftListView(generics.ListAPIView):
 
 class CashierShiftDetailView(generics.RetrieveAPIView):
     """Retrieve a cashier shift."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrPOS]
     serializer_class = CashierShiftSerializer
     
     def get_queryset(self):
@@ -65,7 +65,7 @@ class CashierShiftDetailView(generics.RetrieveAPIView):
 
 class OpenCashierShiftView(APIView):
     """Open a new cashier shift."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrPOS]
     
     def post(self, request):
         # Check if user already has an open shift
@@ -93,7 +93,7 @@ class OpenCashierShiftView(APIView):
 
 class CloseCashierShiftView(APIView):
     """Close a cashier shift."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrPOS]
     
     def post(self, request, pk):
         try:
@@ -141,7 +141,7 @@ class CloseCashierShiftView(APIView):
 
 class ReconcileCashierShiftView(APIView):
     """Reconcile cash and card transactions for a shift."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request, pk):
         try:
@@ -163,14 +163,14 @@ class ReconcileCashierShiftView(APIView):
             payment_method='CASH',
             created_at__gte=shift.shift_start,
             created_at__lte=shift.shift_end if shift.shift_end else timezone.now(),
-            folio__guest__property=request.user.assigned_property
+            folio__guest__home_property=request.user.assigned_property
         ).aggregate(total=Sum('amount'))['total'] or 0
         
         card_payments = Payment.objects.filter(
             payment_method__in=['CREDIT_CARD', 'DEBIT_CARD'],
             created_at__gte=shift.shift_start,
             created_at__lte=shift.shift_end if shift.shift_end else timezone.now(),
-            folio__guest__property=request.user.assigned_property
+            folio__guest__home_property=request.user.assigned_property
         ).aggregate(total=Sum('amount'))['total'] or 0
         
         shift.total_cash_received = cash_payments
@@ -205,7 +205,7 @@ class ReconcileCashierShiftView(APIView):
 
 class CurrentShiftView(APIView):
     """Get the current user's open shift."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrPOS]
     
     def get(self, request):
         shift = CashierShift.objects.filter(
@@ -225,7 +225,7 @@ class CurrentShiftView(APIView):
 
 class CashierShiftSummaryView(APIView):
     """Get cashier shift summary for a specific shift."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def get(self, request, pk):
         try:
@@ -245,7 +245,7 @@ class CashierShiftSummaryView(APIView):
         payments = Payment.objects.filter(
             created_at__gte=shift.shift_start,
             created_at__lte=end_time,
-            folio__guest__property=request.user.assigned_property
+            folio__guest__home_property=request.user.assigned_property
         )
         
         total_payments = payments.count()

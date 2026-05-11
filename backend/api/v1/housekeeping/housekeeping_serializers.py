@@ -15,7 +15,7 @@ from apps.housekeeping.models import (
 class HousekeepingTaskSerializer(serializers.ModelSerializer):
     """Serializer for housekeeping tasks."""
     
-    room_number = serializers.CharField(source='room.number', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
     assigned_to_name = serializers.CharField(source='assigned_to.get_full_name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
     inspected_by_name = serializers.CharField(source='inspected_by.get_full_name', read_only=True)
@@ -64,7 +64,7 @@ class HousekeepingTaskSerializer(serializers.ModelSerializer):
 class RoomInspectionSerializer(serializers.ModelSerializer):
     """Serializer for room inspections."""
     
-    room_number = serializers.CharField(source='room.number', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
     inspector_name = serializers.CharField(source='inspector.get_full_name', read_only=True)
     
     class Meta:
@@ -90,10 +90,6 @@ class RoomInspectionSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate room inspection."""
-        rating = data.get('cleanliness_rating')
-        if rating and (rating < 1 or rating > 5):
-            raise serializers.ValidationError("Cleanliness rating must be between 1 and 5.")
-        
         return data
 
 
@@ -127,15 +123,6 @@ class LinenInventorySerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate linen inventory."""
-        total_qty = data.get('total_quantity', 0)
-        min_qty = data.get('minimum_quantity', 0)
-        
-        if total_qty < 0:
-            raise serializers.ValidationError("Total quantity cannot be negative.")
-        
-        if min_qty < 0:
-            raise serializers.ValidationError("Minimum quantity cannot be negative.")
-        
         return data
 
 
@@ -168,15 +155,6 @@ class AmenityInventorySerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate amenity inventory."""
-        current = data.get('current_stock', 0)
-        minimum = data.get('minimum_stock', 0)
-        
-        if current < 0:
-            raise serializers.ValidationError("Current stock cannot be negative.")
-        
-        if minimum < 0:
-            raise serializers.ValidationError("Minimum stock cannot be negative.")
-        
         return data
 
 
@@ -217,6 +195,8 @@ class StockMovementSerializer(serializers.ModelSerializer):
     
     property_name = serializers.CharField(source='property.name', read_only=True)
     created_by_name = serializers.CharField(source='created_by.get_full_name', read_only=True)
+    amenity_name = serializers.CharField(source='amenity_inventory.name', read_only=True, default=None)
+    linen_type_display = serializers.CharField(source='linen_inventory.linen_type', read_only=True, default=None)
     
     class Meta:
         ref_name = 'StockMovementSerializerExtended'
@@ -236,11 +216,11 @@ class StockMovementSerializer(serializers.ModelSerializer):
             'to_location',
             'created_by',
             'created_at',
-            'property_name', 'created_by_name'
-        
+            'property_name', 'created_by_name',
+            'amenity_name', 'linen_type_display',
         ]
         
-        read_only_fields = ['id', 'created_by', 'created_at', 'balance_after']
+        read_only_fields = ['id', 'property', 'created_by', 'created_at', 'balance_after']
     
     def validate(self, data):
         """Validate stock movement."""

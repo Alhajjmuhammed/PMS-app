@@ -162,7 +162,12 @@ class POSOrderSerializer(serializers.ModelSerializer):
         
         ]
         
-        read_only_fields = ['id', 'order_number', 'posted_at', 'created_at', 'updated_at']
+        read_only_fields = [
+            'id', 'order_number', 'outlet', 'status',
+            'subtotal', 'tax_amount', 'total',
+            'is_posted_to_room', 'posted_at',
+            'created_at', 'updated_at',
+        ]
     
     def validate(self, data):
         """Validate POS order data."""

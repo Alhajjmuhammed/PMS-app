@@ -45,5 +45,8 @@ urlpatterns = [
     
     # ===== Dashboard =====
     path('dashboard/', housekeeping_views.HousekeepingDashboardView.as_view(), name='dashboard'),
+
+    # ===== Choices (dynamic enums) =====
+    path('choices/', housekeeping_views.HousekeepingChoicesView.as_view(), name='choices'),
 ]
 

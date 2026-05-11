@@ -3,15 +3,21 @@ from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
 
 
 class CheckInSerializer(serializers.ModelSerializer):
-    guest_name = serializers.CharField(source='reservation.guest.full_name', read_only=True)
+    guest_name = serializers.SerializerMethodField()
     room_number = serializers.CharField(source='room.room_number', read_only=True)
-    
+
+    def get_guest_name(self, obj):
+        g = obj.guest or (obj.reservation.guest if obj.reservation else None)
+        if g:
+            return '%s %s' % (g.first_name, g.last_name)
+        return ''
+
     class Meta:
         ref_name = 'CheckInSerializer'
         model = CheckIn
         fields = [
-            'id', 'reservation', 'room', 'room_number', 'guest_name',
-            'check_in_time', 'checked_in_by', 'id_verified', 'key_cards_issued'
+            'id', 'reservation', 'room', 'room_number', 'guest', 'guest_name',
+            'check_in_time', 'expected_check_out', 'checked_in_by',
         ]
 
 

@@ -100,9 +100,13 @@ class AuditLogSerializer(serializers.ModelSerializer):
         model = AuditLog
         fields = [
             'id',
-            'night_audit'
+            'night_audit',
+            'step',
+            'message',
+            'is_error',
+            'created_at',
         ]
-        read_only_fields = ['id', 'timestamp']
+        read_only_fields = ['id', 'created_at']
 
 
 class NightAuditSerializer(serializers.ModelSerializer):
@@ -121,21 +125,36 @@ class NightAuditSerializer(serializers.ModelSerializer):
         fields = [
             'id',
             'property',
+            'property_name',
             'business_date',
             'status',
+            'status_display',
             'no_shows_processed',
+            'room_rates_posted',
+            'folios_settled',
+            'departures_checked',
             'room_revenue',
             'tax_amount',
+            'fb_revenue',
+            'other_revenue',
             'total_revenue',
+            'payments_collected',
+            'rooms_sold',
+            'arrivals_count',
+            'departures_count',
             'started_at',
             'completed_at',
             'completed_by',
+            'completed_by_name',
             'notes',
             'logs',
-            'property_name', 'completed_by_name', 'status_display', 'duration_minutes'
+            'duration_minutes',
         ]
         
         read_only_fields = ['id', 'completed_at', 'completed_by']
+        extra_kwargs = {
+            'property': {'required': False},
+        }
     
     def get_duration_minutes(self, obj):
         """Calculate audit duration in minutes."""

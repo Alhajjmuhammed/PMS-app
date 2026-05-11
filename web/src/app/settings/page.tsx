@@ -89,11 +89,23 @@ export default function SettingsPage() {
             </div>
             <div className="flex justify-between">
               <dt className="text-sm font-medium text-gray-500">Role:</dt>
-              <dd className="text-sm text-gray-900">{user?.role}</dd>
+              <dd className="text-sm text-gray-900">
+                {user?.is_superuser ? (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-semibold bg-purple-100 text-purple-800">
+                    ★ Super Admin
+                  </span>
+                ) : (
+                  user?.role?.replace('_', ' ')
+                )}
+              </dd>
             </div>
             <div className="flex justify-between">
               <dt className="text-sm font-medium text-gray-500">Property:</dt>
-              <dd className="text-sm text-gray-900">{user?.assigned_property?.name || 'N/A'}</dd>
+              <dd className="text-sm text-gray-900">
+                {user?.is_superuser
+                  ? <span className="text-purple-700 font-medium">All Properties (Platform)</span>
+                  : user?.assigned_property?.name || 'N/A'}
+              </dd>
             </div>
           </dl>
         </Card>

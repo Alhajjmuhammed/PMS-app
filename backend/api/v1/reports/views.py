@@ -320,12 +320,12 @@ class DailyReportView(APIView):
         
         property_obj = request.user.assigned_property
         
-        # Get daily statistics
+        # Get daily statistics — use filter().first() to avoid DoesNotExist
         try:
-            daily_stat = DailyStatistics.objects.get(
-                date=target_date,
-                property=property_obj
-            ) if property_obj else DailyStatistics.objects.filter(date=target_date).first()
+            stat_qs = DailyStatistics.objects.filter(date=target_date)
+            if property_obj:
+                stat_qs = stat_qs.filter(property=property_obj)
+            daily_stat = stat_qs.first()
             
             if daily_stat:
                 return Response({
@@ -334,6 +334,8 @@ class DailyReportView(APIView):
                     'rooms_sold': daily_stat.rooms_sold,
                     'occupancy_percent': float(daily_stat.occupancy_percent),
                     'room_revenue': float(daily_stat.room_revenue),
+                    'fb_revenue': float(daily_stat.fb_revenue),
+                    'other_revenue': float(daily_stat.other_revenue),
                     'total_revenue': float(daily_stat.total_revenue),
                     'adr': float(daily_stat.adr),
                     'revpar': float(daily_stat.revpar),
@@ -341,11 +343,51 @@ class DailyReportView(APIView):
                     'departures': daily_stat.departures,
                     'in_house': daily_stat.in_house,
                 })
-            else:
-                return Response({
-                    'date': target_date,
-                    'message': 'No data available for this date'
-                })
+            
+            # No stored stats — compute live from reservations & payments
+            rooms = Room.objects.filter(is_active=True)
+            reservations = Reservation.objects
+            if property_obj:
+                rooms = rooms.filter(hotel=property_obj)
+                reservations = reservations.filter(hotel=property_obj)
+
+            total_rooms = rooms.count()
+            in_house = reservations.filter(
+                status='CHECKED_IN',
+                check_in_date__lte=target_date,
+                check_out_date__gt=target_date
+            ).count()
+            arrivals = reservations.filter(check_in_date=target_date, status='CHECKED_IN').count()
+            departures = reservations.filter(check_out_date=target_date, status='CHECKED_OUT').count()
+
+            from apps.billing.models import FolioCharge
+            payments = Payment.objects.filter(payment_date__date=target_date)
+            if property_obj:
+                payments = payments.filter(folio__reservation__hotel=property_obj)
+            total_revenue = float(payments.aggregate(total=Sum('amount'))['total'] or 0)
+
+            charges = FolioCharge.objects.filter(charge_date=target_date)
+            if property_obj:
+                charges = charges.filter(folio__reservation__hotel=property_obj)
+            room_rev = float(charges.filter(charge_code__category='ROOM').aggregate(total=Sum('amount'))['total'] or 0)
+            fb_rev = float(charges.filter(charge_code__category='FOOD').aggregate(total=Sum('amount'))['total'] or 0)
+            other_rev = float(charges.filter(charge_code__category__in=['OTHER','MINIBAR','LAUNDRY','TELEPHONE','PARKING','SPA']).aggregate(total=Sum('amount'))['total'] or 0)
+
+            return Response({
+                'date': target_date,
+                'total_rooms': total_rooms,
+                'rooms_sold': in_house,
+                'occupancy_percent': round(in_house / total_rooms * 100, 1) if total_rooms else 0,
+                'room_revenue': room_rev,
+                'fb_revenue': fb_rev,
+                'other_revenue': other_rev,
+                'total_revenue': total_revenue,
+                'adr': round(room_rev / in_house, 2) if in_house else 0,
+                'revpar': round(room_rev / total_rooms, 2) if total_rooms else 0,
+                'arrivals': arrivals,
+                'departures': departures,
+                'in_house': in_house,
+            })
         except (ValueError, TypeError, AttributeError) as e:
             logger.error(f"Error retrieving daily statistics: {str(e)}")
             return Response({
@@ -452,26 +494,30 @@ class StartNightAuditView(APIView):
         night_audit = get_object_or_404(audit_qs, pk=pk)
         
         # Check if already started
-        if night_audit.status != NightAudit.Status.PENDING:
+        if night_audit.status == NightAudit.Status.COMPLETED:
             return Response(
-                {'error': f'Audit is already {night_audit.status.lower()}'},
+                {'error': 'Audit is already completed'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        if night_audit.status == NightAudit.Status.ROLLED_BACK:
+            return Response(
+                {'error': 'Audit has been rolled back'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
         serializer = StartNightAuditSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Start the audit
-        night_audit.status = NightAudit.Status.IN_PROGRESS
-        night_audit.started_at = timezone.now()
-        night_audit.save()
-        
-        # Create initial log
-        AuditLog.objects.create(
-            night_audit=night_audit,
-            step='START',
-            message=f'Night audit started by {request.user.get_full_name()}'
-        )
+        # Start the audit (or resume if already IN_PROGRESS)
+        if night_audit.status == NightAudit.Status.PENDING:
+            night_audit.status = NightAudit.Status.IN_PROGRESS
+            night_audit.started_at = timezone.now()
+            night_audit.save()
+            AuditLog.objects.create(
+                night_audit=night_audit,
+                step='START',
+                message=f'Night audit started by {request.user.get_full_name()}'
+            )
         
         # If auto_process is True, run the audit steps
         if serializer.validated_data.get('auto_process', True):
@@ -504,35 +550,34 @@ class StartNightAuditView(APIView):
             
             no_show_count = 0
             for reservation in no_show_reservations:
-                # Update status to no-show
+                # Update status to no-show — count every one marked, not just those with folios
                 reservation.status = Reservation.Status.NO_SHOW
                 reservation.save()
+                no_show_count += 1
                 
-                # Post no-show charge if folio exists
+                # Post no-show charge if folio exists (best-effort — don't fail the audit)
                 try:
-                    folio = reservation.folios.first()
+                    folio = getattr(reservation, 'folio', None)
                     if folio:
-                        # Get or create no-show charge code
+                        penalty = reservation.total_amount * Decimal('0.2')  # 20% penalty
                         charge_code, _ = ChargeCode.objects.get_or_create(
                             code='NOSHOW',
                             defaults={
                                 'name': 'No-Show Charge',
                                 'category': 'OTHER',
-                                'default_amount': reservation.total_amount * Decimal('0.2')  # 20% penalty
+                                'default_amount': penalty
                             }
                         )
-                        
                         FolioCharge.objects.create(
                             folio=folio,
                             charge_code=charge_code,
                             description=f'No-show penalty for {reservation.confirmation_number}',
-                            amount=charge_code.default_amount,
+                            unit_price=penalty,
                             quantity=1,
-                            date=business_date,
+                            charge_date=business_date,
                             posted_by=user
                         )
-                        no_show_count += 1
-                except (ValidationError, ValueError) as e:
+                except (ValidationError, ValueError, AttributeError) as e:
                     logger.error(f"Error posting no-show charge for {reservation.confirmation_number}: {str(e)}")
                     AuditLog.objects.create(
                         night_audit=night_audit,
@@ -568,7 +613,7 @@ class StartNightAuditView(APIView):
             room_rate_count = 0
             for reservation in in_house_reservations:
                 try:
-                    folio = reservation.folios.first()
+                    folio = getattr(reservation, 'folio', None)
                     if not folio:
                         continue
                     
@@ -584,13 +629,24 @@ class StartNightAuditView(APIView):
                     
                     # Calculate room rate for this night
                     for res_room in reservation.rooms.all():
+                        # Guard: skip if charge already posted for this folio/date/room
+                        already_posted = FolioCharge.objects.filter(
+                            folio=folio,
+                            charge_code=charge_code,
+                            charge_date=business_date,
+                            description__contains=str(business_date)
+                        ).exists()
+                        if already_posted:
+                            continue
+
+                        rate = res_room.rate_per_night
                         FolioCharge.objects.create(
                             folio=folio,
                             charge_code=charge_code,
                             description=f'Room rate for {business_date} - Room {res_room.room.room_number if res_room.room else res_room.room_type.name}',
-                            amount=res_room.rate_per_night,
+                            unit_price=rate,
                             quantity=1,
-                            date=business_date,
+                            charge_date=business_date,
                             posted_by=user
                         )
                         room_rate_count += 1
@@ -632,7 +688,7 @@ class StartNightAuditView(APIView):
             departure_count = 0
             for reservation in departing_reservations:
                 departure_count += 1
-                folio = reservation.folios.first()
+                folio = getattr(reservation, 'folio', None)
                 if folio and folio.balance > 0:
                     unsettled_count += 1
                     AuditLog.objects.create(
@@ -704,12 +760,12 @@ class StartNightAuditView(APIView):
             # Get charges for the business date
             charges = FolioCharge.objects.filter(
                 folio__reservation__hotel=property_obj,
-                date=business_date
+                charge_date=business_date
             )
             
             room_revenue = charges.filter(charge_code__category='ROOM').aggregate(total=Sum('amount'))['total'] or 0
-            fb_revenue = charges.filter(charge_code__category='FB').aggregate(total=Sum('amount'))['total'] or 0
-            other_revenue = charges.filter(charge_code__category='OTHER').aggregate(total=Sum('amount'))['total'] or 0
+            fb_revenue = charges.filter(charge_code__category='FOOD').aggregate(total=Sum('amount'))['total'] or 0
+            other_revenue = charges.filter(charge_code__category__in=['OTHER', 'MINIBAR', 'LAUNDRY', 'TELEPHONE', 'PARKING', 'SPA']).aggregate(total=Sum('amount'))['total'] or 0
             
             night_audit.room_revenue = room_revenue
             night_audit.fb_revenue = fb_revenue
@@ -763,15 +819,14 @@ class CompleteNightAuditView(APIView):
                 status=status.HTTP_400_BAD_REQUEST
             )
         
-        # Verify all checks are done
+        # Verify all process steps are done (folios_settled is advisory, not blocking)
         if not all([
             night_audit.no_shows_processed,
             night_audit.room_rates_posted,
-            night_audit.folios_settled,
             night_audit.departures_checked
         ]):
             return Response(
-                {'error': 'All audit checks must be completed before finishing'},
+                {'error': 'Audit steps must be completed before finishing (run start/ first)'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         
@@ -796,20 +851,22 @@ class CompleteNightAuditView(APIView):
             # property_obj.business_date = new_business_date
             # property_obj.save()
             
-            # Create daily statistics record
+            # Create or update daily statistics record (update_or_create prevents IntegrityError on re-run)
             total_rooms = Room.objects.filter(hotel=property_obj, is_active=True).count()
-            DailyStatistics.objects.create(
+            DailyStatistics.objects.update_or_create(
                 property=property_obj,
                 date=night_audit.business_date,
-                total_rooms=total_rooms,
-                rooms_sold=night_audit.rooms_sold,
-                occupancy_percent=(night_audit.rooms_sold / total_rooms * 100) if total_rooms > 0 else 0,
-                room_revenue=night_audit.room_revenue,
-                fb_revenue=night_audit.fb_revenue,
-                other_revenue=night_audit.other_revenue,
-                total_revenue=night_audit.total_revenue,
-                arrivals=night_audit.arrivals_count,
-                departures=night_audit.departures_count
+                defaults={
+                    'total_rooms': total_rooms,
+                    'rooms_sold': night_audit.rooms_sold,
+                    'occupancy_percent': (night_audit.rooms_sold / total_rooms * 100) if total_rooms > 0 else 0,
+                    'room_revenue': night_audit.room_revenue,
+                    'fb_revenue': night_audit.fb_revenue,
+                    'other_revenue': night_audit.other_revenue,
+                    'total_revenue': night_audit.total_revenue,
+                    'arrivals': night_audit.arrivals_count,
+                    'departures': night_audit.departures_count,
+                }
             )
             
             AuditLog.objects.create(

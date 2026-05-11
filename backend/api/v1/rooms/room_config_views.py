@@ -19,14 +19,14 @@ from .room_config_serializers import (
     RoomStatusLogSerializer,
     BulkAmenityAssignSerializer
 )
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsFrontDeskOrAbove
 
 
 # ===== Room Types =====
 
 class RoomTypeListCreateView(generics.ListCreateAPIView):
     """List all room types or create new room type."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['is_active']
@@ -35,14 +35,20 @@ class RoomTypeListCreateView(generics.ListCreateAPIView):
     ordering = ['sort_order', 'name']
     
     def get_queryset(self):
-        return RoomType.objects.filter(
-            hotel=self.request.user.assigned_property
-        ).annotate(
-            rooms_count=Count('rooms')
-        )
+        qs = RoomType.objects.annotate(rooms_count=Count('rooms'))
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
+        return qs
     
     def perform_create(self, serializer):
-        serializer.save(hotel=self.request.user.assigned_property)
+        from apps.properties.models import Property
+        from django.db import IntegrityError
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        prop = self.request.user.assigned_property or Property.objects.first()
+        try:
+            serializer.save(hotel=prop)
+        except IntegrityError:
+            raise DRFValidationError({'code': 'A room type with this code already exists for this property.'})
 
 
 class RoomTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -51,21 +57,22 @@ class RoomTypeDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = RoomTypeDetailSerializer
     
     def get_queryset(self):
-        return RoomType.objects.filter(
-            hotel=self.request.user.assigned_property
-        ).prefetch_related('amenities', 'rooms')
+        qs = RoomType.objects.prefetch_related('amenities', 'rooms')
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
+        return qs
 
 
 class ActiveRoomTypesView(generics.ListAPIView):
     """List only active room types."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeSerializer
     
     def get_queryset(self):
-        return RoomType.objects.filter(
-            hotel=self.request.user.assigned_property,
-            is_active=True
-        ).order_by('sort_order', 'name')
+        qs = RoomType.objects.filter(is_active=True).order_by('sort_order', 'name')
+        if self.request.user.assigned_property:
+            qs = qs.filter(hotel=self.request.user.assigned_property)
+        return qs
 
 
 # ===== Room Amenities =====
@@ -78,10 +85,10 @@ class RoomAmenityListCreateView(generics.ListCreateAPIView):
     are master data shared across all properties. Properties then assign these
     amenities to their room types via RoomTypeAmenity which IS property-scoped.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomAmenitySerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['category', 'is_active']
+    filterset_fields = ['category']
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'category']
     ordering = ['category', 'name']
@@ -108,7 +115,7 @@ class ActiveRoomAmenitiesView(generics.ListAPIView):
     
     NOTE: Intentionally GLOBAL - Master amenity catalog.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomAmenitySerializer
     
     def get_queryset(self):
@@ -119,7 +126,7 @@ class ActiveRoomAmenitiesView(generics.ListAPIView):
 
 class RoomTypeAmenityListCreateView(generics.ListCreateAPIView):
     """List all room type amenity assignments or create new."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeAmenitySerializer
     filter_backends = [DjangoFilterBackend]
     filterset_fields = ['room_type', 'amenity', 'is_complimentary']
@@ -143,7 +150,7 @@ class RoomTypeAmenityDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class RoomTypeAmenitiesByTypeView(generics.ListAPIView):
     """Get all amenities for a specific room type."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomTypeAmenitySerializer
     
     def get_queryset(self):
@@ -203,12 +210,12 @@ class BulkAmenityAssignView(APIView):
 
 class RoomImageListCreateView(generics.ListCreateAPIView):
     """List all room images or upload new image."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomImageSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['room', 'is_primary']
-    ordering_fields = ['display_order', 'created_at']
-    ordering = ['display_order']
+    ordering_fields = ['sort_order', 'uploaded_at']
+    ordering = ['sort_order']
     
     def get_queryset(self):
         return RoomImage.objects.filter(
@@ -229,7 +236,7 @@ class RoomImageDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class RoomImagesByRoomView(generics.ListAPIView):
     """Get all images for a specific room."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomImageSerializer
     
     def get_queryset(self):
@@ -237,19 +244,19 @@ class RoomImagesByRoomView(generics.ListAPIView):
         return RoomImage.objects.filter(
             room_id=room_id,
             room__hotel=self.request.user.assigned_property
-        ).order_by('display_order')
+        ).order_by('sort_order')
 
 
 # ===== Room Status Logs =====
 
 class RoomStatusLogListCreateView(generics.ListCreateAPIView):
     """List all room status logs or create new log."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomStatusLogSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
-    filterset_fields = ['room', 'old_status', 'new_status', 'changed_by']
-    ordering_fields = ['changed_at', 'created_at']
-    ordering = ['-changed_at']
+    filterset_fields = ['room', 'previous_status', 'new_status', 'changed_by']
+    ordering_fields = ['timestamp']
+    ordering = ['-timestamp']
     
     def get_queryset(self):
         queryset = RoomStatusLog.objects.filter(
@@ -261,9 +268,9 @@ class RoomStatusLogListCreateView(generics.ListCreateAPIView):
         end_date = self.request.query_params.get('end_date')
         
         if start_date:
-            queryset = queryset.filter(changed_at__date__gte=start_date)
+            queryset = queryset.filter(timestamp__date__gte=start_date)
         if end_date:
-            queryset = queryset.filter(changed_at__date__lte=end_date)
+            queryset = queryset.filter(timestamp__date__lte=end_date)
         
         return queryset
     
@@ -273,7 +280,7 @@ class RoomStatusLogListCreateView(generics.ListCreateAPIView):
 
 class RoomStatusLogDetailView(generics.RetrieveAPIView):
     """Retrieve a room status log."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomStatusLogSerializer
     
     def get_queryset(self):
@@ -284,7 +291,7 @@ class RoomStatusLogDetailView(generics.RetrieveAPIView):
 
 class RoomStatusLogsByRoomView(generics.ListAPIView):
     """Get status history for a specific room."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = RoomStatusLogSerializer
     
     def get_queryset(self):
@@ -297,7 +304,7 @@ class RoomStatusLogsByRoomView(generics.ListAPIView):
 
 class RoomConfigStatsView(APIView):
     """Get room configuration statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         property_obj = request.user.assigned_property
@@ -309,7 +316,7 @@ class RoomConfigStatsView(APIView):
             active=Count('id', filter=Q(is_active=True))
         )
         
-        total_amenities = RoomAmenity.objects.filter(is_active=True).count()
+        total_amenities = RoomAmenity.objects.count()
         
         total_images = RoomImage.objects.filter(
             room__hotel=property_obj

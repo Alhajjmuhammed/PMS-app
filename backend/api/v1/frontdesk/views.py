@@ -114,30 +114,24 @@ class CheckInView(APIView):
         # Auto-create folio if it doesn't exist
         folio = Folio.objects.filter(reservation=reservation, status='OPEN').first()
         if not folio:
-            folio_data = {
-                'reservation': reservation.id,
-                'guest': reservation.guest.id,
-                'folio_type': 'STANDARD',
-                'property': reservation.property.id,
-                'currency': 'USD',
-                'balance': Decimal('0.00')
-            }
-            folio_serializer = FolioCreateSerializer(data=folio_data, context={'request': request})
-            if folio_serializer.is_valid():
-                folio = folio_serializer.save()
-            else:
-                return Response(
-                    {'error': 'Failed to create folio', 'details': folio_serializer.errors},
-                    status=status.HTTP_400_BAD_REQUEST
-                )
+            import uuid as _uuid
+            folio = Folio.objects.create(
+                folio_number=f"F-{_uuid.uuid4().hex[:8].upper()}",
+                folio_type='STANDARD',
+                reservation=reservation,
+                guest=reservation.guest,
+            )
         
         # Create check-in
+        import uuid as _uuid2
+        reg_number = f"REG-{_uuid2.uuid4().hex[:10].upper()}"
         check_in = CheckIn.objects.create(
             reservation=reservation,
             room=room,
+            guest=reservation.guest,
             checked_in_by=request.user,
-            id_verified=data.get('id_verified', True),
-            key_cards_issued=data.get('key_cards_issued', 2)
+            expected_check_out=reservation.check_out_date,
+            registration_number=reg_number,
         )
         
         # Update reservation status

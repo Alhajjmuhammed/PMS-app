@@ -6,12 +6,13 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db.models import Q
 from apps.billing.models import Folio, FolioCharge, Payment, ChargeCode
 from apps.billing.services import (
     BillingService, InvoiceService, PDFService,
     BillingServiceError, FolioClosedError, InsufficientBalanceError
 )
-from api.permissions import IsAccountantOrAbove
+from api.permissions import IsAccountantOrAbove, CanViewBilling
 from .serializers import (
     FolioSerializer, FolioListSerializer, FolioCreateSerializer,
     ChargeCodeSerializer, ChargeCodeCreateSerializer,
@@ -21,7 +22,7 @@ from .serializers import (
 
 class FolioListCreateView(generics.ListCreateAPIView):
     """List all folios or create a new folio."""
-    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    permission_classes = [IsAuthenticated, CanViewBilling]
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'folio_type', 'guest']
     search_fields = ['folio_number', 'guest__first_name', 'guest__last_name']
@@ -32,18 +33,33 @@ class FolioListCreateView(generics.ListCreateAPIView):
         qs = Folio.objects.select_related('guest', 'reservation', 'company')
         prop = self.request.user.assigned_property
         if prop:
-            qs = qs.filter(reservation__hotel=prop)
+            qs = qs.filter(
+                Q(reservation__hotel=prop) |
+                Q(reservation__isnull=True, guest__home_property=prop)
+            )
         return qs
     
     def get_serializer_class(self):
         if self.request.method == 'POST':
             return FolioCreateSerializer
         return FolioListSerializer
+    
+    def perform_create(self, serializer):
+        prop = self.request.user.assigned_property
+        if prop:
+            from rest_framework.exceptions import ValidationError
+            guest = serializer.validated_data.get('guest')
+            if guest and guest.home_property_id and guest.home_property_id != prop.id:
+                raise ValidationError({'guest': 'Guest does not belong to your property.'})
+            reservation = serializer.validated_data.get('reservation')
+            if reservation and reservation.hotel_id != prop.id:
+                raise ValidationError({'reservation': 'Reservation does not belong to your property.'})
+        serializer.save()
 
 
 class FolioDetailView(generics.RetrieveUpdateAPIView):
     """Retrieve or update a folio."""
-    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
+    permission_classes = [IsAuthenticated, CanViewBilling]
     serializer_class = FolioSerializer
     
     def get_queryset(self):
@@ -51,7 +67,10 @@ class FolioDetailView(generics.RetrieveUpdateAPIView):
                           .prefetch_related('charges', 'payments')
         prop = self.request.user.assigned_property
         if prop:
-            qs = qs.filter(reservation__hotel=prop)
+            qs = qs.filter(
+                Q(reservation__hotel=prop) |
+                Q(reservation__isnull=True, guest__home_property=prop)
+            )
         return qs
 
 
@@ -223,7 +242,9 @@ class FolioExportView(APIView):
         
         # Generate PDF using service layer
         try:
-            from reportlab.lib.pagesizes import letter, A4
+            from io import BytesIO
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import letter
             from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
             from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
             from reportlab.lib.units import inch
@@ -452,8 +473,18 @@ class InvoiceListView(generics.ListCreateAPIView):
         return Response(InvoiceSerializer(invoices, many=True).data)
     
     def post(self, request):
-        from apps.billing.models import Invoice
+        from apps.billing.models import Invoice, Folio
         from .serializers import InvoiceSerializer
+        from django.db.models import Q
+        
+        prop = request.user.assigned_property
+        folio_id = request.data.get('folio')
+        if folio_id and prop:
+            folio_qs = Folio.objects.filter(pk=folio_id).filter(
+                Q(reservation__hotel=prop) | Q(guest__home_property=prop)
+            )
+            if not folio_qs.exists():
+                return Response({'error': 'Folio not found'}, status=status.HTTP_404_NOT_FOUND)
         
         serializer = InvoiceSerializer(data=request.data)
         if serializer.is_valid():

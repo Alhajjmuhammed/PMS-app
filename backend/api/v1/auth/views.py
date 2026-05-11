@@ -209,6 +209,9 @@ class ProfileView(APIView):
         serializer.save()
         return Response(serializer.data)
 
+    def patch(self, request):
+        return self.put(request)
+
 
 class ChangePasswordView(APIView):
     permission_classes = [IsAuthenticated]
@@ -241,9 +244,16 @@ class UserListCreateView(generics.ListCreateAPIView):
     serializer_class = UserManagementSerializer
 
     def perform_create(self, serializer):
+        user = self.request.user
         # Non-superadmins can only create users in their own property.
-        if not self.request.user.is_superuser and self.request.user.assigned_property:
-            serializer.save(assigned_property=self.request.user.assigned_property)
+        if not user.is_superuser and user.assigned_property:
+            # MANAGER cannot assign ADMIN or MANAGER roles (privilege escalation)
+            if user.role == 'MANAGER':
+                requested_role = serializer.validated_data.get('role', '')
+                if requested_role in ('ADMIN', 'MANAGER'):
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied('Managers cannot create Admin or Manager accounts.')
+            serializer.save(assigned_property=user.assigned_property)
         else:
             serializer.save()
 
@@ -253,6 +263,10 @@ class UserListCreateView(generics.ListCreateAPIView):
         # Superadmin sees everyone; others see only their property
         if not self.request.user.is_superuser and self.request.user.assigned_property:
             queryset = queryset.filter(assigned_property=self.request.user.assigned_property)
+
+        # MANAGER can only see roles they are allowed to manage (not ADMIN or MANAGER)
+        if not self.request.user.is_superuser and self.request.user.role == 'MANAGER':
+            queryset = queryset.exclude(role__in=('ADMIN', 'MANAGER'))
 
         # Filter by role
         role = self.request.query_params.get('role')
@@ -273,9 +287,16 @@ class UserDetailView(generics.RetrieveUpdateDestroyAPIView):
     serializer_class = UserManagementSerializer
 
     def perform_update(self, serializer):
+        user = self.request.user
         # Non-superadmins cannot move a user to a different property.
-        if not self.request.user.is_superuser and self.request.user.assigned_property:
-            serializer.save(assigned_property=self.request.user.assigned_property)
+        if not user.is_superuser and user.assigned_property:
+            # MANAGER cannot promote a user to ADMIN or MANAGER
+            if user.role == 'MANAGER':
+                requested_role = serializer.validated_data.get('role')
+                if requested_role in ('ADMIN', 'MANAGER'):
+                    from rest_framework.exceptions import PermissionDenied
+                    raise PermissionDenied('Managers cannot assign Admin or Manager roles.')
+            serializer.save(assigned_property=user.assigned_property)
         else:
             serializer.save()
 

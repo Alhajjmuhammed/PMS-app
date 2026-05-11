@@ -26,8 +26,8 @@ urlpatterns = [
     path('night-audits/', reports_views.NightAuditListCreateView.as_view(), name='night_audit_list'),
     path('night-audits/<int:pk>/', reports_views.NightAuditDetailView.as_view(), name='night_audit_detail'),
     path('night-audits/pending/', reports_views.PendingNightAuditsView.as_view(), name='pending_night_audits'),
-    path('night-audits/<int:pk>/start/', reports_views.StartNightAuditView.as_view(), name='night_audit_start'),
-    path('night-audits/<int:pk>/complete/', reports_views.CompleteNightAuditView.as_view(), name='night_audit_complete'),
+    path('night-audits/<int:pk>/start/', views.StartNightAuditView.as_view(), name='night_audit_start'),
+    path('night-audits/<int:pk>/complete/', views.CompleteNightAuditView.as_view(), name='night_audit_complete'),
     path('night-audits/<int:audit_id>/logs/', reports_views.AuditLogListView.as_view(), name='audit_logs'),
     path('night-audits/dashboard/', reports_views.NightAuditDashboardView.as_view(), name='night_audit_dashboard'),
     

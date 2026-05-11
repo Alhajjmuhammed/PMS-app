@@ -32,7 +32,7 @@ class Folio(models.Model):
     company = models.ForeignKey('guests.Company', on_delete=models.SET_NULL, null=True, blank=True, related_name='folios')
     
     # Dates
-    open_date = models.DateField(_('open date'), default=timezone.now)
+    open_date = models.DateField(_('open date'), default=timezone.localdate)
     close_date = models.DateField(_('close date'), null=True, blank=True)
     
     # Amounts
@@ -202,7 +202,7 @@ class Invoice(models.Model):
     folio = models.ForeignKey(Folio, on_delete=models.CASCADE, related_name='invoices')
     
     status = models.CharField(_('status'), max_length=20, choices=Status.choices, default=Status.DRAFT)
-    invoice_date = models.DateField(_('invoice date'), default=timezone.now)
+    invoice_date = models.DateField(_('invoice date'), default=timezone.localdate)
     due_date = models.DateField(_('due date'), null=True, blank=True)
     
     # Amounts

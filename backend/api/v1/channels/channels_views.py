@@ -69,7 +69,7 @@ class PropertyChannelDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class ActivePropertyChannelsView(generics.ListAPIView):
     """List active property channels."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = PropertyChannelSerializer
     
     def get_queryset(self):
@@ -162,7 +162,7 @@ class RoomTypeMappingDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class RoomTypeMappingsByChannelView(generics.ListAPIView):
     """Get room type mappings for a specific channel."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomTypeMappingSerializer
     
     def get_queryset(self):
@@ -202,7 +202,7 @@ class RatePlanMappingDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class RatePlanMappingsByChannelView(generics.ListAPIView):
     """Get rate plan mappings for a specific channel."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RatePlanMappingSerializer
     
     def get_queryset(self):
@@ -217,7 +217,7 @@ class RatePlanMappingsByChannelView(generics.ListAPIView):
 
 class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
     """List all availability updates or create new update."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = AvailabilityUpdateSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['property_channel', 'room_type', 'status']
@@ -243,7 +243,7 @@ class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
 
 class AvailabilityUpdateDetailView(generics.RetrieveAPIView):
     """Retrieve an availability update."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = AvailabilityUpdateSerializer
     
     def get_queryset(self):
@@ -298,7 +298,7 @@ class BulkAvailabilityUpdateView(APIView):
 
 class RateUpdateListCreateView(generics.ListCreateAPIView):
     """List all rate updates or create new update."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RateUpdateSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['property_channel', 'room_type', 'rate_plan', 'status']
@@ -324,7 +324,7 @@ class RateUpdateListCreateView(generics.ListCreateAPIView):
 
 class RateUpdateDetailView(generics.RetrieveAPIView):
     """Retrieve a rate update."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RateUpdateSerializer
     
     def get_queryset(self):
@@ -380,7 +380,7 @@ class BulkRateUpdateView(APIView):
 
 class ChannelReservationListView(generics.ListAPIView):
     """List all channel reservations."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = ChannelReservationSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['property_channel', 'status']
@@ -407,7 +407,7 @@ class ChannelReservationListView(generics.ListAPIView):
 
 class ChannelReservationDetailView(generics.RetrieveAPIView):
     """Retrieve a channel reservation."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = ChannelReservationSerializer
     
     def get_queryset(self):
@@ -418,7 +418,7 @@ class ChannelReservationDetailView(generics.RetrieveAPIView):
 
 class UnprocessedChannelReservationsView(generics.ListAPIView):
     """List unprocessed channel reservations."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = ChannelReservationSerializer
     
     def get_queryset(self):
@@ -432,7 +432,7 @@ class UnprocessedChannelReservationsView(generics.ListAPIView):
 
 class ChannelDashboardView(APIView):
     """Get channel dashboard statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     
     def get(self, request):
         from django.db import models
@@ -519,7 +519,7 @@ class ChannelListView(generics.ListAPIView):
     are master data shared across all properties. Each property then links 
     to these channels via PropertyChannel model which IS property-scoped.
     """
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = ChannelSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'code']

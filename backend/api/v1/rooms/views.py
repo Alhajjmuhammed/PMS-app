@@ -5,6 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.db.models import Count
+from django.db import IntegrityError
 from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from django.utils.decorators import method_decorator
@@ -14,7 +15,7 @@ from datetime import date, timedelta
 from apps.rooms.models import Room, RoomType, RoomStatusLog, RoomImage, RoomAmenity, RoomTypeAmenity
 from apps.reservations.models import Reservation
 from apps.core.cache_utils import CacheManager
-from api.permissions import IsHousekeepingStaff, IsAdminOrManager, IsFrontDeskOrAbove
+from api.permissions import IsHousekeepingStaff, IsAdminOrManager, IsFrontDeskOrAbove, IsFrontDeskOrHousekeeping
 from .serializers import (
     RoomSerializer, RoomTypeSerializer, RoomStatusUpdateSerializer, 
     RoomImageSerializer, RoomAmenitySerializer, RoomAmenityListSerializer,
@@ -23,7 +24,7 @@ from .serializers import (
 
 
 class RoomListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrHousekeeping]
     serializer_class = RoomSerializer
     filter_backends = [DjangoFilterBackend, SearchFilter, OrderingFilter]
     filterset_fields = ['status', 'room_type', 'floor']
@@ -33,19 +34,27 @@ class RoomListView(generics.ListAPIView):
     
     def get_queryset(self):
         qs = Room.objects.select_related('room_type', 'floor__building').filter(is_active=True)
-        
+
         if self.request.user.assigned_property:
             qs = qs.filter(hotel=self.request.user.assigned_property)
-        
+
+        # Housekeeping staff only see rooms they have been assigned tasks for
+        if self.request.user.role == 'HOUSEKEEPING':
+            from apps.housekeeping.models import HousekeepingTask
+            assigned_room_ids = HousekeepingTask.objects.filter(
+                assigned_to=self.request.user
+            ).values_list('room_id', flat=True).distinct()
+            qs = qs.filter(id__in=assigned_room_ids)
+
         floor = self.request.query_params.get('floor')
         if floor:
             qs = qs.filter(floor_id=floor)
-        
+
         return qs.order_by('room_number')
 
 
 class RoomDetailView(generics.RetrieveUpdateDestroyAPIView):
-    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]  # detail/edit: front desk+ only (not housekeeping)
     serializer_class = RoomSerializer
     
     def get_queryset(self):
@@ -67,11 +76,15 @@ class RoomCreateView(generics.CreateAPIView):
         return qs
     
     def perform_create(self, serializer):
+        from rest_framework.exceptions import ValidationError as DRFValidationError
         prop = self.request.user.assigned_property
-        if prop:
-            serializer.save(hotel=prop)
-        else:
-            serializer.save()
+        try:
+            if prop:
+                serializer.save(hotel=prop)
+            else:
+                serializer.save()
+        except IntegrityError:
+            raise DRFValidationError({'room_number': 'A room with this number already exists in this property.'})
 
 
 class UpdateRoomStatusView(APIView):
@@ -104,7 +117,7 @@ class UpdateRoomStatusView(APIView):
         # Log the status change
         RoomStatusLog.objects.create(
             room=room,
-            old_status=old_status,
+            previous_status=old_status,
             new_status=room.status,
             changed_by=request.user,
             notes=serializer.validated_data.get('notes', '')
@@ -271,7 +284,10 @@ class RoomImageListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         room_id = self.kwargs.get('room_id')
-        return RoomImage.objects.filter(room_id=room_id)
+        qs = RoomImage.objects.filter(room_id=room_id)
+        if self.request.user.assigned_property:
+            qs = qs.filter(room__hotel=self.request.user.assigned_property)
+        return qs
     
     def perform_create(self, serializer):
         room_id = self.kwargs.get('room_id')
@@ -340,7 +356,10 @@ class RoomTypeAmenityListCreateView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         room_type_id = self.kwargs.get('room_type_id')
-        return RoomTypeAmenity.objects.filter(room_type_id=room_type_id).select_related('amenity')
+        qs = RoomTypeAmenity.objects.filter(room_type_id=room_type_id).select_related('amenity')
+        if self.request.user.assigned_property:
+            qs = qs.filter(room_type__hotel=self.request.user.assigned_property)
+        return qs
 
 
 class RoomTypeAmenityDetailView(generics.DestroyAPIView):

@@ -150,11 +150,22 @@ class LinenInventory(models.Model):
         BEDSHEET = 'BEDSHEET', _('Bed Sheet')
         DUVET = 'DUVET', _('Duvet Cover')
         PILLOW_CASE = 'PILLOW_CASE', _('Pillow Case')
+        PILLOW = 'PILLOW', _('Pillow')
+        DUVET_INNER = 'DUVET_INNER', _('Duvet Inner')
+        MATTRESS_PAD = 'MATTRESS_PAD', _('Mattress Pad')
+        BED_RUNNER = 'BED_RUNNER', _('Bed Runner')
         BATH_TOWEL = 'BATH_TOWEL', _('Bath Towel')
         HAND_TOWEL = 'HAND_TOWEL', _('Hand Towel')
         FACE_TOWEL = 'FACE_TOWEL', _('Face Towel')
         BATH_MAT = 'BATH_MAT', _('Bath Mat')
         BATHROBE = 'BATHROBE', _('Bathrobe')
+        POOL_TOWEL = 'POOL_TOWEL', _('Pool Towel')
+        GYM_TOWEL = 'GYM_TOWEL', _('Gym Towel')
+        TABLE_CLOTH = 'TABLE_CLOTH', _('Table Cloth')
+        NAPKIN = 'NAPKIN', _('Napkin')
+        CHAIR_COVER = 'CHAIR_COVER', _('Chair Cover')
+        CURTAIN = 'CURTAIN', _('Curtain')
+        OTHER = 'OTHER', _('Other')
     
     hotel = models.ForeignKey(
         'properties.Property',

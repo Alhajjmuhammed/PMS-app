@@ -1,7 +1,6 @@
 {
   "compilerOptions": {
     "baseUrl": ".",
-    "ignoreDeprecations": "6.0",
     "strict": true,
     "target": "esnext",
     "module": "esnext",
@@ -16,6 +15,7 @@
     "resolveJsonModule": true,
     "isolatedModules": true,
     "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
     "paths": {
       "@/*": [
         "src/*"
@@ -25,7 +25,8 @@
   "exclude": [
     "node_modules",
     "babel.config.js",
-    "metro.config.js"
-  ],
-  "extends": "expo/tsconfig.base"
+    "metro.config.js",
+    "jest.config.js",
+    "jest.setup.js"
+  ]
 }

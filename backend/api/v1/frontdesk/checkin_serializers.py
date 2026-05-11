@@ -12,7 +12,7 @@ class CheckInSerializer(serializers.ModelSerializer):
     """Serializer for check-in operations."""
     
     guest_name = serializers.CharField(source='guest.full_name', read_only=True)
-    room_number = serializers.CharField(source='room.number', read_only=True)
+    room_number = serializers.CharField(source='room.room_number', read_only=True)
     reservation_number = serializers.CharField(source='reservation.confirmation_number', read_only=True)
     checked_in_by_name = serializers.CharField(source='checked_in_by.get_full_name', read_only=True)
     
@@ -67,7 +67,7 @@ class CheckOutSerializer(serializers.ModelSerializer):
     """Serializer for check-out operations."""
     
     guest_name = serializers.CharField(source='check_in.guest.full_name', read_only=True)
-    room_number = serializers.CharField(source='check_in.room.number', read_only=True)
+    room_number = serializers.CharField(source='check_in.room.room_number', read_only=True)
     check_in_time = serializers.DateTimeField(source='check_in.check_in_time', read_only=True)
     nights_stayed = serializers.SerializerMethodField()
     
@@ -119,8 +119,8 @@ class RoomMoveSerializer(serializers.ModelSerializer):
     """Serializer for room move operations."""
     
     guest_name = serializers.CharField(source='check_in.guest.full_name', read_only=True)
-    from_room_number = serializers.CharField(source='from_room.number', read_only=True)
-    to_room_number = serializers.CharField(source='to_room.number', read_only=True)
+    from_room_number = serializers.CharField(source='from_room.room_number', read_only=True)
+    to_room_number = serializers.CharField(source='to_room.room_number', read_only=True)
     moved_by_name = serializers.CharField(source='moved_by.get_full_name', read_only=True)
     
     class Meta:

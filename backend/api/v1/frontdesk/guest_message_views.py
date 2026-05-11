@@ -2,6 +2,7 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from api.permissions import IsFrontDeskOrAbove
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
@@ -16,7 +17,7 @@ from .guest_message_serializers import (
 
 class GuestMessageListCreateView(generics.ListCreateAPIView):
     """List all guest messages or create a new one."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['message_type', 'is_delivered', 'check_in']
     search_fields = ['message', 'from_name', 'check_in__guest__first_name', 'check_in__guest__last_name']
@@ -41,7 +42,7 @@ class GuestMessageListCreateView(generics.ListCreateAPIView):
 
 class GuestMessageDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a guest message."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestMessageSerializer
     
     def get_queryset(self):
@@ -57,7 +58,7 @@ class GuestMessageDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class MarkMessageDeliveredView(APIView):
     """Mark a message as delivered."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def post(self, request, pk):
         try:
@@ -89,7 +90,7 @@ class MarkMessageDeliveredView(APIView):
 
 class UndeliveredMessagesView(generics.ListAPIView):
     """Get all undelivered messages."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestMessageSerializer
     
     def get_queryset(self):
@@ -106,7 +107,7 @@ class UndeliveredMessagesView(generics.ListAPIView):
 
 class MessagesByCheckInView(generics.ListAPIView):
     """Get all messages for a specific check-in."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestMessageSerializer
     
     def get_queryset(self):
@@ -124,7 +125,7 @@ class MessagesByCheckInView(generics.ListAPIView):
 
 class MessagesByRoomView(generics.ListAPIView):
     """Get all messages for a specific room."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestMessageSerializer
     
     def get_queryset(self):
@@ -142,7 +143,7 @@ class MessagesByRoomView(generics.ListAPIView):
 
 class GuestMessageStatsView(APIView):
     """Get guest message statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
     def get(self, request):
         queryset = GuestMessage.objects.filter(

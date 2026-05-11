@@ -84,11 +84,12 @@ class GuestCreateSerializer(serializers.ModelSerializer):
     class Meta:
         model = Guest
         fields = [
-            'first_name', 'last_name', 'email', 'phone',
+            'id', 'first_name', 'last_name', 'email', 'phone',
             'date_of_birth', 'gender', 'nationality',
             'id_type', 'id_number',
             'address', 'city', 'state', 'country', 'postal_code'
         ]
+        read_only_fields = ['id']
     
     def validate_first_name(self, value):
         """Validate first name."""
@@ -112,9 +113,11 @@ class GuestCreateSerializer(serializers.ModelSerializer):
     
     def validate_email(self, value):
         """Validate email uniqueness and format."""
-        if Guest.objects.filter(email=value).exists():
-            raise serializers.ValidationError("A guest with this email already exists.")
-        return value.lower()
+        if value:  # only validate if provided
+            if Guest.objects.filter(email=value).exists():
+                raise serializers.ValidationError("A guest with this email already exists.")
+            return value.lower()
+        return value
     
     def validate_phone(self, value):
         """Validate phone number."""

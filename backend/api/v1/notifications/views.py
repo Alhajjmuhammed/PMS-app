@@ -234,11 +234,13 @@ class SendPushNotificationView(APIView):
         priority = data.get('priority', 'NORMAL')
         extra_data = data.get('data', {})
         
-        # Determine target users
+        # Determine target users — scoped to caller's property
+        prop = request.user.assigned_property
         target_users = []
         if data.get('user_id'):
             try:
-                target_users = [User.objects.get(id=data['user_id'])]
+                user_qs = User.objects.filter(assigned_property=prop) if prop else User.objects.all()
+                target_users = [user_qs.get(id=data['user_id'])]
             except User.DoesNotExist:
                 return Response(
                     {'error': 'User not found'},
@@ -246,6 +248,8 @@ class SendPushNotificationView(APIView):
                 )
         elif data.get('user_ids'):
             target_users = User.objects.filter(id__in=data['user_ids'])
+            if prop:
+                target_users = target_users.filter(assigned_property=prop)
         
         if not target_users:
             return Response(

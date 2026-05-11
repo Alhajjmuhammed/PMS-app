@@ -6,7 +6,7 @@ from django.utils import timezone
 class GuestMessageSerializer(serializers.ModelSerializer):
     """Serializer for guest messages."""
     guest_name = serializers.SerializerMethodField()
-    room_number = serializers.CharField(source='check_in.room.number', read_only=True)
+    room_number = serializers.CharField(source='check_in.room.room_number', read_only=True)
     taken_by_name = serializers.SerializerMethodField()
     message_type_display = serializers.CharField(source='get_message_type_display', read_only=True)
     

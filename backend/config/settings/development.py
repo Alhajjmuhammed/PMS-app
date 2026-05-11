@@ -44,6 +44,23 @@ SESSION_COOKIE_HTTPONLY = True
 CSRF_COOKIE_HTTPONLY = True
 SECURE_REFERRER_POLICY = 'same-origin'
 
+# Cache — always use local memory in development (no Redis required)
+CACHES = {
+    'default': {
+        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
+        'LOCATION': 'hotel-pms-dev-cache',
+        'TIMEOUT': 300,
+    }
+}
+SILENCED_SYSTEM_CHECKS = ['django_ratelimit.E003', 'django_ratelimit.W001']
+
+# Use DB-only sessions so they don't require the cache backend
+SESSION_ENGINE = 'django.contrib.sessions.backends.db'
+
+# Celery — run tasks synchronously in development (no broker needed)
+CELERY_TASK_ALWAYS_EAGER = True
+CELERY_TASK_EAGER_PROPAGATES = True
+
 # Debug Toolbar (optional)
 # INSTALLED_APPS += ['debug_toolbar']
 # MIDDLEWARE += ['debug_toolbar.middleware.DebugToolbarMiddleware']

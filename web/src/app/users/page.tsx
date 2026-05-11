@@ -39,6 +39,7 @@ interface User {
 interface Property { id: number; name: string; }
 
 const ROLES = ['ADMIN', 'MANAGER', 'FRONT_DESK', 'HOUSEKEEPING', 'MAINTENANCE', 'ACCOUNTANT', 'POS_STAFF'];
+const MANAGER_ASSIGNABLE_ROLES = ['FRONT_DESK', 'HOUSEKEEPING', 'MAINTENANCE', 'ACCOUNTANT', 'POS_STAFF'];
 
 const ROLE_COLORS: Record<string, string> = {
   ADMIN:        'bg-purple-100 text-purple-700',
@@ -185,6 +186,8 @@ export default function UsersPage() {
   const [roleFilter, setRoleFilter] = useState('');
 
   const isSuperAdmin = currentUser?.is_superuser === true;
+  const isManager = currentUser?.role === 'MANAGER' && !isSuperAdmin;
+  const assignableRoles = isSuperAdmin ? ROLES : isManager ? MANAGER_ASSIGNABLE_ROLES : ROLES;
 
   const showToast = (msg: string, ok = true) => {
     setToast({ msg, ok });
@@ -218,7 +221,9 @@ export default function UsersPage() {
   }, [authLoading, currentUser?.id]);
   useEffect(() => { setPage(1); }, [perPage, viewMode, roleFilter]);
 
-  const filtered = roleFilter ? users.filter((u) => u.role === roleFilter) : users;
+  // Exclude the logged-in user from the list — they manage their own profile via /profile
+  const otherUsers = users.filter((u) => u.id !== currentUser?.id);
+  const filtered = roleFilter ? otherUsers.filter((u) => u.role === roleFilter) : otherUsers;
   const totalPages = Math.max(1, Math.ceil(filtered.length / perPage));
   const safePage = Math.min(page, totalPages);
   const paginated = filtered.slice((safePage - 1) * perPage, safePage * perPage);
@@ -317,7 +322,7 @@ export default function UsersPage() {
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
               className="border border-slate-200 rounded-xl px-3 py-2 text-sm text-slate-700 bg-white focus:outline-none focus:ring-2 focus:ring-blue-300">
               <option value="">All Roles</option>
-              {ROLES.map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+              {assignableRoles.map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
             </select>
             <div className="flex items-center bg-slate-100 rounded-xl p-1 gap-0.5">
               <button onClick={() => setViewMode('card')} title="Card view"
@@ -486,7 +491,7 @@ export default function UsersPage() {
                     <div>
                       <label className="block text-xs font-semibold text-slate-600 mb-1">Role *</label>
                       <select {...f('role')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
-                        {ROLES.map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
+                        {assignableRoles.map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
                       </select>
                     </div>
                     {isSuperAdmin && (

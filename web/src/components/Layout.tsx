@@ -3,14 +3,13 @@
 import { ReactNode, useState, useEffect } from 'react';
 import { useAuth } from '@/contexts/AuthContext';
 import Link from 'next/link';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import clsx from 'clsx';
 import {
   HomeIcon,
   CalendarDaysIcon,
   BuildingOfficeIcon,
   UsersIcon,
-  ArrowRightOnRectangleIcon,
   ArrowLeftOnRectangleIcon,
   SparklesIcon,
   WrenchScrewdriverIcon,
@@ -63,10 +62,9 @@ const navGroups: NavGroup[] = [
   {
     label: 'Front Office',
     items: [
-      { name: 'Reservations',   href: '/reservations', icon: CalendarDaysIcon,         roles: ['ADMIN', 'MANAGER', 'FRONT_DESK'] },
-      { name: 'Rooms',          href: '/rooms',        icon: BuildingOfficeIcon,        roles: ['ADMIN', 'MANAGER', 'FRONT_DESK', 'HOUSEKEEPING'] },
-      { name: 'Guests',         href: '/guests',       icon: UsersIcon,                 roles: ['ADMIN', 'MANAGER', 'FRONT_DESK'] },
-      { name: 'Check-in / Out', href: '/checkin',      icon: ArrowRightOnRectangleIcon, roles: ['ADMIN', 'MANAGER', 'FRONT_DESK'] },
+      { name: 'Reservations', href: '/reservations', icon: CalendarDaysIcon,  roles: ['ADMIN', 'MANAGER', 'FRONT_DESK'] },
+      { name: 'Rooms',        href: '/rooms',        icon: BuildingOfficeIcon, roles: ['ADMIN', 'MANAGER', 'FRONT_DESK', 'HOUSEKEEPING'] },
+      { name: 'Guests',       href: '/guests',       icon: UsersIcon,          roles: ['ADMIN', 'MANAGER', 'FRONT_DESK'] },
     ],
   },
   {
@@ -117,6 +115,7 @@ const ROLE_BADGE: Record<string, string> = {
 export default function Layout({ children, title }: LayoutProps) {
   const { user, logout } = useAuth();
   const pathname = usePathname();
+  const router = useRouter();
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window !== 'undefined') {
@@ -274,7 +273,10 @@ export default function Layout({ children, title }: LayoutProps) {
             </button>
           </div>
         ) : (
-          <div className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-slate-800 transition-colors group">
+          <div
+            onClick={() => router.push('/profile')}
+            className="flex items-center gap-2.5 px-2 py-2 rounded-xl hover:bg-slate-800 transition-colors group cursor-pointer"
+          >
             <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center text-white text-xs font-bold flex-shrink-0 shadow">
               {userInitials}
             </div>
@@ -287,7 +289,7 @@ export default function Layout({ children, title }: LayoutProps) {
               </p>
             </div>
             <button
-              onClick={logout}
+              onClick={(e) => { e.stopPropagation(); logout(); }}
               title="Sign out"
               className="flex-shrink-0 p-1.5 rounded-lg text-slate-500 hover:text-red-400 hover:bg-slate-700 transition-colors"
             >

@@ -8,6 +8,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Q, Count, Avg
 from datetime import date, timedelta
 
@@ -21,20 +22,20 @@ from .maintenance_serializers import (
     MaintenanceDashboardSerializer,
     MaintenanceRequestAssignSerializer
 )
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsMaintenanceStaff
 
 
 # ===== Maintenance Requests =====
 
 class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
     """List all maintenance requests or create new request."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'priority', 'request_type', 'assigned_to', 'room']
     search_fields = ['request_number', 'title', 'description', 'location']
     ordering_fields = ['created_at', 'priority', 'status', 'completed_at']
-    ordering = ['-priority', 'created_at']
+    ordering = ['-created_at']
     
     def get_queryset(self):
         queryset = MaintenanceRequest.objects.filter(
@@ -42,40 +43,66 @@ class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
         ).select_related(
             'room', 'assigned_to', 'reported_by', 'property'
         ).prefetch_related('logs')
-        
+
+        # MAINTENANCE role sees: requests assigned to them + unassigned PENDING (pool)
+        if self.request.user.role == 'MAINTENANCE':
+            queryset = queryset.filter(
+                Q(assigned_to=self.request.user) |
+                Q(assigned_to__isnull=True, status='PENDING')
+            )
+
         # Filter by date range
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
-        
+
         if start_date:
             queryset = queryset.filter(created_at__date__gte=start_date)
         if end_date:
             queryset = queryset.filter(created_at__date__lte=end_date)
-        
+
         return queryset
     
     def perform_create(self, serializer):
-        # Generate request number
-        last_request = MaintenanceRequest.objects.filter(
-            property=self.request.user.assigned_property
+        # Generate globally unique request number
+        last_request = MaintenanceRequest.objects.exclude(
+            request_number=''
         ).order_by('-id').first()
-        
+
         if last_request:
-            last_num = int(last_request.request_number.split('-')[-1])
+            try:
+                last_num = int(last_request.request_number.split('-')[-1])
+            except (ValueError, IndexError):
+                last_num = MaintenanceRequest.objects.exclude(request_number='').count()
             request_number = f"MR-{last_num + 1:06d}"
         else:
             request_number = "MR-000001"
         
+        # Optional inline assignment on create
+        assigned_to_id = self.request.data.get('assigned_to')
+        extra = {}
+        if assigned_to_id:
+            try:
+                assigned_user = User.objects.get(
+                    id=assigned_to_id,
+                    assigned_property=self.request.user.assigned_property
+                )
+                extra['assigned_to'] = assigned_user
+                extra['assigned_at'] = timezone.now()
+                extra['status'] = 'ASSIGNED'
+            except User.DoesNotExist:
+                pass
+
         serializer.save(
             property=self.request.user.assigned_property,
             reported_by=self.request.user,
-            request_number=request_number
+            request_number=request_number,
+            **extra
         )
 
 
 class MaintenanceRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a maintenance request."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     
     def get_queryset(self):
@@ -88,19 +115,25 @@ class MaintenanceRequestDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class PendingMaintenanceView(generics.ListAPIView):
     """List pending maintenance requests."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     
     def get_queryset(self):
-        return MaintenanceRequest.objects.filter(
+        queryset = MaintenanceRequest.objects.filter(
             property=self.request.user.assigned_property,
             status='PENDING'
-        ).select_related('room', 'reported_by').order_by('-priority', 'created_at')
+        ).select_related('room', 'reported_by')
+
+        # MAINTENANCE role only sees unassigned pool requests
+        if self.request.user.role == 'MAINTENANCE':
+            queryset = queryset.filter(assigned_to__isnull=True)
+
+        return queryset.order_by('-priority', 'created_at')
 
 
 class MyMaintenanceTasksView(generics.ListAPIView):
     """List maintenance tasks assigned to current user."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     
     def get_queryset(self):
@@ -116,15 +149,24 @@ class MyMaintenanceTasksView(generics.ListAPIView):
 
 class EmergencyMaintenanceView(generics.ListAPIView):
     """List emergency maintenance requests."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     
     def get_queryset(self):
-        return MaintenanceRequest.objects.filter(
+        queryset = MaintenanceRequest.objects.filter(
             property=self.request.user.assigned_property,
             priority='EMERGENCY',
             status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS']
-        ).select_related('room', 'assigned_to').order_by('created_at')
+        ).select_related('room', 'assigned_to')
+
+        # MAINTENANCE role only sees their own tasks + pool
+        if self.request.user.role == 'MAINTENANCE':
+            queryset = queryset.filter(
+                Q(assigned_to=self.request.user) |
+                Q(assigned_to__isnull=True, status='PENDING')
+            )
+
+        return queryset.order_by('created_at')
 
 
 class AssignMaintenanceView(APIView):
@@ -148,7 +190,7 @@ class AssignMaintenanceView(APIView):
             try:
                 assigned_to = User.objects.get(
                     id=assigned_to_id,
-                    property=request.user.assigned_property
+                    assigned_property=request.user.assigned_property
                 )
             except User.DoesNotExist:
                 return Response(
@@ -188,7 +230,16 @@ class BulkAssignMaintenanceView(APIView):
             return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
         
         data = serializer.validated_data
-        assigned_to = User.objects.get(id=data['assigned_to'])
+        try:
+            assigned_to = User.objects.get(
+                id=data['assigned_to'],
+                assigned_property=request.user.assigned_property
+            )
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found in your property'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         
         requests = MaintenanceRequest.objects.filter(
             id__in=data['requests'],
@@ -217,7 +268,7 @@ class BulkAssignMaintenanceView(APIView):
 
 class StartMaintenanceView(APIView):
     """Start working on maintenance request."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
         try:
@@ -257,7 +308,7 @@ class StartMaintenanceView(APIView):
 
 class CompleteMaintenanceView(APIView):
     """Complete maintenance request."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def post(self, request, pk):
         try:
@@ -316,11 +367,118 @@ class CompleteMaintenanceView(APIView):
             )
 
 
+class ClaimMaintenanceView(APIView):
+    """Self-assign (claim) an unassigned pool request. Race-condition safe."""
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
+
+    def post(self, request, pk):
+        with transaction.atomic():
+            try:
+                maintenance_request = MaintenanceRequest.objects.select_for_update().get(
+                    pk=pk,
+                    property=request.user.assigned_property,
+                    assigned_to__isnull=True,
+                    status='PENDING'
+                )
+            except MaintenanceRequest.DoesNotExist:
+                return Response(
+                    {'error': 'Request is no longer available — someone else may have claimed it first.'},
+                    status=status.HTTP_409_CONFLICT
+                )
+
+            maintenance_request.assigned_to = request.user
+            maintenance_request.assigned_at = timezone.now()
+            maintenance_request.status = 'ASSIGNED'
+            maintenance_request.save()
+
+            MaintenanceLog.objects.create(
+                request=maintenance_request,
+                action=f"Self-assigned by {request.user.get_full_name() or request.user.email}",
+                user=request.user
+            )
+
+            serializer = MaintenanceRequestSerializer(maintenance_request)
+            return Response(serializer.data)
+
+
+class OnHoldMaintenanceView(APIView):
+    """Put a maintenance request on hold (e.g. waiting for parts)."""
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
+
+    def post(self, request, pk):
+        try:
+            maintenance_request = MaintenanceRequest.objects.get(
+                pk=pk,
+                property=request.user.assigned_property
+            )
+
+            if maintenance_request.status != 'IN_PROGRESS':
+                return Response(
+                    {'error': 'Only IN_PROGRESS requests can be put on hold'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            reason = request.data.get('reason', '')
+            maintenance_request.status = 'ON_HOLD'
+            maintenance_request.save()
+
+            MaintenanceLog.objects.create(
+                request=maintenance_request,
+                action=f"Put on hold{': ' + reason if reason else ''}",
+                user=request.user
+            )
+
+            serializer = MaintenanceRequestSerializer(maintenance_request)
+            return Response(serializer.data)
+
+        except MaintenanceRequest.DoesNotExist:
+            return Response(
+                {'error': 'Maintenance request not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
+class ResumeMaintenanceView(APIView):
+    """Resume a maintenance request that was on hold."""
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
+
+    def post(self, request, pk):
+        try:
+            maintenance_request = MaintenanceRequest.objects.get(
+                pk=pk,
+                property=request.user.assigned_property
+            )
+
+            if maintenance_request.status != 'ON_HOLD':
+                return Response(
+                    {'error': 'Only ON_HOLD requests can be resumed'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+
+            maintenance_request.status = 'IN_PROGRESS'
+            maintenance_request.save()
+
+            MaintenanceLog.objects.create(
+                request=maintenance_request,
+                action="Work resumed",
+                user=request.user
+            )
+
+            serializer = MaintenanceRequestSerializer(maintenance_request)
+            return Response(serializer.data)
+
+        except MaintenanceRequest.DoesNotExist:
+            return Response(
+                {'error': 'Maintenance request not found'},
+                status=status.HTTP_404_NOT_FOUND
+            )
+
+
 # ===== Assets =====
 
 class AssetListCreateView(generics.ListCreateAPIView):
     """List all assets or create new asset."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = AssetSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['category', 'room', 'is_active']
@@ -350,7 +508,7 @@ class AssetDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class AssetsByRoomView(generics.ListAPIView):
     """Get assets for a specific room."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = AssetSerializer
     
     def get_queryset(self):
@@ -363,7 +521,7 @@ class AssetsByRoomView(generics.ListAPIView):
 
 class AssetsDueMaintenanceView(generics.ListAPIView):
     """List assets due for maintenance."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = AssetSerializer
     
     def get_queryset(self):
@@ -379,7 +537,7 @@ class AssetsDueMaintenanceView(generics.ListAPIView):
 
 class MaintenanceLogListView(generics.ListAPIView):
     """List maintenance logs for a request."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceLogSerializer
     
     def get_queryset(self):
@@ -392,10 +550,20 @@ class MaintenanceLogListView(generics.ListAPIView):
 
 class MaintenanceLogCreateView(generics.CreateAPIView):
     """Create a new maintenance log entry."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceLogSerializer
-    
+
     def perform_create(self, serializer):
+        # Validate the linked maintenance request belongs to the user's property
+        request_id = serializer.validated_data.get('request') and serializer.validated_data['request'].id
+        if request_id and self.request.user.assigned_property:
+            from apps.maintenance.models import MaintenanceRequest as MR
+            if not MR.objects.filter(
+                id=request_id,
+                property=self.request.user.assigned_property
+            ).exists():
+                from rest_framework.exceptions import PermissionDenied
+                raise PermissionDenied('You cannot log against a request from another property.')
         serializer.save(user=self.request.user)
 
 
@@ -403,17 +571,21 @@ class MaintenanceLogCreateView(generics.CreateAPIView):
 
 class MaintenanceDashboardView(APIView):
     """Get maintenance dashboard statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def get(self, request):
         from django.db import models
         today = date.today()
         property_obj = request.user.assigned_property
-        
+        is_maintenance_role = request.user.role == 'MAINTENANCE'
+
+        # Base queryset — scoped by role
+        base_qs = MaintenanceRequest.objects.filter(property=property_obj)
+        if is_maintenance_role:
+            base_qs = base_qs.filter(assigned_to=request.user)
+
         # Request statistics
-        request_stats = MaintenanceRequest.objects.filter(
-            property=property_obj
-        ).aggregate(
+        request_stats = base_qs.aggregate(
             pending=Count('id', filter=Q(status='PENDING')),
             assigned=Count('id', filter=Q(status='ASSIGNED')),
             in_progress=Count('id', filter=Q(status='IN_PROGRESS')),
@@ -423,25 +595,23 @@ class MaintenanceDashboardView(APIView):
                 status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS']
             ))
         )
-        
+
         # Count overdue requests (emergency > 1h, high > 24h)
         one_hour_ago = timezone.now() - timedelta(hours=1)
         one_day_ago = timezone.now() - timedelta(days=1)
-        
-        overdue_emergency = MaintenanceRequest.objects.filter(
-            property=property_obj,
+
+        overdue_emergency = base_qs.filter(
             priority='EMERGENCY',
             status__in=['PENDING', 'ASSIGNED'],
             created_at__lt=one_hour_ago
         ).count()
-        
-        overdue_high = MaintenanceRequest.objects.filter(
-            property=property_obj,
+
+        overdue_high = base_qs.filter(
             priority='HIGH',
             status__in=['PENDING', 'ASSIGNED'],
             created_at__lt=one_day_ago
         ).count()
-        
+
         overdue_requests = overdue_emergency + overdue_high
         
         # Asset statistics
@@ -455,8 +625,7 @@ class MaintenanceDashboardView(APIView):
         )
         
         # Average resolution time
-        completed_requests = MaintenanceRequest.objects.filter(
-            property=property_obj,
+        completed_requests = base_qs.filter(
             status='COMPLETED',
             started_at__isnull=False,
             completed_at__isnull=False
@@ -470,6 +639,13 @@ class MaintenanceDashboardView(APIView):
             ])
             avg_resolution = round(total_seconds / completed_requests.count() / 3600, 2)
         
+        # Pool = unassigned PENDING requests (property-wide, not role-filtered)
+        pool_requests = MaintenanceRequest.objects.filter(
+            property=property_obj,
+            assigned_to__isnull=True,
+            status='PENDING'
+        ).count()
+
         data = {
             'pending_requests': request_stats['pending'] or 0,
             'assigned_requests': request_stats['assigned'] or 0,
@@ -477,6 +653,7 @@ class MaintenanceDashboardView(APIView):
             'completed_today': request_stats['completed_today'] or 0,
             'emergency_requests': request_stats['emergency'] or 0,
             'overdue_requests': overdue_requests,
+            'pool_requests': pool_requests,
             'total_assets': asset_stats['total'] or 0,
             'assets_due_maintenance': asset_stats['due_maintenance'] or 0,
             'assets_under_warranty': asset_stats['under_warranty'] or 0,

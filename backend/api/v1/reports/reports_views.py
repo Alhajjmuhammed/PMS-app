@@ -23,7 +23,7 @@ from .reports_serializers import (
     NightAuditSummarySerializer,
     GenerateReportSerializer
 )
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsAccountantOrAbove
 
 
 # ===== Daily Statistics =====
@@ -70,7 +70,7 @@ class DailyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class DailyStatisticsByDateView(generics.RetrieveAPIView):
     """Get daily statistics for a specific date."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = DailyStatisticsSerializer
     lookup_field = 'date'
     
@@ -115,7 +115,7 @@ class MonthlyStatisticsDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class ReportTemplateListCreateView(generics.ListCreateAPIView):
     """List all report templates or create new template."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = ReportTemplateSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['report_type', 'is_scheduled']
@@ -136,7 +136,7 @@ class ReportTemplateListCreateView(generics.ListCreateAPIView):
 
 class ReportTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a report template."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = ReportTemplateSerializer
     
     def get_queryset(self):
@@ -147,7 +147,7 @@ class ReportTemplateDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class GenerateReportView(APIView):
     """Generate a report based on template or parameters."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def post(self, request):
         serializer = GenerateReportSerializer(data=request.data)
@@ -317,7 +317,10 @@ class NightAuditListCreateView(generics.ListCreateAPIView):
         # Filter by date range
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
+        business_date = self.request.query_params.get('business_date')
         
+        if business_date:
+            queryset = queryset.filter(business_date=business_date)
         if start_date:
             queryset = queryset.filter(business_date__gte=start_date)
         if end_date:
@@ -326,7 +329,14 @@ class NightAuditListCreateView(generics.ListCreateAPIView):
         return queryset
     
     def perform_create(self, serializer):
-        serializer.save(property=self.request.user.assigned_property)
+        from django.db import IntegrityError
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        try:
+            serializer.save(property=self.request.user.assigned_property)
+        except IntegrityError:
+            raise DRFValidationError(
+                {'non_field_errors': ['A night audit for this property and business date already exists.']}
+            )
 
 
 class NightAuditDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -342,7 +352,7 @@ class NightAuditDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class PendingNightAuditsView(generics.ListAPIView):
     """List pending night audits."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = NightAuditSerializer
     
     def get_queryset(self):
@@ -377,9 +387,8 @@ class StartNightAuditView(APIView):
             # Create log entry
             AuditLog.objects.create(
                 night_audit=audit,
-                action='Audit Started',
-                details=f'Started by {request.user.get_full_name()}',
-                success=True
+                step='STARTED',
+                message=f'Audit started by {request.user.get_full_name()}'
             )
             
             serializer = NightAuditSerializer(audit)
@@ -418,9 +427,8 @@ class CompleteNightAuditView(APIView):
             # Create log entry
             AuditLog.objects.create(
                 night_audit=audit,
-                action='Audit Completed',
-                details=f'Completed by {request.user.get_full_name()}',
-                success=True
+                step='COMPLETED',
+                message=f'Audit completed by {request.user.get_full_name()}'
             )
             
             serializer = NightAuditSerializer(audit)
@@ -437,7 +445,7 @@ class CompleteNightAuditView(APIView):
 
 class AuditLogListView(generics.ListAPIView):
     """List audit logs for a night audit."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     serializer_class = AuditLogSerializer
     
     def get_queryset(self):
@@ -445,14 +453,14 @@ class AuditLogListView(generics.ListAPIView):
         return AuditLog.objects.filter(
             night_audit_id=audit_id,
             night_audit__property=self.request.user.assigned_property
-        ).order_by('timestamp')
+        ).order_by('created_at')
 
 
 # ===== Dashboard & Stats =====
 
 class NightAuditDashboardView(APIView):
     """Get night audit dashboard statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def get(self, request):
         from django.db import models

@@ -25,7 +25,7 @@ from .pos_serializers import (
     POSOrderUpdateSerializer,
     OutletSerializer
 )
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsPOSStaff
 
 
 def _get_pos_tax_rate(property_obj):
@@ -43,13 +43,17 @@ def _get_pos_tax_rate(property_obj):
 
 class MenuCategoryListCreateView(generics.ListCreateAPIView):
     """List all menu categories or create new category."""
-    permission_classes = [IsAuthenticated]
     serializer_class = MenuCategorySerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['outlet', 'is_active']
     search_fields = ['name', 'description']
     ordering_fields = ['sort_order', 'name']
     ordering = ['sort_order']
+
+    def get_permissions(self):
+        if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            return [IsAuthenticated(), IsAdminOrManager()]
+        return [IsAuthenticated(), IsPOSStaff()]
     
     def get_queryset(self):
         return MenuCategory.objects.filter(
@@ -72,13 +76,17 @@ class MenuCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class MenuItemListCreateView(generics.ListCreateAPIView):
     """List all menu items or create new item."""
-    permission_classes = [IsAuthenticated]
     serializer_class = MenuItemSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['category', 'is_available', 'is_taxable']
     search_fields = ['name', 'description']
     ordering_fields = ['name', 'price']
     ordering = ['name']
+
+    def get_permissions(self):
+        if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
+            return [IsAuthenticated(), IsAdminOrManager()]
+        return [IsAuthenticated(), IsPOSStaff()]
     
     def get_queryset(self):
         return MenuItem.objects.filter(
@@ -99,7 +107,7 @@ class MenuItemDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class MenuItemsByCategoryView(generics.ListAPIView):
     """Get menu items by category."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuItemSerializer
     
     def get_queryset(self):
@@ -112,7 +120,7 @@ class MenuItemsByCategoryView(generics.ListAPIView):
 
 class AvailableMenuItemsView(generics.ListAPIView):
     """List available menu items."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = MenuItemSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter]
     filterset_fields = ['category']
@@ -129,7 +137,7 @@ class AvailableMenuItemsView(generics.ListAPIView):
 
 class POSOrderListCreateView(generics.ListCreateAPIView):
     """List all POS orders or create new order."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['outlet', 'status', 'is_posted_to_room']
     search_fields = ['order_number', 'guest_name', 'room_number']
@@ -193,7 +201,17 @@ class POSOrderListCreateView(generics.ListCreateAPIView):
         taxable_subtotal = Decimal('0')
 
         for item_data in data['items']:
-            menu_item = MenuItem.objects.get(id=item_data['menu_item'])
+            try:
+                menu_item = MenuItem.objects.get(
+                    id=item_data['menu_item'],
+                    category__outlet__property=request.user.assigned_property
+                )
+            except MenuItem.DoesNotExist:
+                order.delete()
+                return Response(
+                    {'error': f"Menu item {item_data['menu_item']} not found in your property"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
             quantity = item_data['quantity']
             unit_price = menu_item.price
             item_amount = unit_price * quantity
@@ -225,9 +243,13 @@ class POSOrderListCreateView(generics.ListCreateAPIView):
 
 class POSOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a POS order."""
-    permission_classes = [IsAuthenticated]
     serializer_class = POSOrderSerializer
-    
+
+    def get_permissions(self):
+        if self.request.method == 'DELETE':
+            return [IsAuthenticated(), IsAdminOrManager()]
+        return [IsAuthenticated(), IsPOSStaff()]
+
     def get_queryset(self):
         return POSOrder.objects.filter(
             outlet__property=self.request.user.assigned_property
@@ -236,7 +258,7 @@ class POSOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
 
 class OpenPOSOrdersView(generics.ListAPIView):
     """List open POS orders."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = POSOrderSerializer
     
     def get_queryset(self):
@@ -248,7 +270,7 @@ class OpenPOSOrdersView(generics.ListAPIView):
 
 class ClosePOSOrderView(APIView):
     """Close a POS order."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def post(self, request, pk):
         try:
@@ -278,7 +300,7 @@ class ClosePOSOrderView(APIView):
 
 class PostToRoomView(APIView):
     """Post POS order to room."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def post(self, request, pk):
         try:
@@ -376,7 +398,7 @@ class PostToRoomView(APIView):
 
 class POSOrderItemListView(generics.ListAPIView):
     """List items for a specific order."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = POSOrderItemSerializer
     
     def get_queryset(self):
@@ -389,10 +411,20 @@ class POSOrderItemListView(generics.ListAPIView):
 
 class POSOrderItemCreateView(generics.CreateAPIView):
     """Add item to an order."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = POSOrderItemSerializer
-    
+
     def perform_create(self, serializer):
+        # Ensure the order belongs to the user's property
+        order = serializer.validated_data.get('order')
+        if order and order.outlet.property != self.request.user.assigned_property:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Order does not belong to your property.')
+        # Ensure the menu item belongs to the user's property
+        menu_item = serializer.validated_data.get('menu_item')
+        if menu_item and menu_item.category.outlet.property != self.request.user.assigned_property:
+            from rest_framework.exceptions import PermissionDenied
+            raise PermissionDenied('Menu item does not belong to your property.')
         order_item = serializer.save()
 
         # Recalculate order totals
@@ -420,7 +452,7 @@ class POSOrderItemCreateView(generics.CreateAPIView):
 
 class OutletListView(generics.ListAPIView):
     """List all outlets."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = OutletSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'code']
@@ -437,7 +469,7 @@ class OutletListView(generics.ListAPIView):
 
 class POSDashboardView(APIView):
     """Get POS dashboard statistics."""
-    permission_classes = [IsAuthenticated]
+    permission_classes = [IsAuthenticated, IsPOSStaff]
     
     def get(self, request):
         today = date.today()

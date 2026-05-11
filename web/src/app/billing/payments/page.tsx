@@ -1,272 +1,237 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import Layout from '@/components/Layout';
-import Card from '@/components/Card';
-import Input from '@/components/Input';
-import Button from '@/components/Button';
 import api from '@/lib/api';
+import clsx from 'clsx';
+import {
+  HomeIcon, ChevronRightIcon, CheckCircleIcon, CreditCardIcon, ArrowLeftIcon,
+} from '@heroicons/react/24/outline';
 
-interface Invoice {
+interface Folio {
   id: number;
-  invoice_number: string;
-  guest: {
-    first_name: string;
-    last_name: string;
-  };
-  total: number;
-  paid_amount: number;
-  balance_due: number;
+  folio_number: string;
+  guest_name: string;
+  room_number: string;
+  balance: string;
+  status: string;
 }
 
-export default function PaymentProcessingPage() {
-  const router = useRouter();
-  const searchParams = useSearchParams();
-  const invoiceId = searchParams.get('invoice_id');
+const PAYMENT_METHODS = [
+  { value: 'CASH', label: 'Cash' },
+  { value: 'CREDIT_CARD', label: 'Credit Card' },
+  { value: 'DEBIT_CARD', label: 'Debit Card' },
+  { value: 'BANK_TRANSFER', label: 'Bank Transfer' },
+  { value: 'CITY_LEDGER', label: 'City Ledger' },
+  { value: 'VOUCHER', label: 'Voucher' },
+];
 
-  const [invoice, setInvoice] = useState<Invoice | null>(null);
+const CARD_METHODS = ['CREDIT_CARD', 'DEBIT_CARD'];
+
+function PaymentForm() {
+  const router = useRouter();
+  const params = useSearchParams();
+  const folioId = params.get('folio_id');
+  const [folio, setFolio] = useState<Folio | null>(null);
   const [loading, setLoading] = useState(false);
-  const [formData, setFormData] = useState({
+  const [fetching, setFetching] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [form, setForm] = useState({
     amount: '',
-    payment_method: 'cash',
-    card_number: '',
-    card_holder: '',
-    expiry_date: '',
-    cvv: '',
-    notes: '',
+    payment_method: 'CASH',
+    reference_number: '',
+    card_last_four: '',
   });
 
-  useEffect(() => {
-    if (invoiceId) {
-      loadInvoice(parseInt(invoiceId));
-    }
-  }, [invoiceId]);
-
-  const loadInvoice = async (id: number) => {
-    try {
-      const response = await api.get(`/billing/invoices/${id}/`);
-      setInvoice(response.data);
-      setFormData({ ...formData, amount: response.data.balance_due.toFixed(2) });
-    } catch (error) {
-      console.error('Failed to load invoice:', error);
-    }
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
   };
+
+  useEffect(() => {
+    if (!folioId) return;
+    setFetching(true);
+    api.get(`/api/v1/billing/folios/${folioId}/`)
+      .then(r => setFolio(r.data))
+      .catch(() => showToast('Failed to load folio', false))
+      .finally(() => setFetching(false));
+  }, [folioId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!folioId) { showToast('No folio selected', false); return; }
     setLoading(true);
-
     try {
-      const paymentData: any = {
-        invoice: invoice?.id,
-        amount: parseFloat(formData.amount),
-        payment_method: formData.payment_method,
-        notes: formData.notes,
+      const payload: Record<string, unknown> = {
+        amount: parseFloat(form.amount),
+        payment_method: form.payment_method,
       };
+      if (form.reference_number) payload.reference_number = form.reference_number;
+      if (CARD_METHODS.includes(form.payment_method) && form.card_last_four)
+        payload.card_last_four = form.card_last_four;
 
-      // Add card details if card payment
-      if (formData.payment_method === 'credit_card' || formData.payment_method === 'debit_card') {
-        paymentData.card_last_four = formData.card_number.slice(-4);
-        paymentData.card_holder_name = formData.card_holder;
-      }
-
-      await api.post('/billing/payments/', paymentData);
-
-      alert('Payment processed successfully!');
-      
-      if (invoice) {
-        router.push(`/billing/${invoice.id}`);
-      } else {
-        router.push('/billing');
-      }
-    } catch (error) {
-      console.error('Failed to process payment:', error);
-      alert('Payment processing failed. Please try again.');
+      await api.post(`/api/v1/billing/folios/${folioId}/payments/`, payload);
+      showToast('Payment recorded successfully');
+      setTimeout(() => router.push(`/billing/${folioId}`), 1200);
+    } catch (e: any) {
+      showToast(
+        e?.response?.data?.error ||
+        JSON.stringify(e?.response?.data) ||
+        'Payment failed',
+        false
+      );
     } finally {
       setLoading(false);
     }
   };
 
-  const paymentMethods = [
-    { value: 'cash', label: 'Cash' },
-    { value: 'credit_card', label: 'Credit Card' },
-    { value: 'debit_card', label: 'Debit Card' },
-    { value: 'bank_transfer', label: 'Bank Transfer' },
-    { value: 'check', label: 'Check' },
-    { value: 'mobile_payment', label: 'Mobile Payment' },
-  ];
-
-  const showCardFields = formData.payment_method === 'credit_card' || formData.payment_method === 'debit_card';
-
   return (
     <Layout>
-      <div className="max-w-2xl mx-auto space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Process Payment</h1>
-          <p className="text-gray-500">Record a payment for an invoice</p>
-        </div>
+      <div className="p-5 lg:p-6 space-y-5 max-w-xl">
 
-        {/* Invoice Summary */}
-        {invoice && (
-          <Card>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Invoice Details</h2>
-            <div className="space-y-2">
-              <div className="flex justify-between">
-                <span className="text-gray-600">Invoice Number</span>
-                <span className="font-medium text-gray-900">{invoice.invoice_number}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Guest</span>
-                <span className="font-medium text-gray-900">
-                  {invoice.guest.first_name} {invoice.guest.last_name}
-                </span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Total Amount</span>
-                <span className="font-medium text-gray-900">${invoice.total.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between">
-                <span className="text-gray-600">Paid Amount</span>
-                <span className="font-medium text-green-600">${invoice.paid_amount.toFixed(2)}</span>
-              </div>
-              <div className="flex justify-between border-t pt-2">
-                <span className="text-gray-900 font-semibold">Balance Due</span>
-                <span className="font-bold text-red-600">${invoice.balance_due.toFixed(2)}</span>
-              </div>
-            </div>
-          </Card>
+        {toast && (
+          <div className={clsx(
+            'fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
+            toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+          )}>
+            <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            {toast.msg}
+          </div>
         )}
 
-        {/* Payment Form */}
-        <form onSubmit={handleSubmit} className="space-y-6">
-          <Card>
-            <h2 className="text-lg font-semibold text-gray-900 mb-4">Payment Information</h2>
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <button onClick={() => router.push('/billing')} className="hover:text-slate-700">Billing</button>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          {folioId && (
+            <>
+              <button onClick={() => router.push(`/billing/${folioId}`)} className="hover:text-slate-700">
+                Folio #{folioId}
+              </button>
+              <ChevronRightIcon className="w-3.5 h-3.5" />
+            </>
+          )}
+          <span className="text-slate-700 font-medium">Record Payment</span>
+        </nav>
 
-            <div className="space-y-4">
-              <Input
-                label="Payment Amount"
-                type="number"
-                step="0.01"
-                min="0.01"
-                max={invoice?.balance_due || undefined}
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: e.target.value })}
-                required
-              />
+        <div className="flex items-center gap-3">
+          <button onClick={() => folioId ? router.push(`/billing/${folioId}`) : router.back()}
+            className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
+            <ArrowLeftIcon className="w-5 h-5" />
+          </button>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+              <CreditCardIcon className="w-5 h-5 text-emerald-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Record Payment</h1>
+              <p className="text-slate-500 text-sm">Apply a payment to folio</p>
+            </div>
+          </div>
+        </div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Payment Method</label>
-                <select
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={formData.payment_method}
-                  onChange={(e) => setFormData({ ...formData, payment_method: e.target.value })}
-                  required
-                >
-                  {paymentMethods.map((method) => (
-                    <option key={method.value} value={method.value}>
-                      {method.label}
-                    </option>
-                  ))}
-                </select>
+        {!folioId ? (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-400">
+            No folio selected. Use <code>?folio_id=X</code> to specify a folio.
+          </div>
+        ) : fetching ? (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-8 text-center text-slate-400">
+            Loading folio...
+          </div>
+        ) : (
+          <>
+            {folio && (
+              <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Folio</p>
+                    <p className="font-semibold text-slate-900">{folio.folio_number}</p>
+                    <p className="text-sm text-slate-500 mt-0.5">{folio.guest_name} · Room {folio.room_number}</p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-xs text-slate-400 uppercase tracking-wider mb-1">Balance</p>
+                    <p className={clsx(
+                      'text-xl font-bold',
+                      parseFloat(folio.balance) > 0 ? 'text-red-600' : 'text-emerald-600'
+                    )}>
+                      ${parseFloat(folio.balance).toFixed(2)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmit} className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Amount *</label>
+                  <input
+                    type="number" min="0.01" step="0.01" required
+                    value={form.amount}
+                    onChange={e => setForm(f => ({ ...f, amount: e.target.value }))}
+                    placeholder="0.00"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Payment Method</label>
+                  <select value={form.payment_method}
+                    onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))}
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300">
+                    {PAYMENT_METHODS.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                  </select>
+                </div>
               </div>
 
-              {/* Card Details (shown only for card payments) */}
-              {showCardFields && (
-                <div className="border-t pt-4 space-y-4">
-                  <h3 className="text-md font-medium text-gray-900">Card Details</h3>
+              <div>
+                <label className="block text-sm font-semibold text-slate-700 mb-1.5">Reference Number</label>
+                <input value={form.reference_number}
+                  onChange={e => setForm(f => ({ ...f, reference_number: e.target.value }))}
+                  placeholder="Optional transaction reference"
+                  className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
+              </div>
 
-                  <Input
-                    label="Card Number"
-                    type="text"
-                    pattern="[0-9]{13,19}"
-                    maxLength={19}
-                    placeholder="1234 5678 9012 3456"
-                    value={formData.card_number}
-                    onChange={(e) => setFormData({ ...formData, card_number: e.target.value })}
-                    required
-                  />
-
-                  <Input
-                    label="Cardholder Name"
-                    type="text"
-                    placeholder="John Doe"
-                    value={formData.card_holder}
-                    onChange={(e) => setFormData({ ...formData, card_holder: e.target.value })}
-                    required
-                  />
-
-                  <div className="grid grid-cols-2 gap-4">
-                    <Input
-                      label="Expiry Date"
-                      type="text"
-                      pattern="(0[1-9]|1[0-2])\/[0-9]{2}"
-                      placeholder="MM/YY"
-                      maxLength={5}
-                      value={formData.expiry_date}
-                      onChange={(e) => {
-                        let value = e.target.value.replace(/\D/g, '');
-                        if (value.length >= 2) {
-                          value = value.slice(0, 2) + '/' + value.slice(2, 4);
-                        }
-                        setFormData({ ...formData, expiry_date: value });
-                      }}
-                      required
-                    />
-
-                    <Input
-                      label="CVV"
-                      type="text"
-                      pattern="[0-9]{3,4}"
-                      maxLength={4}
-                      placeholder="123"
-                      value={formData.cvv}
-                      onChange={(e) => setFormData({ ...formData, cvv: e.target.value.replace(/\D/g, '') })}
-                      required
-                    />
-                  </div>
+              {CARD_METHODS.includes(form.payment_method) && (
+                <div>
+                  <label className="block text-sm font-semibold text-slate-700 mb-1.5">Card Last 4 Digits</label>
+                  <input
+                    maxLength={4} pattern="\d{4}"
+                    value={form.card_last_four}
+                    onChange={e => setForm(f => ({ ...f, card_last_four: e.target.value }))}
+                    placeholder="1234"
+                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
                 </div>
               )}
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
-                <textarea
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  rows={3}
-                  value={formData.notes}
-                  onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
-                  placeholder="Payment reference or additional notes..."
-                />
+              <div className="flex gap-3 pt-2">
+                <button type="button"
+                  onClick={() => folioId ? router.push(`/billing/${folioId}`) : router.back()}
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-700">
+                  Cancel
+                </button>
+                <button type="submit" disabled={loading}
+                  className="px-6 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50">
+                  {loading ? 'Processing...' : 'Record Payment'}
+                </button>
               </div>
-            </div>
-          </Card>
 
-          {/* Security Notice */}
-          {showCardFields && (
-            <Card>
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">🔒</span>
-                <div>
-                  <h3 className="font-semibold text-gray-900">Secure Payment</h3>
-                  <p className="text-sm text-gray-600">
-                    Your payment information is encrypted and secure. We do not store complete card details.
-                  </p>
-                </div>
-              </div>
-            </Card>
-          )}
+            </form>
+          </>
+        )}
 
-          {/* Actions */}
-          <div className="flex gap-4">
-            <Button type="submit" disabled={loading}>
-              {loading ? 'Processing...' : `Process Payment ($${formData.amount || '0.00'})`}
-            </Button>
-            <Button type="button" variant="outline" onClick={() => router.back()}>
-              Cancel
-            </Button>
-          </div>
-        </form>
       </div>
     </Layout>
+  );
+}
+
+export default function PaymentsPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-slate-400">Loading...</div>}>
+      <PaymentForm />
+    </Suspense>
   );
 }

@@ -127,7 +127,8 @@ class ReservationCreateView(APIView):
         # Get or create guest
         if 'guest_id' in data:
             prop = request.user.assigned_property
-            guest_qs = Guest.objects.filter(reservations__hotel=prop).distinct() if prop else Guest.objects.all()
+            # Scope to guests belonging to this property (uses home_property isolation)
+            guest_qs = Guest.objects.filter(home_property=prop) if prop else Guest.objects.all()
             guest = get_object_or_404(guest_qs, pk=data['guest_id'])
         else:
             guest, created = Guest.objects.get_or_create(
@@ -143,30 +144,34 @@ class ReservationCreateView(APIView):
         check_in = data['check_in_date']
         check_out = data['check_out_date']
         nights = (check_out - check_in).days
-        total = data['room_rate'] * nights
+
+        # Look up room type early so we can use its base_rate as fallback
+        prop = request.user.assigned_property
+        room_type = get_object_or_404(RoomType, pk=data['room_type_id'])
+
+        nightly_rate = data.get('room_rate') or room_type.base_rate
+        total = nightly_rate * nights
         
         # Create reservation
         reservation = Reservation.objects.create(
-            hotel=data.get('hotel') or data.get('property') or request.user.assigned_property,
+            hotel=data.get('hotel') or prop,
             guest=guest,
             check_in_date=check_in,
             check_out_date=check_out,
             adults=data.get('adults', 1),
             children=data.get('children', 0),
+            source=data.get('source', 'DIRECT'),
             total_amount=total,
             special_requests=data.get('special_requests', ''),
             created_by=request.user
         )
         
         # Create reservation room
-        room_type_qs = RoomType.objects.all()
-        if request.user.assigned_property:
-            room_type_qs = room_type_qs.filter(hotel=request.user.assigned_property)
-        room_type = get_object_or_404(room_type_qs, pk=data['room_type_id'])
         ReservationRoom.objects.create(
             reservation=reservation,
             room_type=room_type,
-            rate=data['room_rate'],
+            rate_per_night=nightly_rate,
+            total_rate=total,
             adults=data.get('adults', 1),
             children=data.get('children', 0)
         )
@@ -234,6 +239,105 @@ class CancelReservationView(APIView):
         reservation.cancellation_reason = request.data.get('reason', '')
         reservation.save()
         
+        return Response(ReservationSerializer(reservation).data)
+
+
+class ConfirmReservationView(APIView):
+    """Set reservation status to CONFIRMED. Only valid from PENDING."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+
+    def post(self, request, pk):
+        try:
+            qs = Reservation.objects.all()
+            if request.user.assigned_property:
+                qs = qs.filter(hotel=request.user.assigned_property)
+            reservation = qs.get(pk=pk)
+        except Reservation.DoesNotExist:
+            return Response({'error': 'Reservation not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if reservation.status not in ('PENDING', 'WAITLIST'):
+            return Response(
+                {'error': f'Cannot confirm a reservation with status {reservation.status}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        reservation.status = 'CONFIRMED'
+        reservation.modified_by = request.user
+        reservation.save(update_fields=['status', 'modified_by'])
+        return Response(ReservationSerializer(reservation).data)
+
+
+class NoShowView(APIView):
+    """Mark a reservation as NO_SHOW. Only valid from CONFIRMED or PENDING."""
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+
+    def post(self, request, pk):
+        try:
+            qs = Reservation.objects.all()
+            if request.user.assigned_property:
+                qs = qs.filter(hotel=request.user.assigned_property)
+            reservation = qs.get(pk=pk)
+        except Reservation.DoesNotExist:
+            return Response({'error': 'Reservation not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if reservation.status not in ('PENDING', 'CONFIRMED'):
+            return Response(
+                {'error': f'Cannot mark as no-show a reservation with status {reservation.status}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        reservation.status = 'NO_SHOW'
+        reservation.modified_by = request.user
+        reservation.save(update_fields=['status', 'modified_by'])
+        return Response(ReservationSerializer(reservation).data)
+
+
+class ReservationCheckoutView(APIView):
+    """
+    Check out a guest. Looks up the CheckIn record by reservation, then
+    sets reservation to CHECKED_OUT and room to vacant-dirty.
+    """
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
+
+    def post(self, request, pk):
+        from apps.frontdesk.models import CheckIn, CheckOut
+
+        try:
+            qs = Reservation.objects.all()
+            if request.user.assigned_property:
+                qs = qs.filter(hotel=request.user.assigned_property)
+            reservation = qs.get(pk=pk)
+        except Reservation.DoesNotExist:
+            return Response({'error': 'Reservation not found'}, status=status.HTTP_404_NOT_FOUND)
+
+        if reservation.status != 'CHECKED_IN':
+            return Response(
+                {'error': 'Only CHECKED_IN reservations can be checked out'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
+        check_in = CheckIn.objects.filter(reservation=reservation).first()
+        if not check_in:
+            return Response({'error': 'No check-in record found for this reservation'}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create check-out record
+        check_out = CheckOut.objects.create(
+            check_in=check_in,
+            checked_out_by=request.user,
+        )
+
+        # Update reservation status
+        reservation.status = 'CHECKED_OUT'
+        reservation.modified_by = request.user
+        reservation.save(update_fields=['status', 'modified_by'])
+
+        # Update room to vacant-dirty
+        room = check_in.room
+        if room:
+            room.status = 'VD'
+            room.fo_status = 'VACANT'
+            room.save(update_fields=['status', 'fo_status'])
+
         return Response(ReservationSerializer(reservation).data)
 
 

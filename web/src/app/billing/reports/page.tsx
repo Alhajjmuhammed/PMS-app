@@ -14,7 +14,7 @@ interface RevenueDay {
   room_revenue: number;
   fb_revenue: number;
   other_revenue: number;
-  total_revenue: number;
+  total: number;
 }
 
 export default function BillingReportsPage() {
@@ -35,7 +35,7 @@ export default function BillingReportsPage() {
     setLoading(true);
     try {
       const resp = await api.get('/api/v1/reports/revenue/', { params: { start: dates.start, end: dates.end } });
-      setRows(resp.data.results ?? resp.data);
+      setRows(resp.data.data ?? resp.data.results ?? resp.data);
     } catch {
       showToast('Failed to generate report', false);
     } finally {
@@ -47,7 +47,7 @@ export default function BillingReportsPage() {
     room: acc.room + Number(r.room_revenue),
     fb: acc.fb + Number(r.fb_revenue),
     other: acc.other + Number(r.other_revenue),
-    total: acc.total + Number(r.total_revenue),
+    total: acc.total + Number(r.total),
   }), { room: 0, fb: 0, other: 0, total: 0 });
 
   return (
@@ -137,7 +137,7 @@ export default function BillingReportsPage() {
                       <td className="px-4 py-3 text-blue-600">${Number(r.room_revenue).toLocaleString()}</td>
                       <td className="px-4 py-3 text-amber-600">${Number(r.fb_revenue).toLocaleString()}</td>
                       <td className="px-4 py-3 text-slate-600">${Number(r.other_revenue).toLocaleString()}</td>
-                      <td className="px-4 py-3 font-bold text-violet-700">${Number(r.total_revenue).toLocaleString()}</td>
+                      <td className="px-4 py-3 font-bold text-violet-700">${Number(r.total).toLocaleString()}</td>
                     </tr>
                   ))}
                 </tbody>

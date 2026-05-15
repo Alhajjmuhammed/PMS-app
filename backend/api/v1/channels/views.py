@@ -6,6 +6,7 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 from datetime import datetime, timedelta
 import logging
 
@@ -18,6 +19,7 @@ from apps.channels.services import (
 )
 from apps.channels.webhook_utils import WebhookValidator, log_webhook_attempt
 from api.permissions import IsAdminOrManager
+from api.throttling import WebhookThrottle
 from .serializers import (
     ChannelSerializer, PropertyChannelSerializer, RoomTypeMappingSerializer,
     RatePlanMappingSerializer, RatePlanMappingCreateSerializer,
@@ -158,7 +160,7 @@ class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
             if pc and pc.property != prop:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied('You do not have access to this property channel.')
-        availability_update = serializer.save()
+        serializer.save()
 
 
 class AvailabilityUpdateDetailView(generics.RetrieveUpdateAPIView):
@@ -240,7 +242,7 @@ class RateUpdateListCreateView(generics.ListCreateAPIView):
             if pc and pc.property != prop:
                 from rest_framework.exceptions import PermissionDenied
                 raise PermissionDenied('You do not have access to this property channel.')
-        rate_update = serializer.save()
+        serializer.save()
 
 
 class RateUpdateDetailView(generics.RetrieveUpdateAPIView):
@@ -387,15 +389,11 @@ class SyncChannelRatesView(APIView):
         start_date_str = request.data.get('start_date')
         end_date_str = request.data.get('end_date')
         
-        if start_date_str:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        else:
-            start_date = timezone.now().date()
-        
-        if end_date_str:
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        else:
-            end_date = start_date + timedelta(days=30)
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else timezone.now().date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else start_date + timedelta(days=30)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Perform sync
         try:
@@ -427,15 +425,11 @@ class SyncChannelAvailabilityView(APIView):
         start_date_str = request.data.get('start_date')
         end_date_str = request.data.get('end_date')
         
-        if start_date_str:
-            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date()
-        else:
-            start_date = timezone.now().date()
-        
-        if end_date_str:
-            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date()
-        else:
-            end_date = start_date + timedelta(days=30)
+        try:
+            start_date = datetime.strptime(start_date_str, '%Y-%m-%d').date() if start_date_str else timezone.now().date()
+            end_date = datetime.strptime(end_date_str, '%Y-%m-%d').date() if end_date_str else start_date + timedelta(days=30)
+        except (ValueError, TypeError):
+            return Response({'error': 'Invalid date format. Use YYYY-MM-DD.'}, status=status.HTTP_400_BAD_REQUEST)
         
         # Perform sync
         try:
@@ -466,7 +460,7 @@ class ChannelWebhookView(APIView):
     """
     permission_classes = []  # No session auth, but HMAC signature required
     authentication_classes = []
-    throttle_classes = ['api.throttling.WebhookThrottle']
+    throttle_classes = [WebhookThrottle]
     
     def post(self, request, property_channel_id):
         """
@@ -526,7 +520,7 @@ class ChannelWebhookView(APIView):
             return Response({
                 'success': True,
                 'reservation_id': result.id,
-                'confirmation_code': result.confirmation_code
+                'confirmation_number': result.confirmation_number
             }, status=status.HTTP_201_CREATED)
             
         except PropertyChannel.DoesNotExist:

@@ -1,9 +1,9 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
+from django.db import models
 from django.views import View
-from django.views.generic import ListView, DetailView, CreateView
-from django.urls import reverse_lazy
+from django.views.generic import ListView, DetailView
 from django.utils import timezone
 from .models import Folio, FolioCharge, Payment, Invoice, CashierShift, ChargeCode
 import uuid

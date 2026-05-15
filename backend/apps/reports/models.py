@@ -184,3 +184,6 @@ class AuditLog(models.Model):
         verbose_name = _('audit log')
         verbose_name_plural = _('audit logs')
         ordering = ['created_at']
+
+    def __str__(self):
+        return f"{self.step}: {self.message[:60]}"

@@ -7,12 +7,14 @@ from django.contrib.auth import authenticate, get_user_model
 from django.contrib.auth.models import Group, Permission
 from django.utils.decorators import method_decorator
 from django.utils import timezone
+from django.db import transaction
 from django.core.cache import cache
 from django_ratelimit.decorators import ratelimit
 import secrets
 
-from apps.accounts.mfa_utils import MFAManager
+from apps.accounts.mfa_utils import MFAManager, EmailMFA, SMSMFA
 from api.permissions import CanManageUsers, IsAdminOrManager
+from api.throttling import MFAVerifyThrottle
 from .serializers import (
     LoginSerializer, MFAVerifySerializer, UserSerializer, ChangePasswordSerializer,
     UserManagementSerializer, PermissionSerializer, RoleSerializer
@@ -23,6 +25,7 @@ User = get_user_model()
 
 @method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=False), name='dispatch')
 class LoginView(APIView):
+    throttle_classes = []  # Rate limiting handled by django-ratelimit decorator above
     """
     User login endpoint with MFA enforcement.
     
@@ -73,14 +76,12 @@ class LoginView(APIView):
                     # TOTP doesn't need to send anything, user has app
                     mfa_message = "Enter the 6-digit code from your authenticator app"
                 elif user.mfa_method == 'EMAIL':
-                    # Send email with code
-                    code = MFAManager.generate_email_code(user.email)
-                    MFAManager.send_email_code(user.email, code)
+                    # Send email with code — call EmailMFA directly to avoid re-fetching user
+                    EmailMFA.send_code(user)
                     mfa_message = f"A 6-digit code has been sent to {user.email}"
                 elif user.mfa_method == 'SMS':
-                    # Send SMS with code
-                    code = MFAManager.generate_sms_code(user.phone)
-                    MFAManager.send_sms_code(user.phone, code)
+                    # Send SMS with code — call SMSMFA directly to avoid re-fetching user
+                    SMSMFA.send_code(user)
                     mfa_message = f"A 6-digit code has been sent to {user.phone}"
                 else:
                     mfa_message = "MFA is enabled. Please enter your verification code."
@@ -108,7 +109,7 @@ class LoginView(APIView):
         )
 
 
-@method_decorator(ratelimit(key='ip', rate='10/m', method='POST', block=False), name='dispatch')
+@method_decorator(ratelimit(key='ip', rate='5/m', method='POST', block=False), name='dispatch')
 class MFAVerifyView(APIView):
     """
     Verify MFA code and complete login.
@@ -118,15 +119,10 @@ class MFAVerifyView(APIView):
         - mfa_code: 6-digit verification code
     """
     permission_classes = [AllowAny]
-    
+    throttle_classes = [MFAVerifyThrottle]
+
+    @transaction.atomic
     def post(self, request):
-        # Check if rate limited
-        if getattr(request, 'limited', False):
-            return Response(
-                {'error': 'Too many verification attempts. Please try again later.'},
-                status=status.HTTP_429_TOO_MANY_REQUESTS
-            )
-        
         serializer = MFAVerifySerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
@@ -162,11 +158,11 @@ class MFAVerifyView(APIView):
             is_valid = MFAManager.verify_sms_code(user.phone, mfa_code)
         
         # Also check backup codes
-        if not is_valid and user.mfa_backup_codes:
+        if not is_valid and user.backup_codes:
             is_valid = MFAManager.verify_backup_code(user, mfa_code)
             if is_valid:
                 # Backup code was used - save the updated list
-                user.save(update_fields=['mfa_backup_codes'])
+                user.save(update_fields=['backup_codes'])
         
         if is_valid:
             # Delete the MFA session from cache
@@ -192,7 +188,10 @@ class LogoutView(APIView):
     permission_classes = [IsAuthenticated]
     
     def post(self, request):
-        request.user.auth_token.delete()
+        try:
+            request.user.auth_token.delete()
+        except Token.DoesNotExist:
+            pass
         return Response({'message': 'Logged out successfully'})
 
 
@@ -338,6 +337,7 @@ class RoleListCreateView(APIView):
             })
         return Response(data)
     
+    @transaction.atomic
     def post(self, request):
         serializer = RoleSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)

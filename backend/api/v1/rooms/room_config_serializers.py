@@ -3,7 +3,6 @@ Serializers for Room Configuration
 """
 from rest_framework import serializers
 from apps.rooms.models import RoomType, RoomAmenity, RoomTypeAmenity, RoomImage, RoomStatusLog
-from apps.properties.models import Property
 
 
 class RoomTypeSerializer(serializers.ModelSerializer):
@@ -68,6 +67,9 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         if max_adults and max_adults < 1:
             raise serializers.ValidationError("Max adults must be at least 1.")
 
+        if max_children and max_children < 0:
+            raise serializers.ValidationError("Max children cannot be negative.")
+
         return data
 
 
@@ -109,10 +111,6 @@ class RoomTypeAmenitySerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate room type amenity."""
-        quantity = data.get('quantity', 1)
-        if quantity < 1:
-            raise serializers.ValidationError("Quantity must be at least 1.")
-        
         return data
 
 
@@ -191,8 +189,6 @@ class RoomTypeDetailSerializer(RoomTypeSerializer):
             'id': rta.amenity.id,
             'name': rta.amenity.name,
             'icon': rta.amenity.icon,
-            'quantity': rta.quantity,
-            'is_complimentary': rta.is_complimentary
         } for rta in room_type_amenities]
     
     def get_rooms(self, obj):
@@ -211,5 +207,3 @@ class BulkAmenityAssignSerializer(serializers.Serializer):
     amenities = serializers.ListField(
         child=serializers.PrimaryKeyRelatedField(queryset=RoomAmenity.objects.all())
     )
-    is_complimentary = serializers.BooleanField(default=True)
-    quantity = serializers.IntegerField(min_value=1, default=1)

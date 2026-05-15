@@ -67,7 +67,7 @@ class HousekeepingTask(models.Model):
     assigned_at = models.DateTimeField(_('assigned at'), null=True, blank=True)
     
     # Schedule
-    scheduled_date = models.DateField(_('scheduled date'), default=timezone.now)
+    scheduled_date = models.DateField(_('scheduled date'), default=timezone.localdate)
     scheduled_time = models.TimeField(_('scheduled time'), null=True, blank=True)
     
     # Progress

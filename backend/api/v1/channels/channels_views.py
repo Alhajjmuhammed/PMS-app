@@ -5,10 +5,10 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
-from django.db.models import Q, Count
 from django.core.exceptions import ValidationError
 from datetime import date, timedelta
 import logging
@@ -30,7 +30,7 @@ from .channels_serializers import (
     BulkRateUpdateSerializer,
     ChannelSerializer
 )
-from api.permissions import IsAdminOrManager
+from api.permissions import IsAdminOrManager, IsFrontDeskOrAbove
 
 logger = logging.getLogger(__name__)
 
@@ -217,8 +217,12 @@ class RatePlanMappingsByChannelView(generics.ListAPIView):
 
 class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
     """List all availability updates or create new update."""
-    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = AvailabilityUpdateSerializer
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsAdminOrManager()]
+        return [IsAuthenticated(), IsFrontDeskOrAbove()]
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['property_channel', 'room_type', 'status']
     ordering_fields = ['date', 'created_at']
@@ -243,7 +247,7 @@ class AvailabilityUpdateListCreateView(generics.ListCreateAPIView):
 
 class AvailabilityUpdateDetailView(generics.RetrieveAPIView):
     """Retrieve an availability update."""
-    permission_classes = [IsAuthenticated, IsAdminOrManager]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = AvailabilityUpdateSerializer
     
     def get_queryset(self):
@@ -278,15 +282,16 @@ class BulkAvailabilityUpdateView(APIView):
         # Create updates for date range
         updates = []
         current_date = data['start_date']
-        while current_date <= data['end_date']:
-            update = AvailabilityUpdate.objects.create(
-                property_channel=property_channel,
-                room_type_id=data['room_type'],
-                date=current_date,
-                availability=data['availability']
-            )
-            updates.append(update)
-            current_date += timedelta(days=1)
+        with transaction.atomic():
+            while current_date <= data['end_date']:
+                update = AvailabilityUpdate.objects.create(
+                    property_channel=property_channel,
+                    room_type_id=data['room_type'],
+                    date=current_date,
+                    availability=data['availability']
+                )
+                updates.append(update)
+                current_date += timedelta(days=1)
         
         return Response({
             'message': f'Created {len(updates)} availability updates',
@@ -359,16 +364,17 @@ class BulkRateUpdateView(APIView):
         # Create updates for date range
         updates = []
         current_date = data['start_date']
-        while current_date <= data['end_date']:
-            update = RateUpdate.objects.create(
-                property_channel=property_channel,
-                room_type_id=data['room_type'],
-                rate_plan_id=data['rate_plan'],
-                date=current_date,
-                rate=data['rate']
-            )
-            updates.append(update)
-            current_date += timedelta(days=1)
+        with transaction.atomic():
+            while current_date <= data['end_date']:
+                update = RateUpdate.objects.create(
+                    property_channel=property_channel,
+                    room_type_id=data['room_type'],
+                    rate_plan_id=data['rate_plan'],
+                    date=current_date,
+                    rate=data['rate']
+                )
+                updates.append(update)
+                current_date += timedelta(days=1)
         
         return Response({
             'message': f'Created {len(updates)} rate updates',
@@ -511,9 +517,9 @@ class ChannelDashboardView(APIView):
 
 # ===== Channels (Global) =====
 
-class ChannelListView(generics.ListAPIView):
+class ChannelListView(generics.ListCreateAPIView):
     """
-    List all available channels.
+    List all available channels (GET) or create a new channel (POST).
     
     NOTE: Intentionally GLOBAL - Channels like Booking.com, Expedia, Airbnb 
     are master data shared across all properties. Each property then links 
@@ -527,4 +533,4 @@ class ChannelListView(generics.ListAPIView):
     
     def get_queryset(self):
         # Intentionally global - master channel list
-        return Channel.objects.filter(is_active=True)
+        return Channel.objects.all()

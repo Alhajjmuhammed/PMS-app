@@ -15,6 +15,8 @@ import {
   CheckCircleIcon,
   HomeModernIcon,
   ClockIcon,
+  HomeIcon,
+  ChevronRightIcon,
 } from '@heroicons/react/24/outline';
 
 interface Outlet { id: number; name: string; outlet_type: string; }
@@ -210,25 +212,38 @@ export default function POSPage() {
 
   return (
     <Layout>
-      <div className="space-y-6">
+      <div className="p-5 lg:p-6 space-y-5">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Point of Sale</span>
+        </nav>
+
         {/* Header */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold text-gray-900">Point of Sale</h1>
-            <p className="text-sm text-gray-500 mt-0.5">Manage orders and menu items</p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+              <ShoppingCartIcon className="w-5 h-5 text-indigo-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Point of Sale</h1>
+              <p className="text-slate-500 text-sm mt-0.5">Manage orders and menu items</p>
+            </div>
           </div>
           {/* Outlet selector */}
           {outlets.length > 1 && (
             <select
               value={selectedOutlet ?? ''}
               onChange={e => setSelectedOutlet(Number(e.target.value))}
-              className="border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500"
+              className="border border-slate-200 rounded-xl px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-300 bg-white text-slate-700"
             >
               {outlets.map(o => <option key={o.id} value={o.id}>{o.name}</option>)}
             </select>
           )}
           {outlets.length === 1 && (
-            <span className="text-sm font-medium text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-lg">{outlets[0]?.name}</span>
+            <span className="text-sm font-semibold text-indigo-700 bg-indigo-50 px-3 py-1.5 rounded-xl">{outlets[0]?.name}</span>
           )}
         </div>
 
@@ -242,7 +257,7 @@ export default function POSPage() {
                 className={`flex items-center gap-2 py-3 px-1 border-b-2 text-sm font-medium transition-colors ${
                   activeTab === key
                     ? 'border-indigo-600 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                    : 'border-transparent text-slate-500 hover:text-slate-700 hover:border-slate-300'
                 }`}
               >
                 <Icon className="h-4 w-4" />

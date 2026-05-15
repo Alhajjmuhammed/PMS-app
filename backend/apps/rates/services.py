@@ -5,8 +5,7 @@ Handles dynamic rate calculation with seasons, discounts, packages, and yield ru
 
 from decimal import Decimal
 from datetime import datetime, timedelta
-from django.db.models import Q
-from apps.rates.models import RatePlan, Season, RoomRate, Discount, Package, YieldRule
+from apps.rates.models import RatePlan, Season, RoomRate, Discount, YieldRule
 
 
 class PricingService:
@@ -37,32 +36,49 @@ class PricingService:
         except RatePlan.DoesNotExist:
             return {'error': 'Rate plan not found'}
         
+        property_id = rate_plan.property_id
+
+        # Pre-fetch all seasons for this property in one query
+        all_seasons = list(
+            Season.objects.filter(
+                property_id=property_id,
+                is_active=True,
+                start_date__lte=check_out_date,
+                end_date__gte=check_in_date,
+            ).order_by('-priority')
+        )
+
+        # Pre-fetch all room rates for this rate plan + room type in one query
+        all_room_rates = list(
+            RoomRate.objects.filter(
+                rate_plan=rate_plan,
+                room_type_id=room_type_id,
+                is_active=True,
+            ).select_related('season')
+        )
+        room_rates_by_season = {rr.season_id: rr for rr in all_room_rates}
+
+        # Pre-fetch yield rules once
+        yield_rules = list(YieldRule.objects.filter(property_id=property_id, is_active=True))
+
         # Calculate daily rates
         daily_rates = []
         total_base = Decimal('0')
         current_date = check_in_date
+        today = datetime.now().date()
         
         while current_date < check_out_date:
-            # Get applicable season
-            season = PricingService._get_season(rate_plan.property_id, current_date)
+            # Get applicable season from pre-fetched list
+            season = next(
+                (s for s in all_seasons
+                 if s.start_date <= current_date <= s.end_date),
+                None
+            )
             
-            # Get room rate for this season
-            try:
-                if season:
-                    room_rate = RoomRate.objects.get(
-                        rate_plan=rate_plan,
-                        room_type_id=room_type_id,
-                        season=season,
-                        is_active=True
-                    )
-                else:
-                    room_rate = RoomRate.objects.get(
-                        rate_plan=rate_plan,
-                        room_type_id=room_type_id,
-                        season__isnull=True,
-                        is_active=True
-                    )
-            except RoomRate.DoesNotExist:
+            # Get room rate from pre-fetched dict
+            season_id = season.id if season else None
+            room_rate = room_rates_by_season.get(season_id)
+            if room_rate is None:
                 return {'error': f'No rate found for date {current_date}'}
             
             # Calculate daily rate based on occupancy
@@ -74,13 +90,17 @@ class PricingService:
             if children > 0:
                 daily_rate += room_rate.extra_child * children
             
-            # Apply yield management
-            daily_rate = PricingService._apply_yield_rules(
-                rate_plan.property_id, 
-                room_type_id,
-                current_date,
-                daily_rate
-            )
+            # Apply yield management from pre-fetched rules
+            for rule in yield_rules:
+                if rule.trigger_type == 'OCCUPANCY':
+                    daily_rate = daily_rate * (Decimal('1') + rule.adjustment_percent / 100)
+                elif rule.trigger_type == 'DAY_AHEAD':
+                    days_until = (current_date - today).days
+                    if rule.min_threshold <= days_until:
+                        if rule.max_threshold is None or days_until <= rule.max_threshold:
+                            daily_rate = daily_rate * (Decimal('1') + rule.adjustment_percent / 100)
+                elif rule.trigger_type == 'DEMAND':
+                    pass
             
             daily_rates.append({
                 'date': current_date.isoformat(),

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import transaction
 from apps.housekeeping.models import (
     HousekeepingTask, RoomInspection, AmenityInventory,
     LinenInventory, StockMovement
@@ -277,6 +278,7 @@ class StockMovementCreateSerializer(serializers.ModelSerializer):
         
         return data
     
+    @transaction.atomic
     def create(self, validated_data):
         """Create stock movement and update inventory."""
         amenity = validated_data.get('amenity_inventory')

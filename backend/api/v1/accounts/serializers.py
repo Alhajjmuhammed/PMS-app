@@ -109,7 +109,10 @@ class StaffProfileCreateSerializer(serializers.ModelSerializer):
     
     def validate_user(self, value):
         """Ensure user doesn't already have a staff profile."""
-        if StaffProfile.objects.filter(user=value).exists():
+        qs = StaffProfile.objects.filter(user=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError("This user already has a staff profile.")
         return value
     

@@ -23,4 +23,8 @@ urlpatterns = [
     path('activity-logs/<int:pk>/', views.ActivityLogDetailView.as_view(), name='activity_log_detail'),
     path('activity-logs/user/<int:user_id>/', views.ActivityLogByUserView.as_view(), name='activity_log_by_user'),
     path('activity-logs/export/', views.ActivityLogExportView.as_view(), name='activity_log_export'),
+
+    # Password Reset (unauthenticated)
+    path('password-reset/request/', views.PasswordResetRequestView.as_view(), name='password_reset_request'),
+    path('password-reset/confirm/', views.PasswordResetConfirmView.as_view(), name='password_reset_confirm'),
 ]

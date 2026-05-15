@@ -36,6 +36,10 @@ urlpatterns = [
     path('daily-stats/', reports_views.DailyStatisticsListCreateView.as_view(), name='daily_stats'),  # Alias for API consistency
     path('monthly-stats/', reports_views.MonthlyStatisticsListCreateView.as_view(), name='monthly_stats'),  # Alias for API consistency
     
+    # ===== Summary & Guest Reports =====
+    path('summary/', views.SummaryReportView.as_view(), name='summary'),
+    path('guests/', views.GuestReportView.as_view(), name='guests'),
+
     # ===== Legacy compatibility =====
     path('dashboard/', views.DashboardStatsView.as_view(), name='dashboard'),
     path('advanced-analytics/', views.AdvancedAnalyticsView.as_view(), name='advanced_analytics'),

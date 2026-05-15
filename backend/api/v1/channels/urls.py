@@ -9,6 +9,7 @@ app_name = 'channels'
 
 urlpatterns = [
     # ===== Global Channels =====
+    path('channels/', channels_views.ChannelListView.as_view(), name='channel_list'),
     path('available/', channels_views.ChannelListView.as_view(), name='available_channels'),
     
     # ===== Property Channels =====

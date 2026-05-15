@@ -19,6 +19,7 @@ export default function RoomTypeDetailPage() {
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [formData, setFormData] = useState<any>({});
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (params.id) loadRoomType();
@@ -38,7 +39,7 @@ export default function RoomTypeDetailPage() {
         is_active: data.is_active ?? true,
       });
     } catch {
-      alert('Failed to load room type');
+      setError('Failed to load room type. Please refresh.');
     } finally {
       setLoading(false);
     }
@@ -55,7 +56,7 @@ export default function RoomTypeDetailPage() {
       setRoomType(updated);
       setEditing(false);
     } catch (error: any) {
-      alert(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to save changes');
+      setError(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to save changes');
     } finally {
       setSaving(false);
     }
@@ -68,7 +69,7 @@ export default function RoomTypeDetailPage() {
       await roomTypeService.delete(parseInt(params.id as string));
       router.push('/rooms/types');
     } catch {
-      alert('Failed to delete room type');
+      setError('Failed to delete room type. Please try again.');
       setDeleting(false);
     }
   };
@@ -102,6 +103,9 @@ export default function RoomTypeDetailPage() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
+        {error && (
+          <div className="px-4 py-3 rounded-lg bg-red-50 text-red-800 border border-red-200 text-sm font-medium">{error}</div>
+        )}
         {/* Header */}
         <div className="flex justify-between items-center">
           <div>

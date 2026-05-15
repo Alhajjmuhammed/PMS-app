@@ -6,17 +6,29 @@ import Card from '@/components/Card';
 import Button from '@/components/Button';
 import Input from '@/components/Input';
 import api from '@/lib/api';
+import clsx from 'clsx';
+import {
+  HomeIcon, ChevronRightIcon, TagIcon,
+  PencilSquareIcon, TrashIcon, CheckCircleIcon, ExclamationTriangleIcon,
+} from '@heroicons/react/24/outline';
 
 export default function RatesPage() {
   const [rates, setRates] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [editing, setEditing] = useState<number | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ id: number; name: string } | null>(null);
   const [formData, setFormData] = useState({
     name: '',
-    rate_type: 'base',
-    amount: 0,
-    percentage: 0,
+    code: '',
+    rate_type: 'BAR',
+    description: '',
   });
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
 
   useEffect(() => {
     loadRates();
@@ -24,10 +36,10 @@ export default function RatesPage() {
 
   const loadRates = async () => {
     try {
-      const response = await api.get('/api/v1/rates/');
+      const response = await api.get('/api/v1/rates/rate-plans/');
       setRates(response.data.results || response.data);
-    } catch (error) {
-      console.error('Failed to load rates:', error);
+    } catch {
+      showToast('Failed to load rate plans', false);
     } finally {
       setLoading(false);
     }
@@ -35,52 +47,131 @@ export default function RatesPage() {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    
     try {
       if (editing) {
-        await api.patch(`/api/v1/rates/${editing}/`, formData);
+        await api.patch(`/api/v1/rates/plans/${editing}/`, formData);
+        showToast('Rate plan updated');
       } else {
-        await api.post('/api/v1/rates/', formData);
+        await api.post('/api/v1/rates/rate-plans/', formData);
+        showToast('Rate plan created');
       }
-      
-      setFormData({ name: '', rate_type: 'base', amount: 0, percentage: 0 });
+      setFormData({ name: '', code: '', rate_type: 'BAR', description: '' });
       setEditing(null);
       await loadRates();
-    } catch (error) {
-      alert('Failed to save rate');
+    } catch {
+      showToast('Failed to save rate plan', false);
     }
   };
 
   const handleEdit = (rate: any) => {
     setEditing(rate.id);
-    setFormData(rate);
+    setFormData({
+      name: rate.name || '',
+      code: rate.code || '',
+      rate_type: rate.rate_type || 'BAR',
+      description: rate.description || '',
+    });
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm('Are you sure you want to delete this rate?')) return;
-    
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
     try {
-      await api.delete(`/api/v1/rates/${id}/`);
+      await api.delete(`/api/v1/rates/plans/${deleteConfirm.id}/`);
+      showToast(`"${deleteConfirm.name}" deleted`);
+      setDeleteConfirm(null);
       await loadRates();
-    } catch (error) {
-      alert('Failed to delete rate');
+    } catch {
+      showToast('Failed to delete rate plan', false);
     }
   };
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">Rate Management</h1>
+      {/* Toast */}
+      {toast && (
+        <div className={clsx(
+          'fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
+          toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
+        )}>
+          {toast.ok
+            ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            : <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
+          {toast.msg}
+        </div>
+      )}
+
+      {/* Delete confirm modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setDeleteConfirm(null)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl p-6 w-full max-w-sm">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0">
+                <ExclamationTriangleIcon className="w-5 h-5 text-red-600" />
+              </div>
+              <div>
+                <h3 className="font-semibold text-gray-900">Delete Rate Plan</h3>
+                <p className="text-xs text-gray-500">This cannot be undone</p>
+              </div>
+            </div>
+            <p className="text-sm text-slate-600 mb-6">
+              Are you sure you want to delete <span className="font-semibold text-slate-800">"{deleteConfirm.name}"</span>?
+            </p>
+            <div className="flex gap-3 justify-end">
+              <button onClick={() => setDeleteConfirm(null)}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-gray-200 hover:bg-gray-300 text-gray-700 transition-colors">
+                Cancel
+              </button>
+              <button onClick={handleDelete}
+                className="px-4 py-2 rounded-lg text-sm font-semibold bg-red-600 hover:bg-red-700 text-white transition-colors">
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="p-5 lg:p-6 space-y-5">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Rates</span>
+        </nav>
+
+        {/* Header */}
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center flex-shrink-0">
+              <TagIcon className="w-5 h-5 text-amber-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Rate Management</h1>
+              <p className="text-slate-500 text-sm mt-0.5">{rates.length} rate plan{rates.length !== 1 ? 's' : ''}</p>
+            </div>
+          </div>
+        </div>
 
         <Card title={editing ? 'Edit Rate' : 'Create New Rate'}>
           <form onSubmit={handleSave} className="space-y-4">
-            <Input
-              label="Rate Name"
-              value={formData.name}
-              onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-              placeholder="e.g., Weekend Rate, Corporate Discount"
-              required
-            />
+            <div className="grid grid-cols-2 gap-4">
+              <Input
+                label="Rate Name"
+                value={formData.name}
+                onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                placeholder="e.g., Weekend Rate"
+                required
+              />
+              <Input
+                label="Code"
+                value={formData.code}
+                onChange={(e) => setFormData({ ...formData, code: e.target.value.toUpperCase() })}
+                placeholder="e.g., WKND-RATE"
+                maxLength={20}
+                required
+              />
+            </div>
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -89,32 +180,26 @@ export default function RatesPage() {
               <select
                 value={formData.rate_type}
                 onChange={(e) => setFormData({ ...formData, rate_type: e.target.value })}
-                className="w-full rounded-md border-gray-300 shadow-sm focus:ring-primary-500 focus:border-primary-500"
+                className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
               >
-                <option value="base">Base Rate</option>
-                <option value="seasonal">Seasonal Rate</option>
-                <option value="discount">Discount</option>
-                <option value="package">Package Rate</option>
+                <option value="RACK">Rack Rate</option>
+                <option value="BAR">Best Available Rate</option>
+                <option value="CORPORATE">Corporate Rate</option>
+                <option value="GOVERNMENT">Government Rate</option>
+                <option value="AAA">AAA Rate</option>
+                <option value="SENIOR">Senior Rate</option>
+                <option value="PACKAGE">Package Rate</option>
+                <option value="PROMOTIONAL">Promotional Rate</option>
+                <option value="OTA">OTA Rate</option>
               </select>
             </div>
 
-            <div className="grid grid-cols-2 gap-4">
-              <Input
-                label="Fixed Amount ($)"
-                type="number"
-                step="0.01"
-                value={formData.amount}
-                onChange={(e) => setFormData({ ...formData, amount: parseFloat(e.target.value) })}
-              />
-              
-              <Input
-                label="Percentage (%)"
-                type="number"
-                step="0.01"
-                value={formData.percentage}
-                onChange={(e) => setFormData({ ...formData, percentage: parseFloat(e.target.value) })}
-              />
-            </div>
+            <Input
+              label="Description"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              placeholder="Optional description"
+            />
 
             <div className="flex gap-3">
               {editing && (
@@ -123,7 +208,7 @@ export default function RatesPage() {
                   variant="secondary"
                   onClick={() => {
                     setEditing(null);
-                    setFormData({ name: '', rate_type: 'base', amount: 0, percentage: 0 });
+                    setFormData({ name: '', code: '', rate_type: 'BAR', description: '' });
                   }}
                 >
                   Cancel
@@ -142,9 +227,9 @@ export default function RatesPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Code</th>
                   <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Type</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-                  <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Percentage</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
                   <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
                 </tr>
               </thead>
@@ -152,10 +237,7 @@ export default function RatesPage() {
                 {loading ? (
                   <tr>
                     <td colSpan={5} className="px-6 py-12 text-center">
-                      <svg className="animate-spin h-8 w-8 text-primary-600 mx-auto" fill="none" viewBox="0 0 24 24">
-                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                      </svg>
+                      <div className="w-8 h-8 border-4 border-amber-500 border-t-transparent rounded-full animate-spin mx-auto" />
                     </td>
                   </tr>
                 ) : rates.length === 0 ? (
@@ -168,26 +250,26 @@ export default function RatesPage() {
                   rates.map((rate) => (
                     <tr key={rate.id} className="hover:bg-gray-50">
                       <td className="px-6 py-4 text-sm font-medium text-gray-900">{rate.name}</td>
+                      <td className="px-6 py-4 text-sm text-gray-500 font-mono">{rate.code}</td>
                       <td className="px-6 py-4 text-sm text-gray-900 capitalize">{rate.rate_type}</td>
-                      <td className="px-6 py-4 text-sm text-gray-900 text-right">
-                        ${rate.amount?.toFixed(2) || '0.00'}
-                      </td>
-                      <td className="px-6 py-4 text-sm text-gray-900 text-right">
-                        {rate.percentage?.toFixed(2) || '0.00'}%
-                      </td>
-                      <td className="px-6 py-4 text-right text-sm font-medium space-x-2">
-                        <button
-                          onClick={() => handleEdit(rate)}
-                          className="text-primary-600 hover:text-primary-900"
-                        >
-                          Edit
-                        </button>
-                        <button
-                          onClick={() => handleDelete(rate.id)}
-                          className="text-red-600 hover:text-red-900"
-                        >
-                          Delete
-                        </button>
+                      <td className="px-6 py-4 text-sm text-gray-500">{rate.description || '—'}</td>
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex items-center justify-end gap-1">
+                          <button
+                            onClick={() => handleEdit(rate)}
+                            className="p-1.5 rounded-lg text-green-600 hover:bg-green-50 transition-colors"
+                            title="Edit"
+                          >
+                            <PencilSquareIcon className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirm({ id: rate.id, name: rate.name })}
+                            className="p-1.5 rounded-lg text-red-600 hover:bg-red-50 transition-colors"
+                            title="Delete"
+                          >
+                            <TrashIcon className="w-4 h-4" />
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   ))

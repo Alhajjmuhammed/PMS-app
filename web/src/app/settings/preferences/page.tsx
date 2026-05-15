@@ -6,7 +6,19 @@ import Card from '@/components/Card';
 import Input from '@/components/Input';
 import Button from '@/components/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import api from '@/lib/api';
+
+const STORAGE_KEY = 'pms_user_preferences';
+
+const defaultPreferences: Preferences = {
+  language: 'en',
+  timezone: 'UTC',
+  dateFormat: 'MM/DD/YYYY',
+  currency: 'USD',
+  theme: 'light',
+  itemsPerPage: 20,
+  emailDigest: 'daily',
+  autoSaveInterval: 5,
+};
 
 interface Preferences {
   language: string;
@@ -22,38 +34,28 @@ interface Preferences {
 export default function PreferencesPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [preferences, setPreferences] = useState<Preferences>({
-    language: 'en',
-    timezone: 'UTC',
-    dateFormat: 'MM/DD/YYYY',
-    currency: 'USD',
-    theme: 'light',
-    itemsPerPage: 20,
-    emailDigest: 'daily',
-    autoSaveInterval: 5,
-  });
+  const [preferences, setPreferences] = useState<Preferences>(defaultPreferences);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
 
   useEffect(() => {
-    loadPreferences();
-  }, []);
-
-  const loadPreferences = async () => {
-    try {
-      const response = await api.get(`/accounts/users/${user?.id}/preferences/`);
-      setPreferences({ ...preferences, ...response.data });
-    } catch (error) {
-      console.error('Failed to load preferences:', error);
+    const key = `${STORAGE_KEY}_${user?.id ?? 'anon'}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try { setPreferences({ ...defaultPreferences, ...JSON.parse(saved) }); } catch {}
     }
-  };
+  }, [user?.id]);
 
   const handleSave = async () => {
     setLoading(true);
     try {
-      await api.patch(`/accounts/users/${user?.id}/preferences/`, preferences);
-      alert('Preferences saved successfully!');
+      const key = `${STORAGE_KEY}_${user?.id ?? 'anon'}`;
+      localStorage.setItem(key, JSON.stringify(preferences));
+      setMessage({ text: 'Preferences saved successfully!', ok: true });
+      setTimeout(() => setMessage(null), 3500);
     } catch (error) {
       console.error('Failed to save preferences:', error);
-      alert('Failed to save preferences');
+      setMessage({ text: 'Failed to save preferences', ok: false });
+      setTimeout(() => setMessage(null), 3500);
     } finally {
       setLoading(false);
     }
@@ -62,6 +64,9 @@ export default function PreferencesPage() {
   return (
     <Layout>
       <div className="max-w-3xl mx-auto space-y-6">
+        {message && (
+          <div className={`px-4 py-3 rounded-lg text-sm font-medium border ${message.ok ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'}`}>{message.text}</div>
+        )}
         <div>
           <h1 className="text-2xl font-bold text-gray-900">User Preferences</h1>
           <p className="text-gray-500">Customize your application experience</p>
@@ -236,7 +241,7 @@ export default function PreferencesPage() {
           <Button onClick={handleSave} disabled={loading}>
             {loading ? 'Saving...' : 'Save Preferences'}
           </Button>
-          <Button variant="outline" onClick={loadPreferences}>
+          <Button variant="outline" onClick={() => setPreferences(defaultPreferences)}>
             Reset to Defaults
           </Button>
         </div>

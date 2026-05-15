@@ -20,6 +20,7 @@ import {
   TableCellsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  HomeIcon,
 } from '@heroicons/react/24/outline';
 
 interface User {
@@ -30,7 +31,7 @@ interface User {
   role: string;
   phone: string;
   is_active: boolean;
-  assigned_property: number | null;
+  assigned_property: { id: number; name: string } | null;
   property_name: string | null;
   last_login: string | null;
   date_joined: string;
@@ -236,7 +237,7 @@ export default function UsersPage() {
     setForm({
       email: u.email, first_name: u.first_name, last_name: u.last_name,
       role: u.role, phone: u.phone ?? '',
-      assigned_property: u.assigned_property ?? '',
+      assigned_property: u.assigned_property?.id ?? '',
       password: '', is_active: u.is_active,
     });
     setEditingId(u.id);
@@ -310,13 +311,26 @@ export default function UsersPage() {
           </div>
         )}
 
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Users</span>
+        </nav>
+
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">System Users</h1>
-            <p className="text-slate-500 text-sm mt-0.5">
-              {filtered.length} user{filtered.length !== 1 ? 's' : ''}{roleFilter ? ` · ${roleFilter.replace('_', ' ')}` : ''}
-            </p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <UserGroupIcon className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">System Users</h1>
+              <p className="text-slate-500 text-sm mt-0.5">
+                {filtered.length} user{filtered.length !== 1 ? 's' : ''}{roleFilter ? ` · ${roleFilter.replace('_', ' ')}` : ''}
+              </p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}
@@ -341,6 +355,22 @@ export default function UsersPage() {
               <PlusIcon className="w-4 h-4" />
               Add User
             </button>
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Users</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{users.length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Admins</p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">{users.filter(u => u.role === 'ADMIN').length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4 col-span-2 sm:col-span-1">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active</p>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">{users.filter(u => u.is_active).length}</p>
           </div>
         </div>
 
@@ -450,56 +480,66 @@ export default function UsersPage() {
           </>
         )}
 
+      </div>
+
         {/* Create / Edit slide-over */}
         {editingId !== null && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={closePanel} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">{editingId === 'new' ? 'Add New User' : 'Edit User'}</h2>
-                <button onClick={closePanel} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-700 flex items-center justify-center">
+                    <UserGroupIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">{editingId === 'new' ? 'Add New User' : 'Edit User'}</h2>
+                    <p className="text-xs text-gray-500">{editingId === 'new' ? 'Fill in the details below' : 'Update user details'}</p>
+                  </div>
+                </div>
+                <button onClick={closePanel} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Personal Information</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Personal Information</p>
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">First Name</label>
-                        <input {...f('first_name')} placeholder="John" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">First Name</label>
+                        <input {...f('first_name')} placeholder="John" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Last Name</label>
-                        <input {...f('last_name')} placeholder="Doe" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Name</label>
+                        <input {...f('last_name')} placeholder="Doe" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Email *</label>
-                      <input {...f('email')} required type="email" placeholder="john@hotel.com" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email *</label>
+                      <input {...f('email')} required type="email" placeholder="john@hotel.com" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Phone</label>
-                      <input {...f('phone')} type="tel" placeholder="+1-555-000-0000" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
+                      <input {...f('phone')} type="tel" placeholder="+1-555-000-0000" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                   </div>
                 </section>
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Role & Access</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Role & Access</p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Role *</label>
-                      <select {...f('role')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Role *</label>
+                      <select {...f('role')} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                         {assignableRoles.map((r) => <option key={r} value={r}>{r.replace('_', ' ')}</option>)}
                       </select>
                     </div>
                     {isSuperAdmin && (
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Assign to Property</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Assign to Property</label>
                         <select value={String(form.assigned_property)}
                           onChange={(e) => setForm((prev) => ({ ...prev, assigned_property: e.target.value ? Number(e.target.value) : '' }))}
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                           <option value="">— No property —</option>
                           {properties.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
                         </select>
@@ -508,26 +548,26 @@ export default function UsersPage() {
                     <div className="flex items-center gap-2 pt-1">
                       <input id="ua_active" type="checkbox" checked={!!form.is_active}
                         onChange={(e) => setForm((prev) => ({ ...prev, is_active: e.target.checked }))}
-                        className="w-4 h-4 rounded border-slate-300 text-blue-500 focus:ring-blue-400" />
-                      <label htmlFor="ua_active" className="text-sm text-slate-700 font-medium select-none cursor-pointer">Account is active</label>
+                        className="w-4 h-4 rounded border-gray-300 text-blue-500 focus:ring-blue-400" />
+                      <label htmlFor="ua_active" className="text-sm text-gray-700 font-medium select-none cursor-pointer">Account is active</label>
                     </div>
                   </div>
                 </section>
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Password</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Password</p>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
                       {editingId === 'new' ? 'Password *' : 'New Password (leave blank to keep current)'}
                     </label>
                     <input {...f('password')} type="password" required={editingId === 'new'} placeholder="••••••••"
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                 </section>
               </form>
-              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button onClick={closePanel} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+                <button onClick={closePanel} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
                 <button onClick={handleSave} disabled={saving}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
                   {saving ? 'Saving…' : editingId === 'new' ? 'Create User' : 'Save Changes'}
                 </button>
               </div>
@@ -539,19 +579,19 @@ export default function UsersPage() {
         {viewingUser && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setViewingUser(null)} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-3">
-                  <div className={clsx('w-10 h-10 rounded-xl bg-gradient-to-br flex items-center justify-center text-white font-bold text-sm flex-shrink-0', avatarColor(viewingUser.id))}>
+                  <div className={clsx('w-10 h-10 rounded-full bg-gradient-to-br flex items-center justify-center text-white font-bold text-sm flex-shrink-0', avatarColor(viewingUser.id))}>
                     {getInitials(viewingUser)}
                   </div>
                   <div>
-                    <h2 className="font-bold text-slate-800 text-base leading-tight">{viewingUser.first_name} {viewingUser.last_name}</h2>
-                    <p className="text-xs text-slate-400">{viewingUser.email}</p>
+                    <h2 className="font-semibold text-gray-900">{viewingUser.first_name} {viewingUser.last_name}</h2>
+                    <p className="text-xs text-gray-500">{viewingUser.email}</p>
                   </div>
                 </div>
-                <button onClick={() => setViewingUser(null)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
-                  <XMarkIcon className="w-5 h-5" />
+                <button onClick={() => setViewingUser(null)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -571,24 +611,24 @@ export default function UsersPage() {
                   ]},
                 ].map(({ label, rows }) => (
                   <section key={label}>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{label}</p>
-                    <div className="bg-slate-50 rounded-xl divide-y divide-slate-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{label}</p>
+                    <div className="bg-gray-50 rounded-xl divide-y divide-gray-100">
                       {(rows as [string, string][]).map(([k, v]) => (
                         <div key={k} className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-xs text-slate-500">{k}</span>
-                          <span className="text-xs font-semibold text-slate-700">{v || '—'}</span>
+                          <span className="text-xs text-gray-500">{k}</span>
+                          <span className="text-xs font-semibold text-gray-700">{v || '—'}</span>
                         </div>
                       ))}
                     </div>
                   </section>
                 ))}
               </div>
-              <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
                 <button onClick={() => { setViewingUser(null); openEdit(viewingUser); }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
                   <PencilSquareIcon className="w-4 h-4" /> Edit
                 </button>
-                <button onClick={() => setViewingUser(null)} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors">
+                <button onClick={() => setViewingUser(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
                   Close
                 </button>
               </div>
@@ -617,7 +657,6 @@ export default function UsersPage() {
             </div>
           </div>
         )}
-      </div>
     </Layout>
   );
 }

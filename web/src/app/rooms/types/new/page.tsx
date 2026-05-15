@@ -13,6 +13,7 @@ const BED_TYPES = ['single', 'double', 'queen', 'king', 'twin', 'suite'];
 export default function CreateRoomTypePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     code: '',
@@ -34,7 +35,7 @@ export default function CreateRoomTypePage() {
       });
       router.push('/rooms/types');
     } catch (error: any) {
-      alert(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to create room type');
+      setError(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to create room type');
     } finally {
       setLoading(false);
     }
@@ -43,6 +44,9 @@ export default function CreateRoomTypePage() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
+        {error && (
+          <div className="px-4 py-3 rounded-lg bg-red-50 text-red-800 border border-red-200 text-sm font-medium">{error}</div>
+        )}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Create Room Type</h1>
           <Button variant="secondary" onClick={() => router.back()}>

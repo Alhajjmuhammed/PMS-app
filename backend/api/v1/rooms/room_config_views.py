@@ -173,8 +173,6 @@ class BulkAmenityAssignView(APIView):
         data = serializer.validated_data
         room_type = data['room_type']
         amenities = data['amenities']
-        is_complimentary = data.get('is_complimentary', True)
-        quantity = data.get('quantity', 1)
         
         # Verify room type belongs to user's property
         if room_type.hotel != request.user.assigned_property:
@@ -185,18 +183,10 @@ class BulkAmenityAssignView(APIView):
         
         created_assignments = []
         for amenity in amenities:
-            assignment, created = RoomTypeAmenity.objects.get_or_create(
+            assignment, _ = RoomTypeAmenity.objects.get_or_create(
                 room_type=room_type,
                 amenity=amenity,
-                defaults={
-                    'quantity': quantity,
-                    'is_complimentary': is_complimentary
-                }
             )
-            if not created:
-                assignment.quantity = quantity
-                assignment.is_complimentary = is_complimentary
-                assignment.save()
             created_assignments.append(assignment)
         
         response_serializer = RoomTypeAmenitySerializer(created_assignments, many=True)
@@ -299,7 +289,7 @@ class RoomStatusLogsByRoomView(generics.ListAPIView):
         return RoomStatusLog.objects.filter(
             room_id=room_id,
             room__hotel=self.request.user.assigned_property
-        ).select_related('room', 'changed_by').order_by('-changed_at')
+        ).select_related('room', 'changed_by').order_by('-timestamp')
 
 
 class RoomConfigStatsView(APIView):

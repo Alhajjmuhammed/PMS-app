@@ -9,12 +9,11 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
 from django.db import transaction
-from django.db.models import Q, Count, Avg
+from django.db.models import Q, Count
 from datetime import date, timedelta
 
 from apps.maintenance.models import MaintenanceRequest, Asset, MaintenanceLog
 from apps.accounts.models import User
-from apps.rooms.models import Room
 from .maintenance_serializers import (
     MaintenanceRequestSerializer,
     AssetSerializer,
@@ -22,20 +21,24 @@ from .maintenance_serializers import (
     MaintenanceDashboardSerializer,
     MaintenanceRequestAssignSerializer
 )
-from api.permissions import IsAdminOrManager, IsMaintenanceStaff
+from api.permissions import IsAdminOrManager, IsMaintenanceStaff, IsFrontDeskOrMaintenance
 
 
 # ===== Maintenance Requests =====
 
 class MaintenanceRequestListCreateView(generics.ListCreateAPIView):
     """List all maintenance requests or create new request."""
-    permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     serializer_class = MaintenanceRequestSerializer
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['status', 'priority', 'request_type', 'assigned_to', 'room']
     search_fields = ['request_number', 'title', 'description', 'location']
     ordering_fields = ['created_at', 'priority', 'status', 'completed_at']
     ordering = ['-created_at']
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsFrontDeskOrMaintenance()]
+        return [IsAuthenticated(), IsMaintenanceStaff()]
     
     def get_queryset(self):
         queryset = MaintenanceRequest.objects.filter(
@@ -172,7 +175,8 @@ class EmergencyMaintenanceView(generics.ListAPIView):
 class AssignMaintenanceView(APIView):
     """Assign maintenance request to a technician."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
-    
+
+    @transaction.atomic
     def post(self, request, pk):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
@@ -223,7 +227,8 @@ class AssignMaintenanceView(APIView):
 class BulkAssignMaintenanceView(APIView):
     """Bulk assign multiple maintenance requests."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
-    
+
+    @transaction.atomic
     def post(self, request):
         serializer = MaintenanceRequestAssignSerializer(data=request.data)
         if not serializer.is_valid():
@@ -269,7 +274,8 @@ class BulkAssignMaintenanceView(APIView):
 class StartMaintenanceView(APIView):
     """Start working on maintenance request."""
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
-    
+
+    @transaction.atomic
     def post(self, request, pk):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
@@ -309,7 +315,8 @@ class StartMaintenanceView(APIView):
 class CompleteMaintenanceView(APIView):
     """Complete maintenance request."""
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
-    
+
+    @transaction.atomic
     def post(self, request, pk):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
@@ -346,8 +353,8 @@ class CompleteMaintenanceView(APIView):
             maintenance_request.save()
             
             # Update room status if needed
-            if maintenance_request.room and maintenance_request.room.status == 'OUT_OF_ORDER':
-                maintenance_request.room.status = 'DIRTY'
+            if maintenance_request.room and maintenance_request.room.status == 'OOO':
+                maintenance_request.room.status = 'VD'
                 maintenance_request.room.save()
             
             MaintenanceLog.objects.create(
@@ -405,6 +412,7 @@ class OnHoldMaintenanceView(APIView):
     """Put a maintenance request on hold (e.g. waiting for parts)."""
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
 
+    @transaction.atomic
     def post(self, request, pk):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
@@ -442,6 +450,7 @@ class ResumeMaintenanceView(APIView):
     """Resume a maintenance request that was on hold."""
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
 
+    @transaction.atomic
     def post(self, request, pk):
         try:
             maintenance_request = MaintenanceRequest.objects.get(
@@ -574,7 +583,6 @@ class MaintenanceDashboardView(APIView):
     permission_classes = [IsAuthenticated, IsMaintenanceStaff]
     
     def get(self, request):
-        from django.db import models
         today = date.today()
         property_obj = request.user.assigned_property
         is_maintenance_role = request.user.role == 'MAINTENANCE'

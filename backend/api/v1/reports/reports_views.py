@@ -5,10 +5,11 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.db.models import Q, Count, Avg, Sum
-from datetime import date, timedelta
+from datetime import date
 
 from apps.reports.models import (
     DailyStatistics, MonthlyStatistics, ReportTemplate, NightAudit, AuditLog
@@ -228,7 +229,7 @@ class GenerateReportView(APIView):
                     'guest': f"{r.guest.first_name} {r.guest.last_name}",
                     'check_in_date': r.check_in_date,
                     'check_out_date': r.check_out_date,
-                    'nights': r.number_of_nights,
+                    'nights': r.nights,
                 }
                 for r in reservations
             ]
@@ -382,14 +383,13 @@ class StartNightAuditView(APIView):
             
             audit.status = 'IN_PROGRESS'
             audit.started_at = timezone.now()
-            audit.save()
-            
-            # Create log entry
-            AuditLog.objects.create(
-                night_audit=audit,
-                step='STARTED',
-                message=f'Audit started by {request.user.get_full_name()}'
-            )
+            with transaction.atomic():
+                audit.save()
+                AuditLog.objects.create(
+                    night_audit=audit,
+                    step='STARTED',
+                    message=f'Audit started by {request.user.get_full_name()}'
+                )
             
             serializer = NightAuditSerializer(audit)
             return Response(serializer.data)
@@ -422,14 +422,13 @@ class CompleteNightAuditView(APIView):
             audit.status = 'COMPLETED'
             audit.completed_at = timezone.now()
             audit.completed_by = request.user
-            audit.save()
-            
-            # Create log entry
-            AuditLog.objects.create(
-                night_audit=audit,
-                step='COMPLETED',
-                message=f'Audit completed by {request.user.get_full_name()}'
-            )
+            with transaction.atomic():
+                audit.save()
+                AuditLog.objects.create(
+                    night_audit=audit,
+                    step='COMPLETED',
+                    message=f'Audit completed by {request.user.get_full_name()}'
+                )
             
             serializer = NightAuditSerializer(audit)
             return Response(serializer.data)
@@ -463,7 +462,6 @@ class NightAuditDashboardView(APIView):
     permission_classes = [IsAuthenticated, IsAccountantOrAbove]
     
     def get(self, request):
-        from django.db import models
         property_obj = request.user.assigned_property
         today = date.today()
         
@@ -508,7 +506,7 @@ class NightAuditDashboardView(APIView):
         )['total'] or 0
         
         data = {
-            'last_business_date': last_audit.business_date if last_audit else None,
+            'last_audit_date': last_audit.business_date if last_audit else None,
             'last_audit_status': last_audit.status if last_audit else 'NONE',
             'pending_audits': pending,
             'completed_this_month': completed_count,

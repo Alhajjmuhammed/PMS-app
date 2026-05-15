@@ -2,16 +2,15 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.views import View
-from django.views.generic import ListView, CreateView, UpdateView
+from django.views.generic import ListView, CreateView
 from django.urls import reverse_lazy
-from django.db.models import Q, Count, Sum
+from django.db.models import Q
 from django.utils import timezone
-from datetime import date, timedelta
+from datetime import date
 import uuid
 
 from apps.reservations.models import Reservation
-from apps.rooms.models import Room, RoomType
-from apps.guests.models import Guest
+from apps.rooms.models import Room
 from .models import CheckIn, CheckOut, RoomMove, WalkIn, GuestMessage
 from .forms import CheckInForm, CheckOutForm, RoomMoveForm, WalkInForm, GuestMessageForm
 
@@ -24,7 +23,7 @@ class DashboardView(LoginRequiredMixin, View):
         today = date.today()
         property_filter = {}
         if request.user.assigned_property:
-            property_filter = {'property': request.user.assigned_property}
+            property_filter = {'hotel': request.user.assigned_property}
         
         # Today's statistics
         arrivals = Reservation.objects.filter(
@@ -89,7 +88,7 @@ class ArrivalsView(LoginRequiredMixin, ListView):
         ).select_related('guest')
         
         if self.request.user.assigned_property:
-            queryset = queryset.filter(property=self.request.user.assigned_property)
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
         
         return queryset
     
@@ -152,7 +151,7 @@ class CheckInView(LoginRequiredMixin, View):
         
         # Get available rooms for this room type
         available_rooms = Room.objects.filter(
-            property=reservation.property,
+            hotel=reservation.hotel,
             status=Room.RoomStatus.VACANT_CLEAN,
             fo_status=Room.FrontOfficeStatus.VACANT,
             is_active=True
@@ -200,7 +199,7 @@ class CheckInView(LoginRequiredMixin, View):
             'reservation': reservation,
             'form': form,
             'available_rooms': Room.objects.filter(
-                property=reservation.property,
+                hotel=reservation.hotel,
                 status=Room.RoomStatus.VACANT_CLEAN,
                 is_active=True
             ),
@@ -216,7 +215,6 @@ class CheckOutView(LoginRequiredMixin, View):
         check_in = get_object_or_404(CheckIn, pk=check_in_pk)
         
         # Calculate charges from folio
-        from apps.billing.models import Folio
         try:
             folio = check_in.reservation.folio
             total_charges = folio.total_charges
@@ -283,7 +281,7 @@ class ExpressCheckOutView(LoginRequiredMixin, View):
         check_in = get_object_or_404(CheckIn, pk=check_in_pk)
         
         # Create check-out record
-        check_out = CheckOut.objects.create(
+        CheckOut.objects.create(
             check_in=check_in,
             is_express=True,
             keys_returned=check_in.keys_issued,
@@ -311,7 +309,7 @@ class RoomMoveView(LoginRequiredMixin, View):
         check_in = get_object_or_404(CheckIn, pk=check_in_pk)
         
         available_rooms = Room.objects.filter(
-            property=check_in.room.property,
+            hotel=check_in.room.hotel,
             status=Room.RoomStatus.VACANT_CLEAN,
             fo_status=Room.FrontOfficeStatus.VACANT,
             is_active=True
@@ -382,7 +380,7 @@ class RoomAssignmentView(LoginRequiredMixin, View):
         ).select_related('guest')
         
         if request.user.assigned_property:
-            unassigned = unassigned.filter(property=request.user.assigned_property)
+            unassigned = unassigned.filter(hotel=request.user.assigned_property)
         
         context = {
             'unassigned_reservations': unassigned,
@@ -482,7 +480,7 @@ class RoomGridView(LoginRequiredMixin, View):
     def get(self, request):
         rooms = Room.objects.select_related('room_type', 'floor').filter(is_active=True)
         if request.user.assigned_property:
-            rooms = rooms.filter(property=request.user.assigned_property)
+            rooms = rooms.filter(hotel=request.user.assigned_property)
         
         # Group by floor
         floors = {}

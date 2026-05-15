@@ -21,6 +21,7 @@ import {
   ArrowPathIcon,
   HandRaisedIcon,
   InboxArrowDownIcon,
+  HomeIcon,
 } from '@heroicons/react/24/outline';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -385,11 +386,24 @@ export default function MaintenancePage() {
           </div>
         )}
 
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Maintenance</span>
+        </nav>
+
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Maintenance</h1>
-            {isMaintenance && <p className="text-sm text-slate-400 mt-0.5">Showing your assigned tasks</p>}
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-orange-100 flex items-center justify-center flex-shrink-0">
+              <WrenchScrewdriverIcon className="w-5 h-5 text-orange-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Maintenance</h1>
+              {isMaintenance && <p className="text-slate-500 text-sm mt-0.5">Showing your assigned tasks</p>}
+            </div>
           </div>
           {canManage && (
             <button onClick={() => setShowCreate(true)}
@@ -558,70 +572,80 @@ export default function MaintenancePage() {
           )}
         </div>
 
+      </div>
+
         {/* ── Create Request Slide-over ─────────────────────────────────────── */}
         {showCreate && canManage && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setShowCreate(false)} />
-            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">New Maintenance Request</h2>
-                <button onClick={() => setShowCreate(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                    <WrenchScrewdriverIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">New Maintenance Request</h2>
+                    <p className="text-xs text-gray-500">Fill in the details below</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowCreate(false)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleCreate} className="flex-1 overflow-y-auto p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Room</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Room</label>
                   <select value={form.room} onChange={(e) => setForm((p) => ({ ...p, room: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                     <option value="">— No specific room —</option>
                     {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Location <span className="font-normal text-slate-400">(optional)</span>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Location <span className="font-normal text-gray-400">(optional)</span>
                   </label>
                   <input type="text" value={form.location}
                     onChange={(e) => setForm((p) => ({ ...p, location: e.target.value }))}
                     placeholder="e.g. Lobby, Pool area, Parking..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Title *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Title *</label>
                   <input type="text" required value={form.title}
                     onChange={(e) => setForm((p) => ({ ...p, title: e.target.value }))}
                     placeholder="e.g. AC not cooling, Pipe leak..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Type *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Type *</label>
                     <select required value={form.request_type}
                       onChange={(e) => setForm((p) => ({ ...p, request_type: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       {REQUEST_TYPES.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Priority *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority *</label>
                     <select required value={form.priority}
                       onChange={(e) => setForm((p) => ({ ...p, priority: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       {PRIORITIES.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Description *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Description *</label>
                   <textarea required rows={3} value={form.description}
                     onChange={(e) => setForm((p) => ({ ...p, description: e.target.value }))}
                     placeholder="Describe the issue in detail..."
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
                 </div>
                 {/* Assignment mode */}
-                <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                  <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Assignment</p>
+                <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assignment</p>
                   <div className="grid grid-cols-2 gap-2">
                     <button type="button"
                       onClick={() => setForm((p) => ({ ...p, assign_to: '' }))}
@@ -629,7 +653,7 @@ export default function MaintenancePage() {
                         'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-sm font-semibold transition-colors',
                         form.assign_to === ''
                           ? 'border-violet-400 bg-violet-50 text-violet-700'
-                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
                       )}>
                       <InboxArrowDownIcon className="w-5 h-5" />
                       Post to Pool
@@ -641,7 +665,7 @@ export default function MaintenancePage() {
                         'flex flex-col items-center gap-1.5 p-3 rounded-xl border-2 text-sm font-semibold transition-colors',
                         form.assign_to !== ''
                           ? 'border-blue-400 bg-blue-50 text-blue-700'
-                          : 'border-slate-200 bg-white text-slate-500 hover:border-slate-300'
+                          : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
                       )}>
                       <UserPlusIcon className="w-5 h-5" />
                       Assign Directly
@@ -651,7 +675,7 @@ export default function MaintenancePage() {
                   {form.assign_to !== '' && (
                     <select value={form.assign_to}
                       onChange={(e) => setForm((p) => ({ ...p, assign_to: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       <option value="">— Select maintenance staff —</option>
                       {staff.map((s) => <option key={s.user} value={s.user}>{s.user_name}</option>)}
                     </select>
@@ -660,11 +684,11 @@ export default function MaintenancePage() {
 
                 <div className="flex gap-2 pt-1">
                   <button type="submit" disabled={saving}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                     {saving ? 'Creating…' : form.assign_to ? 'Create & Assign' : 'Post to Pool'}
                   </button>
                   <button type="button" onClick={() => setShowCreate(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                    className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                     Cancel
                   </button>
                 </div>
@@ -677,14 +701,19 @@ export default function MaintenancePage() {
         {viewReq && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => { setViewReq(null); setNotesMode(null); }} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <div>
-                  <span className="font-mono text-xs text-slate-400">{viewReq.request_number}</span>
-                  <h2 className="font-bold text-slate-800 text-lg leading-tight">{viewReq.title}</h2>
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-orange-500 to-orange-600 flex items-center justify-center">
+                    <WrenchScrewdriverIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <span className="font-mono text-xs text-gray-400">{viewReq.request_number}</span>
+                    <h2 className="font-semibold text-gray-900 leading-tight">{viewReq.title}</h2>
+                  </div>
                 </div>
-                <button onClick={() => { setViewReq(null); setNotesMode(null); }} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
-                  <XMarkIcon className="w-5 h-5" />
+                <button onClick={() => { setViewReq(null); setNotesMode(null); }} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
 
@@ -708,71 +737,71 @@ export default function MaintenancePage() {
                 {/* Details grid */}
                 <div className="grid grid-cols-2 gap-x-4 gap-y-3 text-sm">
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-0.5">Room</p>
-                    <p className="text-slate-700 font-medium">{viewReq.room_number ?? '—'}</p>
+                    <p className="text-xs text-gray-400 font-medium mb-0.5">Room</p>
+                    <p className="text-gray-700 font-medium">{viewReq.room_number ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-0.5">Location</p>
-                    <p className="text-slate-700">{viewReq.location || '—'}</p>
+                    <p className="text-xs text-gray-400 font-medium mb-0.5">Location</p>
+                    <p className="text-gray-700">{viewReq.location || '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-0.5">Reported By</p>
-                    <p className="text-slate-700">{viewReq.reported_by_name ?? '—'}</p>
+                    <p className="text-xs text-gray-400 font-medium mb-0.5">Reported By</p>
+                    <p className="text-gray-700">{viewReq.reported_by_name ?? '—'}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-0.5">Assigned To</p>
-                    <p className="text-slate-700">{viewReq.assigned_to_name ?? <span className="italic text-slate-400">Unassigned</span>}</p>
+                    <p className="text-xs text-gray-400 font-medium mb-0.5">Assigned To</p>
+                    <p className="text-gray-700">{viewReq.assigned_to_name ?? <span className="italic text-gray-400">Unassigned</span>}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-0.5">Created</p>
-                    <p className="text-slate-600 text-xs">{formatDate(viewReq.created_at)}</p>
+                    <p className="text-xs text-gray-400 font-medium mb-0.5">Created</p>
+                    <p className="text-gray-600 text-xs">{formatDate(viewReq.created_at)}</p>
                   </div>
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-0.5">Started</p>
-                    <p className="text-slate-600 text-xs">{formatDateTime(viewReq.started_at)}</p>
+                    <p className="text-xs text-gray-400 font-medium mb-0.5">Started</p>
+                    <p className="text-gray-600 text-xs">{formatDateTime(viewReq.started_at)}</p>
                   </div>
                   {viewReq.completed_at && (
                     <div>
-                      <p className="text-xs text-slate-400 font-medium mb-0.5">Completed</p>
-                      <p className="text-slate-600 text-xs">{formatDateTime(viewReq.completed_at)}</p>
+                      <p className="text-xs text-gray-400 font-medium mb-0.5">Completed</p>
+                      <p className="text-gray-600 text-xs">{formatDateTime(viewReq.completed_at)}</p>
                     </div>
                   )}
                   {viewReq.duration_hours != null && (
                     <div>
-                      <p className="text-xs text-slate-400 font-medium mb-0.5">Duration</p>
-                      <p className="text-slate-600 text-xs">{viewReq.duration_hours}h</p>
+                      <p className="text-xs text-gray-400 font-medium mb-0.5">Duration</p>
+                      <p className="text-gray-600 text-xs">{viewReq.duration_hours}h</p>
                     </div>
                   )}
                 </div>
 
                 {/* Description */}
                 <div>
-                  <p className="text-xs text-slate-400 font-medium mb-1">Description</p>
-                  <p className="text-sm text-slate-700 bg-slate-50 rounded-xl px-3 py-2.5 leading-relaxed">{viewReq.description}</p>
+                  <p className="text-xs text-gray-400 font-medium mb-1">Description</p>
+                  <p className="text-sm text-gray-700 bg-gray-50 rounded-xl px-3 py-2.5 leading-relaxed">{viewReq.description}</p>
                 </div>
 
                 {/* Resolution notes */}
                 {viewReq.resolution_notes && (
                   <div>
-                    <p className="text-xs text-slate-400 font-medium mb-1">Resolution Notes</p>
+                    <p className="text-xs text-gray-400 font-medium mb-1">Resolution Notes</p>
                     <p className="text-sm text-emerald-700 bg-emerald-50 rounded-xl px-3 py-2.5 leading-relaxed">{viewReq.resolution_notes}</p>
                   </div>
                 )}
 
                 {/* Assign section */}
                 {canManage && viewReq.status !== 'COMPLETED' && viewReq.status !== 'CANCELLED' && (
-                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                    <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">Assign to Staff</p>
+                  <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">Assign to Staff</p>
                     <div className="flex gap-2">
                       <select value={assignTo} onChange={(e) => setAssignTo(e.target.value)}
-                        className="flex-1 px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                        className="flex-1 border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                         <option value="">— Select maintenance staff —</option>
                         {staff.map((s) => (
                           <option key={s.user} value={s.user}>{s.user_name}</option>
                         ))}
                       </select>
                       <button onClick={handleAssign} disabled={!assignTo || acting}
-                        className="px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors">
+                        className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-semibold transition-colors">
                         {acting ? '…' : 'Assign'}
                       </button>
                     </div>
@@ -784,14 +813,14 @@ export default function MaintenancePage() {
                   <div className="space-y-3">
                     {isMaintenance && viewReq.assigned_to === null && viewReq.status === 'PENDING' && (
                       <button onClick={() => handleClaim(viewReq)} disabled={acting}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                        className="w-full inline-flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                         <HandRaisedIcon className="w-4 h-4" />
                         {acting ? 'Claiming…' : 'Claim This Task'}
                       </button>
                     )}
                     {isMaintenance && viewReq.status === 'ASSIGNED' && (
                       <button onClick={() => handleStart(viewReq)} disabled={acting}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                        className="w-full inline-flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                         <PlayIcon className="w-4 h-4" />
                         {acting ? 'Starting…' : 'Start Work'}
                       </button>
@@ -799,13 +828,13 @@ export default function MaintenancePage() {
                     {isMaintenance && viewReq.status === 'IN_PROGRESS' && (
                       <div className="grid grid-cols-2 gap-2">
                         <button onClick={() => handleOnHold(viewReq)} disabled={acting}
-                          className="inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                          className="inline-flex items-center justify-center gap-2 bg-amber-500 hover:bg-amber-600 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                           <PauseIcon className="w-4 h-4" />
                           {acting ? '…' : 'Put On Hold'}
                         </button>
                         {notesMode !== 'complete' && (
                           <button onClick={() => setNotesMode('complete')}
-                            className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                            className="inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                             <CheckCircleIcon className="w-4 h-4" />
                             Mark Complete
                           </button>
@@ -814,34 +843,34 @@ export default function MaintenancePage() {
                     )}
                     {isMaintenance && viewReq.status === 'ON_HOLD' && (
                       <button onClick={() => handleResume(viewReq)} disabled={acting}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                        className="w-full inline-flex items-center justify-center gap-2 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                         <ArrowPathIcon className="w-4 h-4" />
                         {acting ? 'Resuming…' : 'Resume Work'}
                       </button>
                     )}
                     {canManage && notesMode !== 'resolve' && (
                       <button onClick={() => setNotesMode('resolve')}
-                        className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                        className="w-full inline-flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                         <CheckCircleIcon className="w-4 h-4" />
                         Resolve Request
                       </button>
                     )}
 
                     {notesMode && (
-                      <div className="bg-slate-50 rounded-2xl p-4 space-y-3">
-                        <p className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+                      <div className="bg-gray-50 rounded-2xl p-4 space-y-3">
+                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">
                           {notesMode === 'complete' ? 'Completion Notes' : 'Resolution Notes'}
                         </p>
                         <textarea rows={3} value={notes} onChange={(e) => setNotes(e.target.value)}
                           placeholder="Describe what was done to resolve this issue..."
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
                         <div className="flex gap-2">
                           <button onClick={handleNotesSubmit} disabled={acting}
-                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                            className="flex-1 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                             {acting ? 'Saving…' : notesMode === 'complete' ? 'Mark Complete' : 'Mark Resolved'}
                           </button>
                           <button onClick={() => { setNotesMode(null); setNotes(''); }}
-                            className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                            className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                             Cancel
                           </button>
                         </div>
@@ -853,8 +882,6 @@ export default function MaintenancePage() {
             </aside>
           </div>
         )}
-
-      </div>
     </Layout>
   );
 }

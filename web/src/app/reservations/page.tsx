@@ -9,7 +9,7 @@ import {
   PlusIcon, XMarkIcon, EyeIcon, PencilSquareIcon,
   XCircleIcon, CalendarDaysIcon, ChevronLeftIcon, ChevronRightIcon,
   CheckCircleIcon, UserIcon, ArrowRightCircleIcon, ArrowLeftCircleIcon,
-  ClockIcon,
+  ClockIcon, HomeIcon,
 } from '@heroicons/react/24/outline';
 
 /* ── Types ─────────────────────────────────────────────────── */
@@ -76,6 +76,7 @@ interface Guest {
 interface Room {
   id: number;
   room_number: string;
+  room_type?: number;
   room_type_name?: string;
   status: string;
 }
@@ -335,159 +336,199 @@ export default function ReservationsPage() {
     <Layout>
       {/* Toast */}
       {toast && (
-        <div className="fixed top-4 right-4 z-[100] bg-green-600 text-white px-5 py-3 rounded-lg shadow-lg flex items-center gap-2 animate-fade-in">
-          <CheckCircleIcon className="w-5 h-5" />
+        <div className="fixed top-5 right-5 z-[100] flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium bg-emerald-600 text-white">
+          <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
           {toast}
         </div>
       )}
 
-      <div className="space-y-6">
+      <div className="p-5 lg:p-6 space-y-5">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Reservations</span>
+        </nav>
+
         {/* Header */}
-        <div className="flex justify-between items-center">
-          <div>
-            <h1 className="text-3xl font-bold text-gray-900">Reservations</h1>
-            <p className="text-sm text-gray-500 mt-1">{filtered.length} reservation{filtered.length !== 1 ? 's' : ''}</p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <CalendarDaysIcon className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Reservations</h1>
+              <p className="text-slate-500 text-sm mt-0.5">{filtered.length} reservation{filtered.length !== 1 ? 's' : ''}</p>
+            </div>
           </div>
           <button
             onClick={openCreate}
-            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-lg transition-colors shadow-sm"
+            className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors shadow-sm"
           >
             <PlusIcon className="w-4 h-4" />
             New Reservation
           </button>
         </div>
 
-        {/* Status tabs + search */}
-        <div className="bg-white rounded-xl shadow-sm border border-gray-200">
-          <div className="px-4 py-3 border-b border-gray-100 flex flex-wrap gap-2">
+        {/* Stats cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{reservations.length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Confirmed</p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">{reservations.filter(r => r.status === 'CONFIRMED').length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Checked In</p>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">{reservations.filter(r => r.status === 'CHECKED_IN').length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Pending</p>
+            <p className="text-2xl font-bold text-amber-600 mt-1">{reservations.filter(r => r.status === 'PENDING').length}</p>
+          </div>
+        </div>
+
+        {/* Search + filter row */}
+        <div className="flex flex-wrap gap-3">
+          <input
+            type="text"
+            placeholder="Search confirmation #, guest name…"
+            value={search}
+            onChange={e => { setSearch(e.target.value); setPage(1); }}
+            className="flex-1 min-w-[200px] px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300"
+          />
+          <div className="flex gap-1.5 flex-wrap">
             {STATUS_TABS.map(s => (
               <button
                 key={s}
                 onClick={() => { setStatusFilter(s); setPage(1); }}
                 className={clsx(
-                  'px-3 py-1.5 rounded-md text-xs font-semibold transition-colors',
-                  statusFilter === s ? 'bg-blue-600 text-white' : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  'px-3 py-2 text-xs font-semibold rounded-xl transition-colors',
+                  statusFilter === s ? 'bg-blue-600 text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
                 )}
               >
                 {s.replace('_', ' ')}
               </button>
             ))}
-            <input
-              type="text"
-              placeholder="Search confirmation #, guest name…"
-              value={search}
-              onChange={e => { setSearch(e.target.value); setPage(1); }}
-              className="ml-auto w-64 text-sm border border-gray-200 rounded-lg px-3 py-1.5 focus:outline-none focus:ring-2 focus:ring-blue-400"
-            />
           </div>
+        </div>
 
-          {/* Table */}
-          {loading ? (
-            <div className="flex justify-center py-20">
-              <svg className="animate-spin h-8 w-8 text-blue-500" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            </div>
-          ) : paged.length === 0 ? (
-            <div className="flex flex-col items-center py-20 text-gray-400">
-              <CalendarDaysIcon className="w-12 h-12 mb-3 opacity-40" />
-              <p className="font-medium">No reservations found</p>
-              {search && <p className="text-sm mt-1">Try clearing the search</p>}
-            </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-gray-50 text-xs text-gray-500 uppercase tracking-wide">
-                  <tr>
-                    <th className="px-4 py-3 text-left">Confirmation #</th>
-                    <th className="px-4 py-3 text-left">Guest</th>
-                    <th className="px-4 py-3 text-left">Room Type</th>
-                    <th className="px-4 py-3 text-left">Check-in</th>
-                    <th className="px-4 py-3 text-left">Check-out</th>
-                    <th className="px-4 py-3 text-left">Nights</th>
-                    <th className="px-4 py-3 text-left">Status</th>
-                    <th className="px-4 py-3 text-right">Total</th>
-                    <th className="px-4 py-3 text-center">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {paged.map(r => (
-                    <tr key={r.id} className="hover:bg-gray-50 transition-colors">
-                      <td className="px-4 py-3 font-mono text-xs text-blue-700 font-semibold">
-                        {r.confirmation_number}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0">
-                            <span className="text-white text-xs font-bold">
-                              {r.guest?.first_name?.[0]}{r.guest?.last_name?.[0]}
+        {/* Table */}
+        {loading ? (
+          <div className="flex items-center justify-center py-20">
+            <div className="w-10 h-10 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
+          </div>
+        ) : paged.length === 0 ? (
+          <div className="flex flex-col items-center py-20 text-slate-400">
+            <CalendarDaysIcon className="w-12 h-12 mb-3 opacity-40" />
+            <p className="font-medium">No reservations found</p>
+            {search && <p className="text-sm mt-1">Try clearing the search</p>}
+          </div>
+        ) : (
+          <>
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-slate-100 bg-slate-50/60">
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Confirmation #</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Guest</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Room Type</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Room #</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Check-in</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Check-out</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Nights</th>
+                      <th className="text-left px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Status</th>
+                      <th className="text-right px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Total</th>
+                      <th className="text-center px-4 py-3 text-xs font-semibold text-slate-500 uppercase tracking-wider">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {paged.map(r => (
+                      <tr key={r.id} className="hover:bg-slate-50/50 transition-colors">
+                        <td className="px-4 py-3">
+                          <span className="font-mono text-xs font-semibold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">{r.confirmation_number}</span>
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center flex-shrink-0">
+                              <span className="text-white text-xs font-bold">
+                                {r.guest?.first_name?.[0]}{r.guest?.last_name?.[0]}
+                              </span>
+                            </div>
+                            <span className="font-medium text-slate-800">
+                              {r.guest?.first_name} {r.guest?.last_name}
                             </span>
                           </div>
-                          <span className="font-medium text-gray-900">
-                            {r.guest?.first_name} {r.guest?.last_name}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">
-                        {r.rooms?.[0]?.room_type_name ?? '—'}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {format(parseISO(r.check_in_date), 'dd MMM yyyy')}
-                      </td>
-                      <td className="px-4 py-3 text-gray-700">
-                        {format(parseISO(r.check_out_date), 'dd MMM yyyy')}
-                      </td>
-                      <td className="px-4 py-3 text-gray-600">{r.nights ?? '—'}</td>
-                      <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
-                      <td className="px-4 py-3 text-right font-semibold text-gray-900">
-                        ${Number(r.total_amount).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3">
-                        <div className="flex items-center justify-center gap-1">
-                          <button
-                            onClick={() => openView(r)}
-                            title="View"
-                            className="p-1.5 rounded hover:bg-blue-50 text-blue-600 transition-colors"
-                          >
-                            <EyeIcon className="w-4 h-4" />
-                          </button>
-                          {!['CANCELLED', 'CHECKED_OUT', 'NO_SHOW'].includes(r.status) && (
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs">
+                          {r.rooms?.[0]?.room_type_name ?? '—'}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs font-medium">
+                          {r.assigned_room_number
+                            ? <span className="bg-green-50 text-green-700 px-2 py-0.5 rounded font-semibold">{r.assigned_room_number}</span>
+                            : <span className="text-slate-300">—</span>}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700 text-xs">
+                          {format(parseISO(r.check_in_date), 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-4 py-3 text-slate-700 text-xs">
+                          {format(parseISO(r.check_out_date), 'dd MMM yyyy')}
+                        </td>
+                        <td className="px-4 py-3 text-slate-600 text-xs">{r.nights ?? '—'}</td>
+                        <td className="px-4 py-3"><StatusBadge status={r.status} /></td>
+                        <td className="px-4 py-3 text-right font-semibold text-slate-900">
+                          ${Number(r.total_amount).toLocaleString()}
+                        </td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center justify-center gap-1">
                             <button
-                              onClick={() => openCancel(r)}
-                              title="Cancel"
-                              className="p-1.5 rounded hover:bg-red-50 text-red-500 transition-colors"
+                              onClick={() => openView(r)}
+                              title="View"
+                              className="p-1.5 rounded hover:bg-blue-50 text-blue-600 transition-colors"
                             >
-                              <XCircleIcon className="w-4 h-4" />
+                              <EyeIcon className="w-4 h-4" />
                             </button>
-                          )}
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* Pagination */}
-          {totalPages > 1 && (
-            <div className="px-4 py-3 border-t border-gray-100 flex items-center justify-between text-sm text-gray-600">
-              <span>{filtered.length} total</span>
-              <div className="flex items-center gap-2">
-                <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
-                  <ChevronLeftIcon className="w-4 h-4" />
-                </button>
-                <span>Page {page} of {totalPages}</span>
-                <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
-                  className="p-1 rounded hover:bg-gray-100 disabled:opacity-30">
-                  <ChevronRightIcon className="w-4 h-4" />
-                </button>
+                            {!['CANCELLED', 'CHECKED_OUT', 'NO_SHOW'].includes(r.status) && (
+                              <button
+                                onClick={() => openCancel(r)}
+                                title="Cancel"
+                                className="p-1.5 rounded hover:bg-red-50 text-red-500 transition-colors"
+                              >
+                                <XCircleIcon className="w-4 h-4" />
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
-          )}
-        </div>
+
+            {/* Pagination */}
+            {totalPages > 1 && (
+              <div className="flex items-center justify-between flex-wrap gap-3 pt-1">
+                <span className="text-sm text-slate-500">{filtered.length} total</span>
+                <div className="flex items-center gap-1">
+                  <button onClick={() => setPage(p => Math.max(1, p - 1))} disabled={page === 1}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-40">
+                    <ChevronLeftIcon className="w-4 h-4" />
+                  </button>
+                  <span className="px-2 text-sm text-slate-600">Page {page} of {totalPages}</span>
+                  <button onClick={() => setPage(p => Math.min(totalPages, p + 1))} disabled={page === totalPages}
+                    className="p-1.5 rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-100 disabled:opacity-40">
+                    <ChevronRightIcon className="w-4 h-4" />
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* ── Slide panels ────────────────────────────────────── */}
@@ -548,22 +589,32 @@ export default function ReservationsPage() {
                   </div>
 
                   {/* Rooms */}
-                  {selected.rooms?.length > 0 && (
+                  {(selected.rooms?.length > 0 || selected.assigned_room_number) && (
                     <div>
                       <p className="text-xs text-gray-500 uppercase tracking-wide mb-2">Rooms</p>
                       <div className="space-y-2">
-                        {selected.rooms.map(room => (
+                        {selected.rooms?.length > 0 ? selected.rooms.map(room => (
                           <div key={room.id} className="bg-gray-50 rounded-lg px-4 py-3 flex justify-between items-center">
                             <div>
                               <p className="font-medium text-gray-900">{room.room_type_name ?? 'Room'}</p>
-                              {room.room_number && <p className="text-xs text-gray-500">Room #{room.room_number}</p>}
+                              {(room.room_number || selected.assigned_room_number) && (
+                                <p className="text-xs text-green-600 font-semibold">Room #{room.room_number ?? selected.assigned_room_number}</p>
+                              )}
                             </div>
                             <div className="text-right">
                               <p className="font-semibold text-gray-900">${Number(room.total_rate).toLocaleString()}</p>
                               <p className="text-xs text-gray-500">${Number(room.rate_per_night).toLocaleString()}/night</p>
                             </div>
                           </div>
-                        ))}
+                        )) : (
+                          /* Fallback: no ReservationRoom records but we know the assigned room */
+                          <div className="bg-gray-50 rounded-lg px-4 py-3 flex justify-between items-center">
+                            <div>
+                              <p className="font-medium text-gray-900">Assigned Room</p>
+                              <p className="text-xs text-green-600 font-semibold">Room #{selected.assigned_room_number}</p>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -743,22 +794,51 @@ export default function ReservationsPage() {
                     <label className="block text-sm font-medium text-gray-700 mb-1">
                       Assign Room <span className="text-red-500">*</span>
                     </label>
-                    {rooms.filter(r => ['VC', 'VD'].includes(r.status)).length === 0 ? (
-                      <p className="text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">No available rooms right now.</p>
-                    ) : (
-                      <select
-                        value={checkInRoomId}
-                        onChange={e => setCheckInRoomId(e.target.value)}
-                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
-                      >
-                        <option value="">— Select a room —</option>
-                        {rooms.filter(r => ['VC', 'VD'].includes(r.status)).map(r => (
-                          <option key={r.id} value={r.id}>
-                            Room {r.room_number}{r.room_type_name ? ` · ${r.room_type_name}` : ''} · {r.status === 'VC' ? 'Vacant Clean' : 'Vacant Dirty'}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                    {(() => {
+                      const reservedTypeId = selected.rooms?.[0]?.room_type ?? null;
+                      const available = rooms.filter(r =>
+                        ['VC', 'VD'].includes(r.status) &&
+                        (reservedTypeId === null || r.room_type === reservedTypeId)
+                      );
+                      const allAvailable = rooms.filter(r => ['VC', 'VD'].includes(r.status));
+                      return available.length === 0 ? (
+                        <div className="space-y-2">
+                          <p className="text-sm text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
+                            No vacant rooms of type <strong>{selected.rooms?.[0]?.room_type_name ?? 'reserved type'}</strong> available.
+                          </p>
+                          {allAvailable.length > 0 && (
+                            <>
+                              <p className="text-xs text-gray-500">You can assign a different room type if needed:</p>
+                              <select
+                                value={checkInRoomId}
+                                onChange={e => setCheckInRoomId(e.target.value)}
+                                className="w-full border border-amber-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-amber-400"
+                              >
+                                <option value="">— Select a room —</option>
+                                {allAvailable.map(r => (
+                                  <option key={r.id} value={r.id}>
+                                    Room {r.room_number}{r.room_type_name ? ` · ${r.room_type_name}` : ''} · {r.status === 'VC' ? 'Vacant Clean' : 'Vacant Dirty'}
+                                  </option>
+                                ))}
+                              </select>
+                            </>
+                          )}
+                        </div>
+                      ) : (
+                        <select
+                          value={checkInRoomId}
+                          onChange={e => setCheckInRoomId(e.target.value)}
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-green-400"
+                        >
+                          <option value="">— Select a room —</option>
+                          {available.map(r => (
+                            <option key={r.id} value={r.id}>
+                              Room {r.room_number}{r.room_type_name ? ` · ${r.room_type_name}` : ''} · {r.status === 'VC' ? 'Vacant Clean' : 'Vacant Dirty'}
+                            </option>
+                          ))}
+                        </select>
+                      );
+                    })()}
                   </div>
                 </div>
 

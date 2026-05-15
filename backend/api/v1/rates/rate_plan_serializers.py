@@ -2,7 +2,7 @@
 Serializers for Rates Management
 """
 from rest_framework import serializers
-from apps.rates.models import RatePlan, RoomRate, DateRate, YieldRule, Season, Package, Discount
+from apps.rates.models import RatePlan, RoomRate, DateRate, YieldRule
 from apps.rooms.models import RoomType
 
 
@@ -10,6 +10,7 @@ class RatePlanSerializer(serializers.ModelSerializer):
     """Serializer for rate plans."""
     
     property_name = serializers.CharField(source='property.name', read_only=True)
+    property = serializers.PrimaryKeyRelatedField(read_only=True)
     room_rates_count = serializers.SerializerMethodField()
     
     class Meta:
@@ -95,16 +96,15 @@ class RoomRateSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate room rate."""
-        effective_from = data.get('effective_from')
-        effective_to = data.get('effective_to')
-        
-        if effective_from and effective_to and effective_to <= effective_from:
-            raise serializers.ValidationError("Effective to date must be after effective from date.")
-        
-        base_rate = data.get('base_rate')
-        if base_rate and base_rate < 0:
-            raise serializers.ValidationError("Base rate cannot be negative.")
-        
+        single_rate = data.get('single_rate')
+        double_rate = data.get('double_rate')
+
+        if single_rate is not None and single_rate < 0:
+            raise serializers.ValidationError("Single rate cannot be negative.")
+
+        if double_rate is not None and double_rate < 0:
+            raise serializers.ValidationError("Double rate cannot be negative.")
+
         return data
 
 
@@ -165,25 +165,22 @@ class YieldRuleSerializer(serializers.ModelSerializer):
     
     def validate(self, data):
         """Validate yield rule."""
-        min_occ = data.get('min_occupancy_percent')
-        max_occ = data.get('max_occupancy_percent')
-        
-        if min_occ and (min_occ < 0 or min_occ > 100):
-            raise serializers.ValidationError("Min occupancy must be between 0 and 100.")
-        
-        if max_occ and (max_occ < 0 or max_occ > 100):
-            raise serializers.ValidationError("Max occupancy must be between 0 and 100.")
-        
-        if min_occ and max_occ and max_occ <= min_occ:
-            raise serializers.ValidationError("Max occupancy must be greater than min occupancy.")
-        
-        adjustment_type = data.get('adjustment_type')
-        adjustment_value = data.get('adjustment_value')
-        
-        if adjustment_type == 'PERCENTAGE' and adjustment_value:
-            if adjustment_value < -100 or adjustment_value > 100:
-                raise serializers.ValidationError("Percentage adjustment must be between -100 and 100.")
-        
+        min_threshold = data.get('min_threshold')
+        max_threshold = data.get('max_threshold')
+
+        if min_threshold is not None and min_threshold < 0:
+            raise serializers.ValidationError("Min threshold cannot be negative.")
+
+        if max_threshold is not None and max_threshold < 0:
+            raise serializers.ValidationError("Max threshold cannot be negative.")
+
+        if min_threshold is not None and max_threshold is not None and max_threshold <= min_threshold:
+            raise serializers.ValidationError("Max threshold must be greater than min threshold.")
+
+        adjustment_percent = data.get('adjustment_percent')
+        if adjustment_percent is not None and (adjustment_percent < -100 or adjustment_percent > 100):
+            raise serializers.ValidationError("Adjustment percent must be between -100 and 100.")
+
         return data
 
 

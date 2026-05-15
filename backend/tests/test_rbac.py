@@ -219,11 +219,11 @@ class TestUserManagement:
         response = api_client.get('/api/v1/auth/users/')
         assert response.status_code == status.HTTP_200_OK
 
-    def test_list_users_manager_forbidden(self, api_client, manager_a):
-        """Manager cannot list users"""
+    def test_list_users_manager_allowed(self, api_client, manager_a):
+        """Manager can list users scoped to their own property (excluding ADMIN/MANAGER roles)"""
         api_client.force_authenticate(user=manager_a)
         response = api_client.get('/api/v1/auth/users/')
-        assert response.status_code == status.HTTP_403_FORBIDDEN
+        assert response.status_code == status.HTTP_200_OK
 
     def test_create_user_admin(self, api_client, admin_user, property_a):
         """Admin can create users"""

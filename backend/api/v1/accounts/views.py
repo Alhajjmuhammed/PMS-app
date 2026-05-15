@@ -2,13 +2,16 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated, AllowAny
-from django.db.models import Q
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
-from django.contrib.auth import authenticate, get_user_model
-from rest_framework_simplejwt.tokens import RefreshToken
+from django.contrib.auth import get_user_model
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
 from drf_yasg.utils import swagger_auto_schema
-from drf_yasg import openapi
+import secrets
+from django.core.cache import cache
+from django.core.mail import send_mail
+from django.conf import settings as django_settings
 
 from apps.accounts.models import StaffProfile, ActivityLog
 from apps.accounts.mfa_utils import MFAManager, EmailMFA, SMSMFA
@@ -21,7 +24,6 @@ from .serializers import (
     MFASetupResponseSerializer,
     MFAVerifySerializer,
     MFAEnableSerializer,
-    MFALoginSerializer,
     UserMFAStatusSerializer,
 )
 from api.permissions import IsAdminOrManager
@@ -213,12 +215,10 @@ class MFADisableView(APIView):
         if user.mfa_method == 'TOTP':
             valid = MFAManager.verify_totp_code(user.mfa_secret, code)
         elif user.mfa_method == 'EMAIL':
-            # Send new code first
-            EmailMFA.send_code(user)
+            # User must already have a code sent — just verify what they submitted
             valid = EmailMFA.verify_code(user, code)
         elif user.mfa_method == 'SMS':
-            # Send new code first
-            SMSMFA.send_code(user)
+            # User must already have a code sent — just verify what they submitted
             valid = SMSMFA.verify_code(user, code)
         
         # Also check backup codes
@@ -442,24 +442,38 @@ class StaffProfileByRoleView(generics.ListAPIView):
 class ActivityLogListCreateView(generics.ListCreateAPIView):
     """List all activity logs or create a new one."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
-    filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
-    filterset_fields = ['user', 'action', 'model_name']
+    filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['description', 'model_name', 'object_id']
     ordering_fields = ['timestamp']
     ordering = ['-timestamp']
-    
+
     def get_queryset(self):
         qs = ActivityLog.objects.select_related('user')
         if not self.request.user.is_superuser:
             qs = qs.filter(user__assigned_property=self.request.user.assigned_property)
 
-        # Filter by date range if provided
+        # Filter by action (exact, UPPERCASE values match model's ActionType choices)
+        action = self.request.query_params.get('action')
+        if action:
+            qs = qs.filter(action=action)
+
+        # Filter by user email (icontains)
+        user_email = self.request.query_params.get('user')
+        if user_email:
+            qs = qs.filter(user__email__icontains=user_email)
+
+        # Filter by model_name (resource type) — case-insensitive
+        model_name = self.request.query_params.get('model_name')
+        if model_name:
+            qs = qs.filter(model_name__iexact=model_name)
+
+        # Filter by date range
         start_date = self.request.query_params.get('start_date')
         end_date = self.request.query_params.get('end_date')
         if start_date:
-            qs = qs.filter(timestamp__gte=start_date)
+            qs = qs.filter(timestamp__date__gte=start_date)
         if end_date:
-            qs = qs.filter(timestamp__lte=end_date)
+            qs = qs.filter(timestamp__date__lte=end_date)
         return qs
     
     def get_serializer_class(self):
@@ -523,17 +537,20 @@ class ActivityLogExportView(APIView):
         # Apply filters
         start_date = request.query_params.get('start_date')
         end_date = request.query_params.get('end_date')
-        user_id = request.query_params.get('user')
+        user_email = request.query_params.get('user')
         action = request.query_params.get('action')
+        model_name = request.query_params.get('model_name')
         
         if start_date:
-            queryset = queryset.filter(timestamp__gte=start_date)
+            queryset = queryset.filter(timestamp__date__gte=start_date)
         if end_date:
-            queryset = queryset.filter(timestamp__lte=end_date)
-        if user_id:
-            queryset = queryset.filter(user_id=user_id)
+            queryset = queryset.filter(timestamp__date__lte=end_date)
+        if user_email:
+            queryset = queryset.filter(user__email__icontains=user_email)
         if action:
             queryset = queryset.filter(action=action)
+        if model_name:
+            queryset = queryset.filter(model_name__iexact=model_name)
         
         serializer = ActivityLogSerializer(queryset, many=True)
         
@@ -541,3 +558,86 @@ class ActivityLogExportView(APIView):
             'count': queryset.count(),
             'logs': serializer.data
         })
+
+
+User = get_user_model()
+
+_RESET_CACHE_PREFIX = 'pwd_reset:'
+_RESET_TTL = 15 * 60  # 15 minutes
+
+
+class PasswordResetRequestView(APIView):
+    """Send a 6-digit reset code to the user's email."""
+    permission_classes = [AllowAny]
+    throttle_scope = 'sensitive'
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        if not email:
+            return Response({'error': 'Email is required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email__iexact=email, is_active=True)
+        except User.DoesNotExist:
+            # Respond identically whether the email exists or not (anti-enumeration)
+            return Response({'message': 'If that email is registered, a reset code has been sent.'})
+
+        code = ''.join(secrets.choice('0123456789') for _ in range(6))
+        cache.set(f'{_RESET_CACHE_PREFIX}{email}', code, timeout=_RESET_TTL)
+
+        send_mail(
+            subject='Your password reset code',
+            message=f'Your 6-digit password reset code is: {code}\n\nThis code expires in 15 minutes.',
+            from_email=getattr(django_settings, 'DEFAULT_FROM_EMAIL', 'noreply@pms.local'),
+            recipient_list=[user.email],
+            fail_silently=True,
+        )
+
+        return Response({'message': 'If that email is registered, a reset code has been sent.'})
+
+
+class PasswordResetConfirmView(APIView):
+    """Verify the reset code and set a new password."""
+    permission_classes = [AllowAny]
+    throttle_scope = 'sensitive'
+
+    def post(self, request):
+        email = request.data.get('email', '').strip().lower()
+        code = request.data.get('code', '').strip()
+        new_password = request.data.get('new_password', '')
+
+        if not email or not code or not new_password:
+            return Response({'error': 'email, code and new_password are required.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            validate_password(new_password)
+        except DjangoValidationError as e:
+            return Response({'error': list(e.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        cache_key = f'{_RESET_CACHE_PREFIX}{email}'
+        stored_code = cache.get(cache_key)
+
+        if stored_code is None:
+            return Response({'error': 'Reset code has expired. Please request a new one.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        if stored_code != code:
+            return Response({'error': 'Invalid reset code.'}, status=status.HTTP_400_BAD_REQUEST)
+
+        try:
+            user = User.objects.get(email__iexact=email, is_active=True)
+        except User.DoesNotExist:
+            return Response({'error': 'User not found.'}, status=status.HTTP_404_NOT_FOUND)
+
+        user.set_password(new_password)
+        user.save(update_fields=['password'])
+
+        # Invalidate any existing auth tokens
+        try:
+            user.auth_token.delete()
+        except Exception:
+            pass
+
+        # Consume the code so it cannot be reused
+        cache.delete(cache_key)
+
+        return Response({'message': 'Password reset successfully. Please log in with your new password.'})

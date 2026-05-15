@@ -14,14 +14,15 @@ import {
   PlusIcon,
   XMarkIcon,
   CheckCircleIcon,
+  ExclamationTriangleIcon,
   MapPinIcon,
   PhoneIcon,
-  GlobeAltIcon,
   StarIcon,
   Squares2X2Icon,
   TableCellsIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  HomeIcon,
 } from '@heroicons/react/24/outline';
 
 interface Property {
@@ -307,23 +308,54 @@ function PropertiesManager() {
   });
 
   return (
-    <div className="p-5 lg:p-6 space-y-5">
-      {/* Toast */}
+    <>
+      {/* Toast — outside space-y-5 to prevent layout jump */}
       {toast && (
         <div className={clsx(
           'fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
           toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white',
         )}>
-          <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+          {toast.ok
+            ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            : <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
           {toast.msg}
         </div>
       )}
+      <div className="p-5 lg:p-6 space-y-5">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Properties</span>
+      </nav>
+
+      {/* Stats */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Properties</p>
+          <p className="text-2xl font-bold text-slate-800 mt-1">{properties.length}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Active</p>
+          <p className="text-2xl font-bold text-emerald-600 mt-1">{properties.filter(p => p.is_active).length}</p>
+        </div>
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4 col-span-2 sm:col-span-1">
+          <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Inactive</p>
+          <p className="text-2xl font-bold text-slate-400 mt-1">{properties.filter(p => !p.is_active).length}</p>
+        </div>
+      </div>
 
       {/* Header */}
-      <div className="flex items-center justify-between flex-wrap gap-3">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-900">All Properties</h1>
-          <p className="text-slate-500 text-sm mt-0.5">{properties.length} propert{properties.length === 1 ? 'y' : 'ies'} registered</p>
+      <div className="flex items-start justify-between flex-wrap gap-4">
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+            <BuildingOfficeIcon className="w-5 h-5 text-indigo-600" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">All Properties</h1>
+            <p className="text-slate-500 text-sm mt-0.5">{properties.length} propert{properties.length === 1 ? 'y' : 'ies'} registered</p>
+          </div>
         </div>
         <div className="flex items-center gap-2">
           {/* View toggle */}
@@ -486,7 +518,7 @@ function PropertiesManager() {
       {editingId !== null && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={closePanel} />
-          <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
+          <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <h2 className="font-bold text-slate-800 text-lg">
                 {editingId === 'new' ? 'Add New Property' : 'Edit Property'}
@@ -626,7 +658,7 @@ function PropertiesManager() {
       {viewingProp && (
         <div className="fixed inset-0 z-50 flex">
           <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setViewingProp(null)} />
-          <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
+          <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
             <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
               <div className="flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
@@ -733,11 +765,10 @@ function PropertiesManager() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </>
   );
 }
-
-/* ── Regular admin: single-property settings ── */
 function SinglePropertySettings() {
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
@@ -751,7 +782,8 @@ function SinglePropertySettings() {
   };
 
   useEffect(() => {
-    api.get(`/api/v1/properties/${user?.assigned_property?.id}/`)
+    if (!user?.assigned_property?.id) return;
+    api.get(`/api/v1/properties/${user.assigned_property.id}/`)
       .then((r) => { setProperty(r.data); setForm(r.data); })
       .catch(() => showToast('Failed to load property', false));
   }, [user]);
@@ -776,20 +808,37 @@ function SinglePropertySettings() {
   };
 
   return (
-    <div className="p-5 lg:p-6 max-w-3xl space-y-6">
+    <>
+      {/* Toast — outside space-y-5 to prevent layout jump */}
       {toast && (
         <div className={clsx(
           'fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
           toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white',
         )}>
-          <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+          {toast.ok
+            ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            : <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
           {toast.msg}
         </div>
       )}
+      <div className="p-5 lg:p-6 space-y-5">
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Property</span>
+      </nav>
 
-      <div>
-        <h1 className="text-2xl font-bold text-slate-900">Property Settings</h1>
-        <p className="text-slate-500 text-sm mt-0.5">{user?.assigned_property?.name}</p>
+      {/* Header */}
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center flex-shrink-0">
+          <BuildingOfficeIcon className="w-5 h-5 text-indigo-600" />
+        </div>
+        <div>
+          <h1 className="text-2xl font-bold text-slate-900">Property Settings</h1>
+          <p className="text-slate-500 text-sm mt-0.5">{user?.assigned_property?.name}</p>
+        </div>
       </div>
 
       {!property ? (
@@ -797,61 +846,66 @@ function SinglePropertySettings() {
           <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
         </div>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          {/* Basic */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Basic Information</p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Property Name *</label>
-              <input {...f('name')} required className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Address</label>
-              <input {...f('address')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
-            </div>
-            <div className="grid grid-cols-2 gap-3">
+        <form onSubmit={handleSubmit} className="grid grid-cols-1 lg:grid-cols-3 gap-5 items-start">
+          {/* Left column — Basic + Contact */}
+          <div className="lg:col-span-2 space-y-5">
+            {/* Basic */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Basic Information</p>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">City</label>
-                <input {...f('city')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Property Name *</label>
+                <input {...f('name')} required className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">State</label>
-                <input {...f('state')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Address</label>
+                <input {...f('address')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">City</label>
+                  <input {...f('city')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">State</label>
+                  <input {...f('state')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Country</label>
+                  <input {...f('country')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Postal Code</label>
+                  <input {...f('postal_code')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                </div>
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Country</label>
-                <input {...f('country')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+
+            {/* Contact */}
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Contact Information</p>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Phone</label>
+                  <input {...f('phone')} type="tel" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1">Email</label>
+                  <input {...f('email')} type="email" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                </div>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">Postal Code</label>
-                <input {...f('postal_code')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Website</label>
+                <input {...f('website')} type="url" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
               </div>
             </div>
           </div>
 
-          {/* Contact */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Contact Information</p>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Phone</label>
-              <input {...f('phone')} type="tel" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Email</label>
-              <input {...f('email')} type="email" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
-            </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Website</label>
-              <input {...f('website')} type="url" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
-            </div>
-          </div>
-
-          {/* Operational */}
-          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
-            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Operational Settings</p>
-            <div className="grid grid-cols-2 gap-3">
+          {/* Right column — Operational + Save */}
+          <div className="space-y-5">
+            <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5 space-y-4">
+              <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Operational Settings</p>
               <div>
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Check-in Time</label>
                 <input {...f('check_in_time')} type="time" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
@@ -860,29 +914,28 @@ function SinglePropertySettings() {
                 <label className="block text-xs font-semibold text-slate-600 mb-1">Check-out Time</label>
                 <input {...f('check_out_time')} type="time" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 focus:border-blue-400" />
               </div>
+              <div>
+                <label className="block text-xs font-semibold text-slate-600 mb-1">Currency</label>
+                <select {...f('currency')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                  {['USD','EUR','GBP','JPY','AUD','CAD','SGD','AED','SAR','MYR'].map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
+              </div>
             </div>
-            <div>
-              <label className="block text-xs font-semibold text-slate-600 mb-1">Currency</label>
-              <select {...f('currency')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
-                {['USD','EUR','GBP','JPY','AUD','CAD','SGD','AED','SAR','MYR'].map((c) => (
-                  <option key={c} value={c}>{c}</option>
-                ))}
-              </select>
-            </div>
-          </div>
 
-          <div className="flex justify-end">
             <button
               type="submit"
               disabled={saving}
-              className="px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60"
+              className="w-full px-6 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60"
             >
               {saving ? 'Saving…' : 'Save Settings'}
             </button>
           </div>
         </form>
       )}
-    </div>
+      </div>
+    </>
   );
 }
 

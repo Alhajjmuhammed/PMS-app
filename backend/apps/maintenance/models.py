@@ -4,7 +4,6 @@ Maintenance Models for Hotel PMS
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
 
 
 class MaintenanceRequest(models.Model):
@@ -130,3 +129,6 @@ class MaintenanceLog(models.Model):
         verbose_name = _('maintenance log')
         verbose_name_plural = _('maintenance logs')
         ordering = ['-timestamp']
+
+    def __str__(self):
+        return f"{self.action} ({self.timestamp:%Y-%m-%d %H:%M})"

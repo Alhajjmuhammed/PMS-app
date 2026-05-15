@@ -6,7 +6,6 @@ from apps.channels.models import (
     PropertyChannel, RoomTypeMapping, RatePlanMapping,
     AvailabilityUpdate, RateUpdate, ChannelReservation, Channel
 )
-from django.utils import timezone
 
 
 class ChannelSerializer(serializers.ModelSerializer):
@@ -240,7 +239,7 @@ class ChannelReservationSerializer(serializers.ModelSerializer):
         source='property_channel.property.name', read_only=True
     )
     reservation_number = serializers.CharField(
-        source='reservation.reservation_number', read_only=True
+        source='reservation.confirmation_number', read_only=True
     )
     nights = serializers.SerializerMethodField()
     

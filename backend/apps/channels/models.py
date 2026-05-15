@@ -4,7 +4,6 @@ Channel Manager Models for OTA Integration
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
 
 
 class Channel(models.Model):
@@ -143,6 +142,9 @@ class AvailabilityUpdate(models.Model):
         verbose_name_plural = _('availability updates')
         ordering = ['-created_at']
 
+    def __str__(self):
+        return f"{self.room_type} on {self.date} — {self.status}"
+
 
 class RateUpdate(models.Model):
     """Rate update log."""
@@ -170,6 +172,9 @@ class RateUpdate(models.Model):
         verbose_name = _('rate update')
         verbose_name_plural = _('rate updates')
         ordering = ['-created_at']
+
+    def __str__(self):
+        return f"{self.room_type} / {self.rate_plan} on {self.date} — {self.status}"
 
 
 class ChannelReservation(models.Model):

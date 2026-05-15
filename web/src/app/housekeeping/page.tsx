@@ -22,6 +22,7 @@ import {
   PencilSquareIcon,
   TrashIcon,
   ArrowDownTrayIcon,
+  HomeIcon,
 } from '@heroicons/react/24/outline';
 
 // ── Types ─────────────────────────────────────────────────────────
@@ -710,10 +711,23 @@ export default function HousekeepingPage() {
           </div>
         )}
 
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Housekeeping</span>
+        </nav>
+
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Housekeeping</h1>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-teal-100 flex items-center justify-center flex-shrink-0">
+              <SparklesIcon className="w-5 h-5 text-teal-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Housekeeping</h1>
+            </div>
           </div>
           <div className="flex items-center gap-2">
             {tab === 'movements' && (
@@ -1184,24 +1198,34 @@ export default function HousekeepingPage() {
           );
         })()}
 
+      </div>
+
         {/* ── Add/Edit Linen Slide-over ─────────────────────────── */}
         {showLinenForm && canManage && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setShowLinenForm(false)} />
-            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">{editLinen ? 'Edit Linen' : 'Add Linen'}</h2>
-                <button onClick={() => setShowLinenForm(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-green-500 to-green-700 flex items-center justify-center">
+                    <ArchiveBoxIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">{editLinen ? 'Edit Linen' : 'Add Linen'}</h2>
+                    <p className="text-xs text-gray-500">Manage linen inventory</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowLinenForm(false)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleSaveLinen} className="flex-1 overflow-y-auto p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Linen Type *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Linen Type *</label>
                   <select required value={linenForm.linen_type}
                     onChange={(e) => setLinenForm((p) => ({ ...p, linen_type: e.target.value }))}
                     disabled={!!editLinen}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white disabled:bg-slate-50 disabled:text-slate-500">
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 disabled:bg-gray-50 disabled:text-gray-500">
                     {editLinen
                       ? choices.linen_types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)
                       : choices.linen_types
@@ -1209,49 +1233,49 @@ export default function HousekeepingPage() {
                           .map((t) => <option key={t.value} value={t.value}>{t.label}</option>)
                     }
                   </select>
-                  {editLinen && <p className="text-xs text-slate-400 mt-1">Linen type cannot be changed after creation</p>}
+                  {editLinen && <p className="text-xs text-gray-400 mt-1">Linen type cannot be changed after creation</p>}
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Total Quantity *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Total Quantity *</label>
                     <input type="number" required min="0" value={linenForm.quantity_total}
                       onChange={(e) => setLinenForm((p) => ({ ...p, quantity_total: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Reorder Level *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reorder Level *</label>
                     <input type="number" required min="0" value={linenForm.reorder_level}
                       onChange={(e) => setLinenForm((p) => ({ ...p, reorder_level: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">In Use</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">In Use</label>
                     <input type="number" min="0" value={linenForm.quantity_in_use}
                       onChange={(e) => setLinenForm((p) => ({ ...p, quantity_in_use: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">In Laundry</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">In Laundry</label>
                     <input type="number" min="0" value={linenForm.quantity_in_laundry}
                       onChange={(e) => setLinenForm((p) => ({ ...p, quantity_in_laundry: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Damaged</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Damaged</label>
                     <input type="number" min="0" value={linenForm.quantity_damaged}
                       onChange={(e) => setLinenForm((p) => ({ ...p, quantity_damaged: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button type="submit" disabled={saving}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                     {saving ? 'Saving…' : editLinen ? 'Save Changes' : 'Add Linen'}
                   </button>
                   <button type="button" onClick={() => setShowLinenForm(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                    className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                     Cancel
                   </button>
                 </div>
@@ -1264,34 +1288,42 @@ export default function HousekeepingPage() {
         {showAmenityForm && canManage && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setShowAmenityForm(false)} />
-            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">{editAmenity ? 'Edit Amenity' : 'Add Amenity'}</h2>
-                <button onClick={() => setShowAmenityForm(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-emerald-500 to-emerald-700 flex items-center justify-center">
+                    <SparklesIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">{editAmenity ? 'Edit Amenity' : 'Add Amenity'}</h2>
+                    <p className="text-xs text-gray-500">Manage amenity inventory</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowAmenityForm(false)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleSaveAmenity} className="flex-1 overflow-y-auto p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Name *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Name *</label>
                   <input type="text" required value={amenityForm.name}
                     onChange={(e) => setAmenityForm((p) => ({ ...p, name: e.target.value }))}
                     placeholder="e.g. Shampoo (30ml)"
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Code *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Code *</label>
                     <input type="text" required value={amenityForm.code}
                       onChange={(e) => setAmenityForm((p) => ({ ...p, code: e.target.value.toUpperCase() }))}
                       placeholder="e.g. SHAM-30"
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Category</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
                     <select value={amenityForm.category}
                       onChange={(e) => setAmenityForm((p) => ({ ...p, category: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       <option value="">— select —</option>
                       {AMENITY_CATEGORIES.map((c) => (
                         <option key={c} value={c}>{c}</option>
@@ -1301,32 +1333,32 @@ export default function HousekeepingPage() {
                 </div>
                 <div className="grid grid-cols-3 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Quantity *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
                     <input type="number" required min="0" value={amenityForm.quantity}
                       onChange={(e) => setAmenityForm((p) => ({ ...p, quantity: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Reorder At *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Reorder At *</label>
                     <input type="number" required min="0" value={amenityForm.reorder_level}
                       onChange={(e) => setAmenityForm((p) => ({ ...p, reorder_level: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Unit Cost ($)</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Unit Cost ($)</label>
                     <input type="number" min="0" step="0.01" value={amenityForm.unit_cost}
                       onChange={(e) => setAmenityForm((p) => ({ ...p, unit_cost: e.target.value }))}
                       placeholder="0.00"
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                   </div>
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button type="submit" disabled={saving}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                     {saving ? 'Saving…' : editAmenity ? 'Save Changes' : 'Add Amenity'}
                   </button>
                   <button type="button" onClick={() => setShowAmenityForm(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                    className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                     Cancel
                   </button>
                 </div>
@@ -1339,69 +1371,77 @@ export default function HousekeepingPage() {
         {showTaskForm && canManage && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setShowTaskForm(false)} />
-            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">New Housekeeping Task</h2>
-                <button onClick={() => setShowTaskForm(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center">
+                    <ClipboardDocumentListIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">New Housekeeping Task</h2>
+                    <p className="text-xs text-gray-500">Fill in the details below</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowTaskForm(false)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleCreateTask} className="flex-1 overflow-y-auto p-6 space-y-4">
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Room *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Room *</label>
                   <select required value={taskForm.room} onChange={(e) => setTaskForm((p) => ({ ...p, room: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                     <option value="">— Select room —</option>
                     {rooms.map((r) => <option key={r.id} value={r.id}>{r.room_number}</option>)}
                   </select>
                 </div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Task Type</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Task Type</label>
                     <select value={taskForm.task_type} onChange={(e) => setTaskForm((p) => ({ ...p, task_type: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       {choices.task_types.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
                     </select>
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Priority</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Priority</label>
                     <select value={taskForm.priority} onChange={(e) => setTaskForm((p) => ({ ...p, priority: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       {choices.priorities.map((p) => <option key={p.value} value={p.value}>{p.label}</option>)}
                     </select>
                   </div>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Assign To</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Assign To</label>
                   <select value={taskForm.assigned_to} onChange={(e) => setTaskForm((p) => ({ ...p, assigned_to: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                     <option value="">— Unassigned —</option>
                     {staff.map((s) => <option key={s.id} value={s.id}>{s.first_name} {s.last_name}</option>)}
                   </select>
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Scheduled Date</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Scheduled Date</label>
                   <input type="date" required value={taskForm.scheduled_date}
                     onChange={(e) => setTaskForm((p) => ({ ...p, scheduled_date: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Notes</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                   <textarea rows={2} value={taskForm.notes} onChange={(e) => setTaskForm((p) => ({ ...p, notes: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Special Instructions</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Special Instructions</label>
                   <textarea rows={2} value={taskForm.special_instructions} onChange={(e) => setTaskForm((p) => ({ ...p, special_instructions: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
                 </div>
                 <div className="flex gap-2 pt-1">
                   <button type="submit" disabled={saving}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                     {saving ? 'Creating…' : 'Create Task'}
                   </button>
                   <button type="button" onClick={() => setShowTaskForm(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                    className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                     Cancel
                   </button>
                 </div>
@@ -1414,26 +1454,34 @@ export default function HousekeepingPage() {
         {showMoveForm && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setShowMoveForm(false)} />
-            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">Log Stock Movement</h2>
-                <button onClick={() => setShowMoveForm(false)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-indigo-500 to-indigo-700 flex items-center justify-center">
+                    <ArrowsRightLeftIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">Log Stock Movement</h2>
+                    <p className="text-xs text-gray-500">Record inventory changes</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowMoveForm(false)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleLogMovement} className="flex-1 overflow-y-auto p-6 space-y-4">
                 {/* Movement type */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Movement Type *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Movement Type *</label>
                   <div className="grid grid-cols-3 gap-2">
                     {choices.movement_types.map((mt) => (
                       <button key={mt.value} type="button"
                         onClick={() => setMoveForm((p) => ({ ...p, movement_type: mt.value }))}
                         className={clsx(
-                          'py-2 rounded-xl text-xs font-semibold border transition-colors',
+                          'py-2 rounded-lg text-xs font-semibold border transition-colors',
                           moveForm.movement_type === mt.value
                             ? `${mColor(mt.value)} border-current`
-                            : 'border-slate-200 text-slate-600 hover:bg-slate-50',
+                            : 'border-gray-200 text-gray-600 hover:bg-gray-50',
                         )}>
                         {mt.label}
                       </button>
@@ -1443,16 +1491,16 @@ export default function HousekeepingPage() {
 
                 {/* Item type toggle */}
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Item Category *</label>
-                  <div className="flex rounded-xl border border-slate-200 overflow-hidden">
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Item Category *</label>
+                  <div className="flex rounded-lg border border-gray-200 overflow-hidden">
                     <button type="button" onClick={() => setMoveForm((p) => ({ ...p, item_type: 'amenity', linen_inventory: '' }))}
                       className={clsx('flex-1 py-2 text-sm font-semibold transition-colors',
-                        moveForm.item_type === 'amenity' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50')}>
+                        moveForm.item_type === 'amenity' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50')}>
                       Amenity
                     </button>
                     <button type="button" onClick={() => setMoveForm((p) => ({ ...p, item_type: 'linen', amenity_inventory: '' }))}
                       className={clsx('flex-1 py-2 text-sm font-semibold transition-colors',
-                        moveForm.item_type === 'linen' ? 'bg-blue-600 text-white' : 'text-slate-600 hover:bg-slate-50')}>
+                        moveForm.item_type === 'linen' ? 'bg-blue-600 text-white' : 'text-gray-600 hover:bg-gray-50')}>
                       Linen
                     </button>
                   </div>
@@ -1461,20 +1509,20 @@ export default function HousekeepingPage() {
                 {/* Item selector */}
                 {moveForm.item_type === 'amenity' ? (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Amenity *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Amenity *</label>
                     <select required value={moveForm.amenity_inventory}
                       onChange={(e) => setMoveForm((p) => ({ ...p, amenity_inventory: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       <option value="">— Select amenity —</option>
                       {amenities.map((a) => <option key={a.id} value={a.id}>{a.name} (stock: {a.quantity})</option>)}
                     </select>
                   </div>
                 ) : (
                   <div>
-                    <label className="block text-xs font-semibold text-slate-600 mb-1">Linen *</label>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">Linen *</label>
                     <select required value={moveForm.linen_inventory}
                       onChange={(e) => setMoveForm((p) => ({ ...p, linen_inventory: e.target.value }))}
-                      className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                       <option value="">— Select linen —</option>
                       {linens.map((l) => (
                         <option key={l.id} value={l.id}>
@@ -1486,49 +1534,49 @@ export default function HousekeepingPage() {
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Quantity *</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Quantity *</label>
                   <input type="number" required min="1" value={moveForm.quantity}
                     onChange={(e) => setMoveForm((p) => ({ ...p, quantity: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
 
                 {moveForm.movement_type === 'TRANSFER' && (
                   <div className="grid grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">From Location *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">From Location *</label>
                       <input type="text" value={moveForm.from_location}
                         onChange={(e) => setMoveForm((p) => ({ ...p, from_location: e.target.value }))}
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">To Location *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">To Location *</label>
                       <input type="text" value={moveForm.to_location}
                         onChange={(e) => setMoveForm((p) => ({ ...p, to_location: e.target.value }))}
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                   </div>
                 )}
 
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Reason</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Reason</label>
                   <input type="text" value={moveForm.reason}
                     onChange={(e) => setMoveForm((p) => ({ ...p, reason: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                 </div>
                 <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">Notes</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                   <textarea rows={2} value={moveForm.notes}
                     onChange={(e) => setMoveForm((p) => ({ ...p, notes: e.target.value }))}
-                    className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
+                    className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
                 </div>
 
                 <div className="flex gap-2 pt-1">
                   <button type="submit" disabled={saving}
-                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-xl transition-colors">
+                    className="flex-1 bg-indigo-600 hover:bg-indigo-700 disabled:opacity-60 text-white text-sm font-semibold py-2.5 rounded-lg transition-colors">
                     {saving ? 'Logging…' : 'Log Movement'}
                   </button>
                   <button type="button" onClick={() => setShowMoveForm(false)}
-                    className="px-4 py-2.5 rounded-xl border border-slate-200 text-sm font-semibold text-slate-600 hover:bg-slate-50">
+                    className="px-4 py-2.5 rounded-lg border border-gray-200 text-sm font-semibold text-gray-600 hover:bg-gray-50">
                     Cancel
                   </button>
                 </div>
@@ -1541,11 +1589,19 @@ export default function HousekeepingPage() {
         {viewTask && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setViewTask(null)} />
-            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">Task #{viewTask.id}</h2>
-                <button onClick={() => setViewTask(null)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-md bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-teal-500 to-teal-700 flex items-center justify-center">
+                    <ClipboardDocumentListIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">Task #{viewTask.id}</h2>
+                    <p className="text-xs text-gray-500">{viewTask.room_number || `Room #${viewTask.room}`}</p>
+                  </div>
+                </div>
+                <button onClick={() => setViewTask(null)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-4">
@@ -1567,24 +1623,24 @@ export default function HousekeepingPage() {
                     ['Completed', formatDateTime(viewTask.completed_at)],
                     ['Created By',viewTask.created_by_name || '—'],
                   ] as [string, string][]).map(([label, val]) => (
-                    <div key={label} className="flex gap-3 border-b border-slate-50 pb-3 last:border-0">
-                      <dt className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0 mt-0.5">{label}</dt>
-                      <dd className="text-sm text-slate-800">{val}</dd>
+                    <div key={label} className="flex gap-3 border-b border-gray-50 pb-3 last:border-0">
+                      <dt className="text-xs font-semibold text-gray-500 w-24 flex-shrink-0 mt-0.5">{label}</dt>
+                      <dd className="text-sm text-gray-800">{val}</dd>
                     </div>
                   ))}
-                  {viewTask.notes && <div className="flex gap-3"><dt className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0 mt-0.5">Notes</dt><dd className="text-sm text-slate-800">{viewTask.notes}</dd></div>}
-                  {viewTask.special_instructions && <div className="flex gap-3"><dt className="text-xs font-semibold text-slate-500 w-24 flex-shrink-0 mt-0.5">Instructions</dt><dd className="text-sm text-slate-800">{viewTask.special_instructions}</dd></div>}
+                  {viewTask.notes && <div className="flex gap-3"><dt className="text-xs font-semibold text-gray-500 w-24 flex-shrink-0 mt-0.5">Notes</dt><dd className="text-sm text-gray-800">{viewTask.notes}</dd></div>}
+                  {viewTask.special_instructions && <div className="flex gap-3"><dt className="text-xs font-semibold text-gray-500 w-24 flex-shrink-0 mt-0.5">Instructions</dt><dd className="text-sm text-gray-800">{viewTask.special_instructions}</dd></div>}
                 </dl>
                 <div className="flex gap-2 pt-2">
                   {viewTask.status === 'PENDING' && (
                     <button onClick={() => handleStart(viewTask)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-xl">
+                      className="flex-1 flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold py-2.5 rounded-lg">
                       <PlayIcon className="w-4 h-4" /> Start Task
                     </button>
                   )}
                   {(viewTask.status === 'PENDING' || viewTask.status === 'IN_PROGRESS') && (
                     <button onClick={() => handleComplete(viewTask)}
-                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-xl">
+                      className="flex-1 flex items-center justify-center gap-2 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold py-2.5 rounded-lg">
                       <CheckCircleIcon className="w-4 h-4" /> Complete
                     </button>
                   )}
@@ -1593,8 +1649,6 @@ export default function HousekeepingPage() {
             </aside>
           </div>
         )}
-
-      </div>
     </Layout>
   );
 }

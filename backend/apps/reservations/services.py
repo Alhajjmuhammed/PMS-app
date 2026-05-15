@@ -55,38 +55,32 @@ class AvailabilityService:
     def get_available_rooms(hotel_id, room_type_id, check_in_date, check_out_date, count=1):
         """
         Get list of available rooms for given criteria.
-        
-        Args:
-            hotel_id: Hotel/Property ID
-            room_type_id: Room type ID (optional)
-            check_in_date: Check-in date
-            check_out_date: Check-out date
-            count: Number of rooms needed
-            
-        Returns:
-            QuerySet: Available rooms
         """
-        # Get all rooms matching criteria
+        from apps.reservations.models import ReservationRoom
+
+        # Get all candidate rooms
         rooms = Room.objects.filter(
             hotel_id=hotel_id,
             is_active=True,
             status='VC'  # Vacant Clean
         )
-        
         if room_type_id:
             rooms = rooms.filter(room_type_id=room_type_id)
-        
-        # Filter out rooms with conflicting reservations
-        available_rooms = []
-        for room in rooms:
-            if AvailabilityService.check_availability(
-                room.id, check_in_date, check_out_date
-            ):
-                available_rooms.append(room.id)
-                if len(available_rooms) >= count:
-                    break
-        
-        return Room.objects.filter(id__in=available_rooms)
+
+        # Single query: find all room IDs that are already booked in this date range
+        booked_room_ids = set(
+            ReservationRoom.objects.filter(
+                room__in=rooms,
+                reservation__status__in=['CONFIRMED', 'CHECKED_IN'],
+                reservation__check_in_date__lt=check_out_date,
+                reservation__check_out_date__gt=check_in_date,
+            ).values_list('room_id', flat=True)
+        )
+
+        available = rooms.exclude(id__in=booked_room_ids)
+        if count:
+            available = available[:count]
+        return available
     
     @staticmethod
     def get_availability_calendar(hotel_id, room_type_id, start_date, end_date):
@@ -121,20 +115,25 @@ class AvailabilityService:
             reservation__status__in=['CONFIRMED', 'CHECKED_IN'],
             reservation__check_in_date__lt=end_date,
             reservation__check_out_date__gt=start_date
-        ).select_related('room', 'reservation')
-        
+        ).values('room_id', 'reservation__check_in_date', 'reservation__check_out_date')
+
+        # Evaluate once — avoids N queries (one per day) inside the loop below
+        reservation_rooms_list = list(reservation_rooms)
+
         # Build calendar
         calendar = {}
         current_date = start_date
-        
+
         while current_date < end_date:
             next_date = current_date + timedelta(days=1)
-            
-            # Count occupied rooms for this date
-            occupied = reservation_rooms.filter(
-                reservation__check_in_date__lt=next_date,
-                reservation__check_out_date__gt=current_date
-            ).values('room').distinct().count()
+
+            # Count occupied rooms for this date using Python-level filtering
+            occupied_room_ids = set(
+                rr['room_id'] for rr in reservation_rooms_list
+                if rr['reservation__check_in_date'] < next_date
+                and rr['reservation__check_out_date'] > current_date
+            )
+            occupied = len(occupied_room_ids)
             
             available = total_rooms - occupied
             occupancy_rate = (occupied / total_rooms * 100) if total_rooms > 0 else 0

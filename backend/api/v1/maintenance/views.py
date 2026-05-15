@@ -2,9 +2,9 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django.utils import timezone
 from apps.maintenance.models import MaintenanceRequest, MaintenanceLog
-from apps.rooms.models import Room
 from api.permissions import IsMaintenanceStaff
 from .serializers import (
     MaintenanceRequestSerializer, MaintenanceRequestCreateSerializer,
@@ -45,7 +45,7 @@ class RequestListView(generics.ListCreateAPIView):
         
         category = self.request.query_params.get('category')
         if category:
-            qs = qs.filter(category=category)
+            qs = qs.filter(request_type=category)
         
         return qs.order_by('-priority', '-created_at')
 
@@ -93,7 +93,7 @@ class MyRequestsView(generics.ListAPIView):
     def get_queryset(self):
         qs = MaintenanceRequest.objects.filter(
             assigned_to=self.request.user,
-            status__in=['OPEN', 'ASSIGNED', 'IN_PROGRESS']
+            status__in=['PENDING', 'ASSIGNED', 'IN_PROGRESS']
         )
         if self.request.user.assigned_property:
             qs = qs.filter(property=self.request.user.assigned_property)
@@ -121,19 +121,21 @@ class AssignRequestView(APIView):
         User = get_user_model()
         
         try:
-            assigned_to = User.objects.get(pk=assigned_to_id)
+            user_qs = User.objects.filter(assigned_property=prop) if prop else User.objects.all()
+            assigned_to = user_qs.get(pk=assigned_to_id)
         except User.DoesNotExist:
             return Response({'error': 'User not found'}, status=status.HTTP_404_NOT_FOUND)
         
         maintenance_request.assigned_to = assigned_to
         maintenance_request.status = 'ASSIGNED'
-        maintenance_request.save()
         
-        MaintenanceLog.objects.create(
+        with transaction.atomic():
+            maintenance_request.save()
+            MaintenanceLog.objects.create(
             request=maintenance_request,
             action='Assigned',
             notes=f'Assigned to {assigned_to.get_full_name()}',
-            performed_by=request.user
+            user=request.user
         )
         
         return Response(MaintenanceRequestSerializer(maintenance_request).data)
@@ -153,19 +155,20 @@ class StartRequestView(APIView):
         
         maintenance_request.status = 'IN_PROGRESS'
         maintenance_request.started_at = timezone.now()
-        maintenance_request.save()
         
-        MaintenanceLog.objects.create(
-            request=maintenance_request,
-            action='Started',
-            notes='Work started',
-            performed_by=request.user
-        )
-        
-        # Put room OOS if needed
-        if maintenance_request.room and maintenance_request.priority in ['HIGH', 'CRITICAL']:
-            maintenance_request.room.status = 'OOS'
-            maintenance_request.room.save()
+        with transaction.atomic():
+            maintenance_request.save()
+            MaintenanceLog.objects.create(
+                request=maintenance_request,
+                action='Started',
+                notes='Work started',
+                user=request.user
+            )
+            
+            # Put room OOS if needed
+            if maintenance_request.room and maintenance_request.priority in ['HIGH', 'EMERGENCY']:
+                maintenance_request.room.status = 'OOS'
+                maintenance_request.room.save()
         
         return Response(MaintenanceRequestSerializer(maintenance_request).data)
 
@@ -190,21 +193,21 @@ class CompleteRequestView(APIView):
         maintenance_request.resolution_notes = serializer.validated_data.get('notes', '')
         
         if 'actual_cost' in serializer.validated_data:
-            maintenance_request.actual_cost = serializer.validated_data['actual_cost']
+            maintenance_request.parts_cost = serializer.validated_data['actual_cost']
         
-        maintenance_request.save()
-        
-        MaintenanceLog.objects.create(
-            request=maintenance_request,
-            action='Completed',
-            notes=maintenance_request.resolution_notes,
-            performed_by=request.user
-        )
-        
-        # Return room to VD if it was OOS
-        if maintenance_request.room and maintenance_request.room.status == 'OOS':
-            maintenance_request.room.status = 'VD'
-            maintenance_request.room.save()
+        with transaction.atomic():
+            maintenance_request.save()
+            MaintenanceLog.objects.create(
+                request=maintenance_request,
+                action='Completed',
+                notes=maintenance_request.resolution_notes,
+                user=request.user
+            )
+            
+            # Return room to VD if it was OOS
+            if maintenance_request.room and maintenance_request.room.status == 'OOS':
+                maintenance_request.room.status = 'VD'
+                maintenance_request.room.save()
         
         return Response(MaintenanceRequestSerializer(maintenance_request).data)
 
@@ -239,14 +242,14 @@ class ResolveRequestView(APIView):
         maintenance_request.status = 'COMPLETED'
         maintenance_request.resolution_notes = notes
         maintenance_request.completed_at = timezone.now()
-        maintenance_request.completed_by = request.user
-        maintenance_request.save()
         
-        MaintenanceLog.objects.create(
+        with transaction.atomic():
+            maintenance_request.save()
+            MaintenanceLog.objects.create(
             request=maintenance_request,
             action='Resolved',
             notes=notes,
-            performed_by=request.user
+            user=request.user
         )
         
         return Response(MaintenanceRequestSerializer(maintenance_request).data)

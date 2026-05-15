@@ -1,37 +1,49 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Layout from '@/components/Layout';
 import Card from '@/components/Card';
 import Button from '@/components/Button';
 import { useAuth } from '@/contexts/AuthContext';
-import api from '@/lib/api';
+
+const STORAGE_KEY = 'pms_notification_settings';
+
+const defaultSettings = {
+  email_reservations: true,
+  email_checkins: true,
+  email_checkouts: false,
+  email_maintenance: true,
+  email_reports: true,
+  push_reservations: true,
+  push_checkins: true,
+  push_checkouts: false,
+  push_maintenance: true,
+  push_housekeeping: false,
+  sms_enabled: false,
+  sms_critical_only: true,
+};
 
 export default function NotificationsSettingsPage() {
   const { user } = useAuth();
   const [loading, setLoading] = useState(false);
-  const [settings, setSettings] = useState({
-    email_reservations: true,
-    email_checkins: true,
-    email_checkouts: false,
-    email_maintenance: true,
-    email_reports: true,
-    push_reservations: true,
-    push_checkins: true,
-    push_checkouts: false,
-    push_maintenance: true,
-    push_housekeeping: false,
-    sms_enabled: false,
-    sms_critical_only: true,
-  });
+  const [settings, setSettings] = useState(defaultSettings);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    const key = `${STORAGE_KEY}_${user?.id ?? 'anon'}`;
+    const saved = localStorage.getItem(key);
+    if (saved) {
+      try { setSettings({ ...defaultSettings, ...JSON.parse(saved) }); } catch {}
+    }
+  }, [user?.id]);
 
   const handleSave = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      await api.patch(`/api/v1/accounts/users/${user?.id}/notification-settings/`, settings);
-      alert('Notification settings updated successfully!');
-    } catch (error) {
-      alert('Failed to update settings');
+      const key = `${STORAGE_KEY}_${user?.id ?? 'anon'}`;
+      localStorage.setItem(key, JSON.stringify(settings));
+      setSaved(true);
+      setTimeout(() => setSaved(false), 3500);
     } finally {
       setLoading(false);
     }
@@ -40,6 +52,9 @@ export default function NotificationsSettingsPage() {
   return (
     <Layout>
       <div className="max-w-4xl mx-auto space-y-6">
+        {saved && (
+          <div className="px-4 py-3 rounded-lg bg-green-50 text-green-800 border border-green-200 text-sm font-medium">Notification settings updated successfully!</div>
+        )}
         <h1 className="text-3xl font-bold text-gray-900">Notification Settings</h1>
 
         <Card title="Email Notifications">

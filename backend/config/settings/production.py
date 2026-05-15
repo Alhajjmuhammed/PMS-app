@@ -175,12 +175,13 @@ REST_FRAMEWORK.update({
     'DEFAULT_RENDERER_CLASSES': [
         'rest_framework.renderers.JSONRenderer',
     ],
-    'DEFAULT_THROTTLE_RATES': {
-        'anon': '50/hour',
-        'user': '500/hour',
-        'login': '10/hour',
-        'admin': '2000/hour',
-    },
+})
+# Deep-merge throttle rates so webhook/mfa_verify/mfa_send rates from base are kept
+REST_FRAMEWORK['DEFAULT_THROTTLE_RATES'].update({
+    'anon': '50/hour',
+    'user': '500/hour',
+    'login': '10/hour',
+    'admin': '2000/hour',
 })
 
 # Static files configuration

@@ -1,3 +1,4 @@
+from decimal import Decimal
 from rest_framework import serializers
 from apps.billing.models import Folio, FolioCharge, Payment, ChargeCode
 from django.utils import timezone
@@ -20,7 +21,10 @@ class ChargeCodeCreateSerializer(serializers.ModelSerializer):
     def validate_code(self, value):
         """Validate charge code uniqueness."""
         value = value.strip().upper()
-        if ChargeCode.objects.filter(code=value).exists():
+        qs = ChargeCode.objects.filter(code=value)
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError("Charge code already exists.")
         return value
     
@@ -149,13 +153,13 @@ class FolioCreateSerializer(serializers.ModelSerializer):
 class AddChargeSerializer(serializers.Serializer):
     charge_code_id = serializers.IntegerField()
     description = serializers.CharField(required=False, allow_blank=True)
-    quantity = serializers.IntegerField(default=1)
-    unit_price = serializers.DecimalField(max_digits=10, decimal_places=2)
+    quantity = serializers.IntegerField(default=1, min_value=1)
+    unit_price = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0'))
 
 
 class AddPaymentSerializer(serializers.Serializer):
     payment_method = serializers.ChoiceField(choices=Payment.PaymentMethod.choices)
-    amount = serializers.DecimalField(max_digits=10, decimal_places=2)
+    amount = serializers.DecimalField(max_digits=10, decimal_places=2, min_value=Decimal('0.01'))
     reference_number = serializers.CharField(required=False, allow_blank=True)
     card_last_four = serializers.CharField(required=False, allow_blank=True, max_length=4)
 

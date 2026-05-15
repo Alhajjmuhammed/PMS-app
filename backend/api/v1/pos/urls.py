@@ -10,6 +10,7 @@ app_name = 'pos'
 urlpatterns = [
     # ===== Outlets =====
     path('outlets/', pos_views.OutletListView.as_view(), name='outlet_list'),
+    path('outlets/<int:outlet_id>/categories/', pos_views.MenuCategoryListCreateView.as_view(), name='outlet_categories'),
     
     # ===== Menu Categories =====
     path('categories/', pos_views.MenuCategoryListCreateView.as_view(), name='category_list'),

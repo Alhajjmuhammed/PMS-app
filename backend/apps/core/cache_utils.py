@@ -5,8 +5,6 @@ Caching utilities for expensive queries and operations.
 from django.core.cache import cache
 from functools import wraps
 from django.db.models import QuerySet
-import hashlib
-import json
 
 
 def cache_queryset(timeout=300, key_prefix='qs'):
@@ -129,4 +127,4 @@ class CacheManager:
     @staticmethod
     def invalidate_rate_plans(property_id):
         """Invalidate all rate plan caches for a property."""
-        invalidate_cache_pattern(f'rate_plan_*')
+        invalidate_cache_pattern('rate_plan_*')

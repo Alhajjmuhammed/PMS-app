@@ -42,8 +42,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await authService.login({ email, password });
       
       if (response.mfa_required) {
-        // Redirect to MFA verification page
-        router.push(`/login/mfa?method=${response.mfa_method}`);
+        // Redirect to MFA verification page, passing the temp token as query param
+        router.push(`/login/mfa?method=${response.mfa_method}&mfa_token=${encodeURIComponent(response.mfa_token ?? '')}`);
       } else {
         await loadUser();
         router.push('/dashboard');

@@ -37,12 +37,12 @@ class MaintenanceRequestCreateSerializer(serializers.ModelSerializer):
 
 
 class MaintenanceLogSerializer(serializers.ModelSerializer):
-    performed_by_name = serializers.CharField(source='performed_by.get_full_name', read_only=True)
+    performed_by_name = serializers.CharField(source='user.get_full_name', read_only=True)
     
     class Meta:
         ref_name = 'MaintenanceLogSerializer'
         model = MaintenanceLog
-        fields = ['id', 'request', 'action', 'notes', 'performed_by', 'performed_by_name', 'created_at']
+        fields = ['id', 'request', 'action', 'notes', 'user', 'performed_by_name', 'timestamp']
 
 
 class RequestUpdateSerializer(serializers.Serializer):

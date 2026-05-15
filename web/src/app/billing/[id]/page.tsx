@@ -7,7 +7,7 @@ import api from '@/lib/api';
 import { format } from 'date-fns';
 import clsx from 'clsx';
 import {
-  HomeIcon, ChevronRightIcon, CheckCircleIcon, CreditCardIcon,
+  HomeIcon, ChevronRightIcon, CheckCircleIcon, ExclamationTriangleIcon, CreditCardIcon,
   DocumentArrowDownIcon, ArrowLeftIcon,
 } from '@heroicons/react/24/outline';
 
@@ -144,7 +144,7 @@ export default function FolioDetailPage() {
 
   const handleCloseFolio = async () => {
     if (!folio) return;
-    if (Number(folio.balance) !== 0) {
+    if (Number(folio.balance) > 0) {
       showToast(`Cannot close — outstanding balance $${Number(folio.balance).toLocaleString()}`, false);
       return;
     }
@@ -158,8 +158,20 @@ export default function FolioDetailPage() {
     }
   };
 
-  const handleExport = () => {
-    window.open(`/api/v1/billing/folios/${params.id}/export/`, '_blank');
+  const handleExport = async () => {
+    try {
+      const resp = await api.get(`/api/v1/billing/folios/${params.id}/export/`, {
+        responseType: 'blob',
+      });
+      const url = URL.createObjectURL(new Blob([resp.data], { type: 'application/pdf' }));
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `folio-${folio?.folio_number ?? params.id}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast('Export failed', false);
+    }
   };
 
   if (loading) return (
@@ -185,7 +197,7 @@ export default function FolioDetailPage() {
         {toast && (
           <div className={clsx('fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
             toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white')}>
-            <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            {toast.ok ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" /> : <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
             {toast.msg}
           </div>
         )}

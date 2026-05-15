@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
+from apps.frontdesk.models import CheckIn, CheckOut, WalkIn
 
 
 class CheckInSerializer(serializers.ModelSerializer):

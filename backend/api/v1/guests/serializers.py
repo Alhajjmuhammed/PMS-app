@@ -6,7 +6,7 @@ from apps.guests.models import Guest, GuestPreference, GuestDocument, Company, L
 
 class GuestPreferenceSerializer(serializers.ModelSerializer):
     """Guest preference read serializer."""
-    guest_name = serializers.CharField(source='guest.get_full_name', read_only=True)
+    guest_name = serializers.CharField(source='guest.full_name', read_only=True)
     category_display = serializers.CharField(source='get_category_display', read_only=True)
     
     class Meta:

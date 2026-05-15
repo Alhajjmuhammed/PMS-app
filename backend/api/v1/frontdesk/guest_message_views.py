@@ -10,8 +10,7 @@ from django.utils import timezone
 from apps.frontdesk.models import GuestMessage
 from .guest_message_serializers import (
     GuestMessageSerializer,
-    GuestMessageCreateSerializer,
-    GuestMessageReplySerializer
+    GuestMessageCreateSerializer
 )
 
 

@@ -1,5 +1,5 @@
 from django import forms
-from .models import Property, Building, Floor, Department, PropertyAmenity, TaxConfiguration
+from .models import Property, Building, Floor, Department
 
 
 class PropertyForm(forms.ModelForm):

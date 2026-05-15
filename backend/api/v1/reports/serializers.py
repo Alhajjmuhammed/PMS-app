@@ -91,12 +91,15 @@ class MonthlyStatisticsCreateSerializer(serializers.ModelSerializer):
         return value
     
     def validate(self, data):
-        # Check for duplicate
-        if MonthlyStatistics.objects.filter(
+        # Check for duplicate — exclude self when updating
+        qs = MonthlyStatistics.objects.filter(
             property=data['property'],
             year=data['year'],
             month=data['month']
-        ).exists():
+        )
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError(
                 "Statistics for this month already exist"
             )

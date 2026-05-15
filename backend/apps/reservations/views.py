@@ -4,8 +4,7 @@ from django.contrib import messages
 from django.views import View
 from django.views.generic import ListView, DetailView, CreateView, UpdateView
 from django.urls import reverse_lazy
-from django.http import JsonResponse
-from django.db.models import Q, Count, Sum
+from django.db.models import Q
 from datetime import datetime, timedelta
 from .models import Reservation, ReservationRoom, GroupBooking, ReservationLog
 from .forms import ReservationForm, ReservationRoomFormSet, GroupBookingForm
@@ -18,9 +17,9 @@ class ReservationListView(LoginRequiredMixin, ListView):
     paginate_by = 20
     
     def get_queryset(self):
-        queryset = Reservation.objects.select_related('guest', 'property').all()
+        queryset = Reservation.objects.select_related('guest', 'hotel').all()
         if self.request.user.assigned_property:
-            queryset = queryset.filter(property=self.request.user.assigned_property)
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
         
         # Filters
         status = self.request.GET.get('status')
@@ -84,7 +83,7 @@ class ReservationCreateView(LoginRequiredMixin, CreateView):
         if room_formset.is_valid():
             form.instance.created_by = self.request.user
             if self.request.user.assigned_property:
-                form.instance.property = self.request.user.assigned_property
+                form.instance.hotel = self.request.user.assigned_property
             
             self.object = form.save()
             room_formset.instance = self.object
@@ -193,7 +192,7 @@ class ReservationSearchView(LoginRequiredMixin, View):
         )
         
         if request.user.assigned_property:
-            reservations = reservations.filter(property=request.user.assigned_property)
+            reservations = reservations.filter(hotel=request.user.assigned_property)
         
         return render(request, self.template_name, {
             'reservations': reservations[:50],
@@ -210,7 +209,7 @@ class GroupBookingListView(LoginRequiredMixin, ListView):
     def get_queryset(self):
         queryset = GroupBooking.objects.all()
         if self.request.user.assigned_property:
-            queryset = queryset.filter(property=self.request.user.assigned_property)
+            queryset = queryset.filter(hotel=self.request.user.assigned_property)
         return queryset
 
 
@@ -234,7 +233,7 @@ class GroupBookingCreateView(LoginRequiredMixin, CreateView):
     def form_valid(self, form):
         form.instance.created_by = self.request.user
         if self.request.user.assigned_property:
-            form.instance.property = self.request.user.assigned_property
+            form.instance.hotel = self.request.user.assigned_property
         messages.success(self.request, 'Group booking created successfully.')
         return super().form_valid(form)
 
@@ -267,7 +266,7 @@ class ReservationCalendarView(LoginRequiredMixin, View):
         ).select_related('guest')
         
         if request.user.assigned_property:
-            reservations = reservations.filter(property=request.user.assigned_property)
+            reservations = reservations.filter(hotel=request.user.assigned_property)
         
         context = {
             'reservations': reservations,
@@ -282,14 +281,14 @@ class AvailabilityView(LoginRequiredMixin, View):
     template_name = 'reservations/availability.html'
     
     def get(self, request):
-        from apps.rooms.models import RoomType, Room
+        from apps.rooms.models import RoomType
         
         check_in = request.GET.get('check_in')
         check_out = request.GET.get('check_out')
         
         room_types = RoomType.objects.filter(is_active=True)
         if request.user.assigned_property:
-            room_types = room_types.filter(property=request.user.assigned_property)
+            room_types = room_types.filter(hotel=request.user.assigned_property)
         
         availability = []
         if check_in and check_out:

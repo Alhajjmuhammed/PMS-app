@@ -7,7 +7,7 @@ import clsx from 'clsx';
 import {
   PlusIcon, XMarkIcon, EyeIcon, PencilSquareIcon, TrashIcon,
   CheckCircleIcon, UserIcon, ChevronLeftIcon, ChevronRightIcon,
-  IdentificationIcon,
+  IdentificationIcon, HomeIcon,
 } from '@heroicons/react/24/outline';
 
 /* ── Types ── */
@@ -277,16 +277,45 @@ export default function GuestsPage() {
           </div>
         )}
 
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Guests</span>
+        </nav>
+
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Guests</h1>
-            <p className="text-slate-500 text-sm mt-0.5">{guests.length} guest{guests.length !== 1 ? 's' : ''}</p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-violet-100 flex items-center justify-center flex-shrink-0">
+              <UserIcon className="w-5 h-5 text-violet-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Guests</h1>
+              <p className="text-slate-500 text-sm mt-0.5">{guests.length} guest{guests.length !== 1 ? 's' : ''}</p>
+            </div>
           </div>
           <button onClick={openNew}
             className="inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold px-4 py-2.5 rounded-xl transition-colors shadow-sm">
             <PlusIcon className="w-4 h-4" /> New Guest
           </button>
+        </div>
+
+        {/* Stats cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Guests</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{guests.length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">VIP</p>
+            <p className="text-2xl font-bold text-violet-600 mt-1">{guests.filter(g => (g.vip_level ?? 0) > 0).length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4 col-span-2 sm:col-span-1">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Blacklisted</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">{guests.filter(g => g.is_blacklisted).length}</p>
+          </div>
         </div>
 
         {/* Search */}
@@ -381,87 +410,97 @@ export default function GuestsPage() {
           </>
         )}
 
+      </div>
+
         {/* ── Create / Edit slide-over ── */}
         {editingId !== null && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={closePanel} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">{editingId === 'new' ? 'Add New Guest' : 'Edit Guest'}</h2>
-                <button onClick={closePanel} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center">
+                    <UserIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">{editingId === 'new' ? 'Add New Guest' : 'Edit Guest'}</h2>
+                    <p className="text-xs text-gray-500">{editingId === 'new' ? 'Fill in the details below' : 'Update guest details'}</p>
+                  </div>
+                </div>
+                <button onClick={closePanel} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
 
                 {/* Personal Info */}
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Personal Info</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Personal Info</p>
                   <div className="space-y-3">
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">First Name *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">First Name *</label>
                         <input {...inp('first_name')} required placeholder="John"
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Last Name *</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Last Name *</label>
                         <input {...inp('last_name')} required placeholder="Doe"
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Gender</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Gender</label>
                         <select {...inp('gender')}
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                           {GENDER_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Date of Birth</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label>
                         <input {...inp('date_of_birth')} type="date"
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Nationality</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Nationality</label>
                       <input {...inp('nationality')} placeholder="e.g. Tanzanian"
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                   </div>
                 </section>
 
                 {/* Contact */}
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Contact</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Contact</p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Phone *</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Phone *</label>
                       <input {...inp('phone')} required placeholder="+255 712 345 678"
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Email <span className="text-slate-400 font-normal">(optional)</span></label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Email <span className="text-gray-400 font-normal">(optional)</span></label>
                       <input {...inp('email')} type="email" placeholder="john@example.com"
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                   </div>
                 </section>
 
                 {/* Identity */}
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Identity</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Identity</p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">ID Type</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">ID Type</label>
                       <select {...inp('id_type')}
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                         {ID_TYPE_OPTIONS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1 flex items-center justify-between">
+                      <label className="block text-sm font-medium text-gray-700 mb-1 flex items-center justify-between">
                         <span>ID Number</span>
                         {editingId === 'new' && (
                           <button type="button" onClick={() => setForm((p) => ({ ...p, id_number: generateGuestId() }))}
@@ -469,52 +508,52 @@ export default function GuestsPage() {
                         )}
                       </label>
                       <input {...inp('id_number')} placeholder="Auto-generated"
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 font-mono focus:outline-none focus:ring-2 focus:ring-blue-300 bg-slate-50" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-blue-400 bg-gray-50" />
                     </div>
                   </div>
                 </section>
 
                 {/* Address */}
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Address <span className="text-slate-300 font-normal normal-case">(optional)</span></p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Address <span className="text-gray-300 font-normal normal-case">(optional)</span></p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Street Address</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Street Address</label>
                       <input {...inp('address')} placeholder="123 Main Street"
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">City</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">City</label>
                         <input {...inp('city')} placeholder="Dar es Salaam"
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">State / Region</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">State / Region</label>
                         <input {...inp('state')} placeholder="Tanzania"
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Country</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Country</label>
                         <input {...inp('country')} placeholder="Tanzania"
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                       <div>
-                        <label className="block text-xs font-semibold text-slate-600 mb-1">Postal Code</label>
+                        <label className="block text-sm font-medium text-gray-700 mb-1">Postal Code</label>
                         <input {...inp('postal_code')} placeholder="00100"
-                          className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                          className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                       </div>
                     </div>
                   </div>
                 </section>
 
               </form>
-              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button onClick={closePanel} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+                <button onClick={closePanel} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
                 <button onClick={handleSave} disabled={saving}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
                   {saving ? 'Saving…' : editingId === 'new' ? 'Create Guest' : 'Save Changes'}
                 </button>
               </div>
@@ -526,19 +565,19 @@ export default function GuestsPage() {
         {viewingGuest && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setViewingGuest(null)} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-full bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                     {viewingGuest.first_name[0]}{viewingGuest.last_name[0]}
                   </div>
                   <div>
-                    <h2 className="font-bold text-slate-800 text-base leading-tight">{viewingGuest.first_name} {viewingGuest.last_name}</h2>
-                    <p className="text-xs text-slate-400">{viewingGuest.email || viewingGuest.phone}</p>
+                    <h2 className="font-semibold text-gray-900">{viewingGuest.first_name} {viewingGuest.last_name}</h2>
+                    <p className="text-xs text-gray-500">{viewingGuest.email || viewingGuest.phone}</p>
                   </div>
                 </div>
-                <button onClick={() => setViewingGuest(null)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
-                  <XMarkIcon className="w-5 h-5" />
+                <button onClick={() => setViewingGuest(null)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -576,29 +615,29 @@ export default function GuestsPage() {
                   ]},
                 ].map(({ label, rows }) => (
                   <section key={label}>
-                    <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">{label}</p>
-                    <div className="bg-slate-50 rounded-xl divide-y divide-slate-100">
+                    <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{label}</p>
+                    <div className="bg-gray-50 rounded-xl divide-y divide-gray-100">
                       {(rows as [string, string][]).map(([k, v]) => (
                         <div key={k} className="flex items-center justify-between px-4 py-2.5">
-                          <span className="text-xs text-slate-500">{k}</span>
-                          <span className="text-xs font-semibold text-slate-700">{v || '—'}</span>
+                          <span className="text-xs text-gray-500">{k}</span>
+                          <span className="text-xs font-semibold text-gray-700">{v || '—'}</span>
                         </div>
                       ))}
                     </div>
                   </section>
                 ))}
               </div>
-              <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
                 <button onClick={() => { setViewingGuest(null); openEdit(viewingGuest); }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
                   <PencilSquareIcon className="w-4 h-4" /> Edit
                 </button>
                 <button onClick={() => { setDeleteConfirm(viewingGuest); setViewingGuest(null); }}
-                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
                   <TrashIcon className="w-4 h-4" /> Delete
                 </button>
                 <button onClick={() => setViewingGuest(null)}
-                  className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors">
+                  className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
                   Close
                 </button>
               </div>
@@ -627,8 +666,6 @@ export default function GuestsPage() {
             </div>
           </div>
         )}
-
-      </div>
     </Layout>
   );
 }

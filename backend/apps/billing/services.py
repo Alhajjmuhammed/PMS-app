@@ -14,17 +14,14 @@ from .models import Folio, FolioCharge, Payment, ChargeCode
 
 class BillingServiceError(Exception):
     """Base exception for billing service errors."""
-    pass
 
 
 class FolioClosedError(BillingServiceError):
     """Raised when attempting to modify a closed folio."""
-    pass
 
 
 class InsufficientBalanceError(BillingServiceError):
     """Raised when folio has outstanding balance."""
-    pass
 
 
 class BillingService:
@@ -74,7 +71,7 @@ class BillingService:
             posted_by=posted_by
         )
         
-        # Recalculate folio totals
+        # Keep folio totals in sync so callers see correct values
         folio.recalculate_totals()
         
         return charge
@@ -123,7 +120,7 @@ class BillingService:
             received_by=received_by
         )
         
-        # Recalculate folio totals
+        # Keep folio totals in sync so callers see correct balance
         folio.recalculate_totals()
         
         return payment
@@ -148,8 +145,8 @@ class BillingService:
         if folio.status == 'CLOSED':
             raise FolioClosedError(f"Folio {folio.folio_number} is already closed")
         
-        # Check if balance is zero
-        if folio.balance != 0:
+        # Check if balance is positive (guest still owes money)
+        if folio.balance > 0:
             raise InsufficientBalanceError(
                 f"Cannot close folio {folio.folio_number} with outstanding balance ${folio.balance}"
             )
@@ -283,8 +280,8 @@ class InvoiceService:
         
         if total_paid >= invoice.total:
             invoice.status = 'PAID'
-        elif total_paid > 0:
-            invoice.status = 'PARTIAL'
+        elif invoice.status == 'DRAFT':
+            invoice.status = 'ISSUED'
         
         invoice.save()
         
@@ -314,7 +311,7 @@ class PDFService:
         from reportlab.platypus import SimpleDocTemplate, Table, TableStyle, Paragraph, Spacer
         from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
         from reportlab.lib.units import inch
-        from reportlab.lib.enums import TA_CENTER, TA_RIGHT
+        from reportlab.lib.enums import TA_CENTER
         
         buffer = BytesIO()
         doc = SimpleDocTemplate(buffer, pagesize=letter)

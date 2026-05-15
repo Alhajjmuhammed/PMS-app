@@ -14,6 +14,9 @@ export default function ForgotPasswordPage() {
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
+
+  const showMsg = (text: string, ok = true) => setMessage({ text, ok });
 
   const handleSendCode = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -21,10 +24,10 @@ export default function ForgotPasswordPage() {
     try {
       setLoading(true);
       await api.post('/api/v1/accounts/password-reset/request/', { email });
-      alert('Reset code sent to your email!');
+      showMsg('Reset code sent to your email!', true);
       setStep(2);
     } catch (error) {
-      alert('Failed to send reset code');
+      showMsg('Failed to send reset code. Please check your email address.', false);
     } finally {
       setLoading(false);
     }
@@ -34,12 +37,12 @@ export default function ForgotPasswordPage() {
     e.preventDefault();
 
     if (newPassword !== confirmPassword) {
-      alert('Passwords do not match');
+      showMsg('Passwords do not match', false);
       return;
     }
 
     if (newPassword.length < 8) {
-      alert('Password must be at least 8 characters');
+      showMsg('Password must be at least 8 characters', false);
       return;
     }
 
@@ -50,10 +53,10 @@ export default function ForgotPasswordPage() {
         code,
         new_password: newPassword,
       });
-      alert('Password reset successfully!');
-      window.location.href = '/login';
+      showMsg('Password reset successfully! Redirecting…', true);
+      setTimeout(() => { window.location.href = '/login'; }, 1500);
     } catch (error) {
-      alert('Failed to reset password. Please check your code.');
+      showMsg('Failed to reset password. Please check your code.', false);
     } finally {
       setLoading(false);
     }
@@ -68,6 +71,12 @@ export default function ForgotPasswordPage() {
             {step === 1 ? 'Enter your email to receive a reset code' : 'Enter the code and your new password'}
           </p>
         </div>
+
+        {message && (
+          <div className={`px-4 py-3 rounded-lg text-sm font-medium ${message.ok ? 'bg-green-50 text-green-800 border border-green-200' : 'bg-red-50 text-red-800 border border-red-200'}`}>
+            {message.text}
+          </div>
+        )}
 
         {step === 1 ? (
           <Card>

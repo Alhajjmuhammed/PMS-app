@@ -2,6 +2,8 @@
 Billing Models for Hotel PMS
 """
 
+from decimal import Decimal
+
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.utils import timezone
@@ -70,9 +72,10 @@ class Folio(models.Model):
         return self.total_charges + self.total_taxes - self.total_payments
     
     def recalculate_totals(self):
-        self.total_charges = sum(item.amount for item in self.charges.all())
+        charges = list(self.charges.all())
+        self.total_charges = sum(item.amount for item in charges)
+        self.total_taxes = sum(item.tax_amount for item in charges)
         self.total_payments = sum(payment.amount for payment in self.payments.all())
-        self.total_taxes = sum(item.tax_amount for item in self.charges.all())
         self.save()
 
 
@@ -117,7 +120,7 @@ class FolioCharge(models.Model):
     amount = models.DecimalField(_('amount'), max_digits=12, decimal_places=2)
     tax_amount = models.DecimalField(_('tax amount'), max_digits=10, decimal_places=2, default=0)
     
-    charge_date = models.DateField(_('charge date'), default=timezone.now)
+    charge_date = models.DateField(_('charge date'), default=timezone.localdate)
     reference = models.CharField(_('reference'), max_length=100, blank=True)
     
     is_posted = models.BooleanField(_('posted'), default=True)
@@ -134,6 +137,36 @@ class FolioCharge(models.Model):
     
     def save(self, *args, **kwargs):
         self.amount = self.quantity * self.unit_price
+
+        # Auto-compute tax from the property's TaxConfiguration when the
+        # charge code is marked as taxable.  The category decides which
+        # tax rows apply (room vs. services).
+        try:
+            from apps.properties.models import TaxConfiguration
+            if self.charge_code_id and self.charge_code.is_taxable:
+                prop = None
+                if self.folio_id:
+                    if self.folio.reservation_id:
+                        prop = self.folio.reservation.hotel
+                    if prop is None and self.folio.guest_id:
+                        prop = getattr(self.folio.guest, 'home_property', None)
+                if prop:
+                    is_room = self.charge_code.category == 'ROOM'
+                    tax_qs = TaxConfiguration.objects.filter(
+                        property=prop,
+                        is_active=True,
+                        **({'applies_to_room': True} if is_room else {'applies_to_services': True}),
+                    )
+                    tax_total = Decimal('0')
+                    for tax in tax_qs:
+                        if tax.is_percentage:
+                            tax_total += self.amount * tax.rate / Decimal('100')
+                        else:
+                            tax_total += tax.rate
+                    self.tax_amount = tax_total
+        except Exception:
+            pass  # Never crash a charge save over tax lookup
+
         super().save(*args, **kwargs)
         self.folio.recalculate_totals()
 

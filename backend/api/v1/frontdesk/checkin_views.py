@@ -8,8 +8,9 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
+from django.db import transaction
 from django.db.models import Q, Count
-from django.core.exceptions import ObjectDoesNotExist, ValidationError
+from django.core.exceptions import ObjectDoesNotExist
 from datetime import date
 import logging
 
@@ -17,7 +18,8 @@ from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
 from apps.rooms.models import Room
 from apps.reservations.models import Reservation, ReservationRoom
 from apps.guests.models import Guest
-from apps.billing.models import Folio
+from apps.billing.models import Folio, FolioCharge, ChargeCode
+from decimal import Decimal
 import uuid
 from .checkin_serializers import (
     CheckInSerializer,
@@ -59,6 +61,7 @@ class CheckInListCreateView(generics.ListCreateAPIView):
         
         return queryset
     
+    @transaction.atomic
     def perform_create(self, serializer):
         check_in = serializer.save(checked_in_by=self.request.user)
         
@@ -71,6 +74,27 @@ class CheckInListCreateView(generics.ListCreateAPIView):
             check_in.reservation.status = 'CHECKED_IN'
             check_in.reservation.save()
 
+            # Assign the checked-in room to the first unassigned ReservationRoom so that
+            # the billing folio list can display the correct room number.
+            unassigned_rr = check_in.reservation.rooms.filter(room__isnull=True).first()
+            if unassigned_rr:
+                unassigned_rr.room = check_in.room
+                unassigned_rr.save(update_fields=['room'])
+            elif not check_in.reservation.rooms.exists():
+                # No ReservationRoom at all (e.g. legacy/seed data) — create one now
+                room_type = check_in.room.room_type
+                rate = room_type.base_rate if room_type else Decimal('0')
+                nights = (check_in.reservation.check_out_date - check_in.reservation.check_in_date).days or 1
+                ReservationRoom.objects.create(
+                    reservation=check_in.reservation,
+                    room=check_in.room,
+                    room_type=room_type,
+                    rate_per_night=rate,
+                    total_rate=rate * nights,
+                    adults=check_in.reservation.adults,
+                    children=check_in.reservation.children,
+                )
+
         # Auto-create a guest folio if one doesn't exist for the reservation
         folio_exists = (
             check_in.reservation
@@ -79,12 +103,49 @@ class CheckInListCreateView(generics.ListCreateAPIView):
         )
         if not folio_exists:
             folio_number = f"F-{uuid.uuid4().hex[:8].upper()}"
-            Folio.objects.create(
+            folio = Folio.objects.create(
                 folio_number=folio_number,
                 folio_type=Folio.FolioType.GUEST,
                 reservation=check_in.reservation if check_in.reservation else None,
                 guest=check_in.guest,
             )
+        else:
+            folio = getattr(check_in.reservation, 'folio', None) if check_in.reservation else None
+
+        # Post first night's room rate charge immediately at check-in
+        # (International standard: Opera, Mews, Cloudbeds all do this)
+        if folio and check_in.reservation:
+            charge_date = check_in.check_in_time.date() if check_in.check_in_time else date.today()
+            charge_code, _ = ChargeCode.objects.get_or_create(
+                code='ROOM',
+                defaults={
+                    'name': 'Room Rate',
+                    'category': 'ROOM',
+                    'default_amount': Decimal('0'),
+                }
+            )
+            for res_room in check_in.reservation.rooms.all():
+                # Guard: skip if a ROOM charge already exists for this folio/date
+                already_posted = FolioCharge.objects.filter(
+                    folio=folio,
+                    charge_code=charge_code,
+                    charge_date=charge_date,
+                    description__contains=str(charge_date),
+                ).exists()
+                if already_posted:
+                    continue
+                room_label = res_room.room.room_number if res_room.room else (
+                    res_room.room_type.name if res_room.room_type else 'Room'
+                )
+                FolioCharge.objects.create(
+                    folio=folio,
+                    charge_code=charge_code,
+                    description=f'Room rate for {charge_date} - Room {room_label}',
+                    unit_price=res_room.rate_per_night,
+                    quantity=1,
+                    charge_date=charge_date,
+                    posted_by=check_in.checked_in_by,
+                )
 
 
 class CheckInDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -144,6 +205,7 @@ class CheckOutListCreateView(generics.ListCreateAPIView):
         
         return queryset
     
+    @transaction.atomic
     def perform_create(self, serializer):
         check_out = serializer.save(
             checked_out_by=self.request.user,
@@ -165,7 +227,7 @@ class CheckOutListCreateView(generics.ListCreateAPIView):
             if folio.status == 'OPEN':
                 if folio.balance == 0:
                     # Use service layer — enforces balance check properly
-                    from apps.billing.services import BillingService, InsufficientBalanceError
+                    from apps.billing.services import BillingService
                     BillingService.close_folio(folio, closed_by=self.request.user)
                 else:
                     logger.warning(
@@ -190,7 +252,6 @@ class CheckOutListCreateView(generics.ListCreateAPIView):
         except (ObjectDoesNotExist, AttributeError) as e:
             # No folio or no reservation - non-fatal but log for monitoring
             logger.info(f"Could not process folio/invoice during checkout: {str(e)}")
-            pass
 
 
 class CheckOutDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -233,7 +294,7 @@ class RoomMoveListCreateView(generics.ListCreateAPIView):
     serializer_class = RoomMoveSerializer
     filter_backends = [DjangoFilterBackend, filters.OrderingFilter]
     filterset_fields = ['check_in', 'from_room', 'to_room', 'reason']
-    ordering_fields = ['move_time', 'created_at']
+    ordering_fields = ['move_time']
     ordering = ['-move_time']
     
     def get_queryset(self):
@@ -246,6 +307,7 @@ class RoomMoveListCreateView(generics.ListCreateAPIView):
             from_room__hotel=self.request.user.assigned_property
         )
     
+    @transaction.atomic
     def perform_create(self, serializer):
         room_move = serializer.save(moved_by=self.request.user)
         
@@ -319,11 +381,12 @@ class ConvertWalkInView(APIView):
     """Convert walk-in to reservation."""
     permission_classes = [IsAuthenticated, IsAdminOrManager]
     
+    @transaction.atomic
     def post(self, request, pk):
         try:
             walk_in = WalkIn.objects.get(
                 pk=pk,
-                room__hotel=request.user.assigned_property
+                property=request.user.assigned_property
             )
             
             if walk_in.is_converted:
@@ -454,7 +517,17 @@ class FrontDeskDashboardView(APIView):
             from_room__hotel=property_obj,
             move_time__date=today
         ).count()
-        
+
+        # Additional fields needed by dashboard frontend
+        total_rooms = Room.objects.filter(hotel=property_obj).count()
+        occupied_rooms = room_stats['occupied'] or 0
+        occupancy_rate = round((occupied_rooms / total_rooms * 100), 1) if total_rooms > 0 else 0
+        total_reservations_today = Reservation.objects.filter(
+            hotel=property_obj,
+            check_in_date=today,
+            status__in=['CONFIRMED', 'CHECKED_IN', 'PENDING']
+        ).count()
+
         data = {
             'total_check_ins_today': total_check_ins_today,
             'total_check_outs_today': total_check_outs_today,
@@ -462,10 +535,19 @@ class FrontDeskDashboardView(APIView):
             'expected_departures': expected_departures,
             'in_house_guests': in_house_guests,
             'available_rooms': room_stats['available'] or 0,
-            'occupied_rooms': room_stats['occupied'] or 0,
+            'occupied_rooms': occupied_rooms,
             'dirty_rooms': room_stats['dirty'] or 0,
             'walk_ins_today': walk_ins_today,
-            'room_moves_today': room_moves_today
+            'room_moves_today': room_moves_today,
+            # Alias fields for frontend DashboardStats compatibility
+            'total_rooms': total_rooms,
+            'check_ins_today': total_check_ins_today,
+            'check_outs_today': total_check_outs_today,
+            'total_reservations_today': total_reservations_today,
+            'occupancy_rate': occupancy_rate,
+            'revenue_today': 0,
+            'pending_maintenance': 0,
+            'housekeeping_pending': 0,
         }
         
         serializer = CheckInDashboardSerializer(data)

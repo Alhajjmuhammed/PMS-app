@@ -6,7 +6,7 @@ import Layout from '@/components/Layout';
 import api from '@/lib/api';
 import clsx from 'clsx';
 import {
-  HomeIcon, ChevronRightIcon, CheckCircleIcon, CreditCardIcon, ArrowLeftIcon,
+  HomeIcon, ChevronRightIcon, CheckCircleIcon, ExclamationTriangleIcon, CreditCardIcon, ArrowLeftIcon,
 } from '@heroicons/react/24/outline';
 
 interface Folio {
@@ -95,7 +95,7 @@ function PaymentForm() {
             'fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
             toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
           )}>
-            <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            {toast.ok ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" /> : <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
             {toast.msg}
           </div>
         )}

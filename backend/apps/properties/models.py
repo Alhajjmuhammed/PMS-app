@@ -5,9 +5,8 @@ Property and Hotel Models for Hotel PMS
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 
-
-# Import SystemSetting model
-from .settings_models import SystemSetting
+# Re-export SystemSetting so admin.py can import it from this module
+from .settings_models import SystemSetting  # noqa: F401
 
 
 class Property(models.Model):
@@ -23,7 +22,7 @@ class Property(models.Model):
         GUESTHOUSE = 'GUESTHOUSE', _('Guest House')
     
     name = models.CharField(_('property name'), max_length=200)
-    code = models.CharField(_('property code'), max_length=20, unique=True)
+    code = models.CharField(_('property code'), max_length=20, unique=True, blank=True)
     property_type = models.CharField(
         _('property type'),
         max_length=20,
@@ -70,6 +69,18 @@ class Property(models.Model):
         verbose_name_plural = _('properties')
         ordering = ['name']
     
+    def save(self, *args, **kwargs):
+        if not self.code:
+            import re
+            import secrets
+            words = re.split(r'[\s\-_]+', self.name.upper())
+            base = ''.join(w[:3] for w in words if w)[:12] or 'PROP'
+            candidate = f"{base}{secrets.token_hex(2).upper()}"[:20]
+            while Property.objects.filter(code=candidate).exclude(pk=self.pk).exists():
+                candidate = f"{base}{secrets.token_hex(2).upper()}"[:20]
+            self.code = candidate
+        super().save(*args, **kwargs)
+
     def __str__(self):
         return f"{self.name} ({self.code})"
 

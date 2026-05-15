@@ -33,7 +33,7 @@ class HousekeepingDashboardView(LoginRequiredMixin, View):
         # Room status summary
         rooms = Room.objects.filter(is_active=True)
         if request.user.assigned_property:
-            rooms = rooms.filter(property=request.user.assigned_property)
+            rooms = rooms.filter(hotel=request.user.assigned_property)
         
         room_stats = {
             'vacant_clean': rooms.filter(status=Room.RoomStatus.VACANT_CLEAN).count(),
@@ -147,7 +147,7 @@ class RoomStatusBoardView(LoginRequiredMixin, View):
     def get(self, request):
         rooms = Room.objects.select_related('room_type', 'floor').filter(is_active=True)
         if request.user.assigned_property:
-            rooms = rooms.filter(property=request.user.assigned_property)
+            rooms = rooms.filter(hotel=request.user.assigned_property)
         
         # Group by floor
         floors = {}

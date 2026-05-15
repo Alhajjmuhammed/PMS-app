@@ -136,7 +136,8 @@ class IsReadOnly(BasePermission):
 class CanManageUsers(BasePermission):
     """
     Permission class for user management.
-    Superusers, Admins, and Managers can manage users.
+    Superusers and Admins can manage users system-wide.
+    Managers can manage staff within their own property (view filters queryset accordingly).
     """
     def has_permission(self, request, view):
         if not request.user or not request.user.is_authenticated:
@@ -156,6 +157,40 @@ class CanManageProperties(BasePermission):
         
         # Superusers, Admins, Managers can do everything
         allowed_roles = ['ADMIN', 'MANAGER']
+        return request.user.is_superuser or request.user.role in allowed_roles
+
+
+class IsFrontDeskOrPOS(BasePermission):
+    """
+    Permission class for POS order read access.
+    FRONT_DESK staff need to view POS orders (e.g. to post charges to rooms).
+    POS_STAFF, ADMIN, MANAGER can also access.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        allowed_roles = ['ADMIN', 'MANAGER', 'FRONT_DESK', 'POS_STAFF']
+        return request.user.is_superuser or request.user.role in allowed_roles
+
+
+class IsFrontDeskOrMaintenance(BasePermission):
+    """
+    Permission for submitting maintenance requests.
+    FRONT_DESK can report issues; MAINTENANCE workers can create/manage tasks.
+    ADMIN and MANAGER have full access.
+    """
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        allowed_roles = ['ADMIN', 'MANAGER', 'FRONT_DESK', 'MAINTENANCE']
+        return request.user.is_superuser or request.user.role in allowed_roles
+
+
+class IsAccountantOrFrontDesk(BasePermission):
+    def has_permission(self, request, view):
+        if not request.user or not request.user.is_authenticated:
+            return False
+        allowed_roles = ['ADMIN', 'MANAGER', 'ACCOUNTANT', 'FRONT_DESK']
         return request.user.is_superuser or request.user.role in allowed_roles
 
 

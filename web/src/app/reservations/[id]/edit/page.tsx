@@ -12,6 +12,7 @@ export default function EditReservationPage() {
   const params = useParams();
   const router = useRouter();
   const [loading, setLoading] = useState(true);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [formData, setFormData] = useState({
     guest_id: '',
     room_id: '',
@@ -41,7 +42,7 @@ export default function EditReservationPage() {
         special_requests: data.special_requests || '',
       });
     } catch (error) {
-      alert('Failed to load reservation');
+      setMessage({ text: 'Failed to load reservation.', ok: false });
     } finally {
       setLoading(false);
     }
@@ -53,10 +54,10 @@ export default function EditReservationPage() {
     try {
       setLoading(true);
       await reservationService.update(parseInt(params.id as string), formData);
-      alert('Reservation updated successfully!');
-      router.push(`/reservations/${params.id}`);
+      setMessage({ text: 'Reservation updated successfully!', ok: true });
+      setTimeout(() => router.push(`/reservations/${params.id}`), 1000);
     } catch (error) {
-      alert('Failed to update reservation');
+      setMessage({ text: 'Failed to update reservation.', ok: false });
     } finally {
       setLoading(false);
     }
@@ -78,6 +79,9 @@ export default function EditReservationPage() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
+        {message && (
+          <div className={`px-4 py-3 rounded-lg text-sm font-medium border ${message.ok ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'}`}>{message.text}</div>
+        )}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Edit Reservation</h1>
           <Button variant="secondary" onClick={() => router.back()}>

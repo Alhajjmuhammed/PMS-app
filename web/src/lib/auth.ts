@@ -26,6 +26,7 @@ export interface LoginResponse {
   user?: User;
   mfa_required?: boolean;
   mfa_method?: string;
+  mfa_token?: string;
 }
 
 export interface MFASetupResponse {
@@ -54,7 +55,17 @@ export const authService = {
       user: data.user,
       mfa_required: data.mfa_required,
       mfa_method: data.mfa_method,
+      mfa_token: data.mfa_token,
     };
+  },
+
+  // Complete MFA login with the temporary token from the login step
+  async verifyMFALogin(mfa_token: string, mfa_code: string): Promise<void> {
+    const response = await api.post<any>('/api/v1/auth/mfa/verify/', { mfa_token, mfa_code });
+    const data = response.data;
+    if (data.token) {
+      api.setAccessToken(data.token);
+    }
   },
 
   // Logout

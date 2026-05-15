@@ -101,7 +101,10 @@ class BuildingListSerializer(serializers.ModelSerializer):
 class PropertySerializer(serializers.ModelSerializer):
     buildings = BuildingSerializer(many=True, read_only=True)
     total_rooms = serializers.IntegerField(read_only=True)
-    
+    code = serializers.CharField(max_length=20, required=False, allow_blank=True)
+    city = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+    country = serializers.CharField(max_length=100, required=False, allow_blank=True, default='')
+
     class Meta:
         model = Property
         fields = [
@@ -110,6 +113,18 @@ class PropertySerializer(serializers.ModelSerializer):
             'website', 'check_in_time', 'check_out_time', 'currency',
             'timezone', 'star_rating', 'is_active', 'buildings', 'total_rooms'
         ]
+
+    def validate(self, data):
+        # Auto-generate property code from name if not provided
+        if not data.get('code'):
+            import re
+            import secrets
+            name = data.get('name', '')
+            words = re.split(r'[\s\-_]+', name.upper())
+            base = ''.join(w[:3] for w in words if w)[:12] or 'PROP'
+            suffix = secrets.token_hex(2).upper()
+            data['code'] = f"{base}{suffix}"[:20]
+        return data
 
 
 class SystemSettingSerializer(serializers.ModelSerializer):

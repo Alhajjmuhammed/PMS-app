@@ -5,8 +5,8 @@ from django.views import View
 from django.views.generic import ListView, DetailView
 from django.utils import timezone
 from .models import (
-    Channel, PropertyChannel, RoomTypeMapping, RatePlanMapping,
-    AvailabilityUpdate, RateUpdate, ChannelReservation
+    Channel, PropertyChannel, AvailabilityUpdate, RateUpdate,
+    ChannelReservation
 )
 
 

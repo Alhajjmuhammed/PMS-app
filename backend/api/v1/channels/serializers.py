@@ -69,11 +69,14 @@ class RatePlanMappingCreateSerializer(serializers.ModelSerializer):
         ]
     
     def validate(self, data):
-        # Check for duplicate mapping
-        if RatePlanMapping.objects.filter(
+        # Check for duplicate mapping (exclude self when updating)
+        qs = RatePlanMapping.objects.filter(
             property_channel=data['property_channel'],
             rate_plan=data['rate_plan']
-        ).exists():
+        )
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError(
                 "This rate plan is already mapped to this channel"
             )
@@ -158,7 +161,7 @@ class ChannelReservationSerializer(serializers.ModelSerializer):
     property_channel_info = PropertyChannelSerializer(source='property_channel', read_only=True)
     channel_name = serializers.CharField(source='property_channel.channel.name', read_only=True)
     reservation_id = serializers.IntegerField(source='reservation.id', read_only=True)
-    reservation_number = serializers.CharField(source='reservation.reservation_number', read_only=True)
+    reservation_number = serializers.CharField(source='reservation.confirmation_number', read_only=True)
     
     class Meta:
         ref_name = 'ChannelReservationSerializer'
@@ -185,11 +188,14 @@ class ChannelReservationCreateSerializer(serializers.ModelSerializer):
         ]
     
     def validate(self, data):
-        # Check for duplicate booking
-        if ChannelReservation.objects.filter(
+        # Check for duplicate booking (exclude self when updating)
+        qs = ChannelReservation.objects.filter(
             property_channel=data['property_channel'],
             channel_booking_id=data['channel_booking_id']
-        ).exists():
+        )
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError(
                 "This booking ID already exists for this channel"
             )

@@ -316,7 +316,7 @@ export default function RoomTypesPage() {
         {editingId !== null && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={closePanel} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
                 <h2 className="font-bold text-slate-800 text-lg">{editingId === 'new' ? 'Add Room Type' : 'Edit Room Type'}</h2>
                 <button onClick={closePanel} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
@@ -384,7 +384,7 @@ export default function RoomTypesPage() {
         {viewingType && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setViewingType(null)} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
               <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
                 <div className="flex items-center gap-3">
                   <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-violet-500 to-violet-600 flex items-center justify-center flex-shrink-0">

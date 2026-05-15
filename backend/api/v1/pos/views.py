@@ -4,10 +4,12 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db import transaction
+from decimal import Decimal
 from apps.pos.models import Outlet, MenuCategory, MenuItem, POSOrder, POSOrderItem
 from apps.billing.models import Folio, FolioCharge, ChargeCode
 from apps.frontdesk.models import CheckIn
-from api.permissions import IsPOSStaff
+from api.permissions import IsPOSStaff, IsFrontDeskOrAbove
 from .serializers import (
     OutletSerializer, MenuCategorySerializer, MenuItemSerializer,
     POSOrderSerializer, OrderCreateSerializer, AddOrderItemSerializer
@@ -15,7 +17,7 @@ from .serializers import (
 
 
 class OutletListView(generics.ListAPIView):
-    permission_classes = [IsAuthenticated, IsPOSStaff]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = OutletSerializer
     
     def get_queryset(self):
@@ -124,6 +126,7 @@ class OrderCreateView(APIView):
 class AddItemView(APIView):
     permission_classes = [IsAuthenticated, IsPOSStaff]
     
+    @transaction.atomic
     def post(self, request, pk):
         prop = request.user.assigned_property
         if not prop:
@@ -159,7 +162,7 @@ class AddItemView(APIView):
         # Recalculate totals
         items = order.items.filter(is_voided=False)
         order.subtotal = sum(item.amount for item in items)
-        order.tax_amount = order.subtotal * 0.1  # 10% tax
+        order.tax_amount = order.subtotal * Decimal('0.10')  # 10% tax
         order.total = order.subtotal + order.tax_amount - order.discount
         order.save()
         
@@ -169,6 +172,7 @@ class AddItemView(APIView):
 class PostToRoomView(APIView):
     permission_classes = [IsAuthenticated, IsPOSStaff]
     
+    @transaction.atomic
     def post(self, request, pk):
         prop = request.user.assigned_property
         try:
@@ -182,11 +186,14 @@ class PostToRoomView(APIView):
         if not order.room_number:
             return Response({'error': 'No room number specified'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Find guest check-in
-        check_in = CheckIn.objects.filter(
+        # Find guest check-in — scope to this property to prevent cross-property leak
+        check_in_qs = CheckIn.objects.filter(
             room__room_number=order.room_number,
             check_out__isnull=True
-        ).first()
+        )
+        if prop:
+            check_in_qs = check_in_qs.filter(room__hotel=prop)
+        check_in = check_in_qs.first()
         
         if not check_in:
             return Response({'error': 'No active check-in found for room'}, status=status.HTTP_400_BAD_REQUEST)
@@ -196,13 +203,12 @@ class PostToRoomView(APIView):
         if not folio:
             return Response({'error': 'No folio found'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Get F&B charge code
+        # Get F&B charge code — use get_or_create to avoid IntegrityError on duplicate code
         charge_code = ChargeCode.objects.filter(category='FOOD').first()
         if not charge_code:
-            charge_code = ChargeCode.objects.create(
+            charge_code, _ = ChargeCode.objects.get_or_create(
                 code='FB',
-                name='Food & Beverage',
-                category='FOOD'
+                defaults={'name': 'Food & Beverage', 'category': 'FOOD'},
             )
         
         # Create folio charge
@@ -235,7 +241,10 @@ class MenuCategoryListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         outlet_id = self.kwargs.get('outlet_id')
-        return MenuCategory.objects.filter(outlet_id=outlet_id, is_active=True)
+        qs = MenuCategory.objects.filter(outlet_id=outlet_id, is_active=True)
+        if self.request.user.assigned_property:
+            qs = qs.filter(outlet__property=self.request.user.assigned_property)
+        return qs
     
     def perform_create(self, serializer):
         outlet_id = self.kwargs.get('outlet_id')

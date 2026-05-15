@@ -4,7 +4,7 @@ Serializers for Guests Enhanced Module
 from rest_framework import serializers
 from apps.guests.models import (
     GuestPreference, GuestDocument, Company,
-    LoyaltyProgram, LoyaltyTier, LoyaltyTransaction, Guest
+    LoyaltyProgram, LoyaltyTier, LoyaltyTransaction
 )
 
 

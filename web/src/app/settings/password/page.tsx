@@ -11,6 +11,7 @@ import api from '@/lib/api';
 export default function PasswordChangePage() {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const [message, setMessage] = useState<{ text: string; ok: boolean } | null>(null);
   const [formData, setFormData] = useState({
     current_password: '',
     new_password: '',
@@ -21,26 +22,27 @@ export default function PasswordChangePage() {
     e.preventDefault();
 
     if (formData.new_password !== formData.confirm_password) {
-      alert('New passwords do not match');
+      setMessage({ text: 'New passwords do not match', ok: false });
       return;
     }
 
     if (formData.new_password.length < 8) {
-      alert('Password must be at least 8 characters long');
+      setMessage({ text: 'Password must be at least 8 characters long', ok: false });
       return;
     }
 
     try {
       setLoading(true);
-      await api.post('/api/v1/accounts/change-password/', {
+      await api.post('/api/v1/auth/change-password/', {
         old_password: formData.current_password,
         new_password: formData.new_password,
+        confirm_password: formData.confirm_password,
       });
-      alert('Password changed successfully!');
+      setMessage({ text: 'Password changed successfully!', ok: true });
       setFormData({ current_password: '', new_password: '', confirm_password: '' });
-      router.push('/settings');
+      setTimeout(() => router.push('/settings'), 1000);
     } catch (error: any) {
-      alert(error.response?.data?.detail || 'Failed to change password');
+      setMessage({ text: error.response?.data?.detail || 'Failed to change password', ok: false });
     } finally {
       setLoading(false);
     }
@@ -49,6 +51,9 @@ export default function PasswordChangePage() {
   return (
     <Layout>
       <div className="max-w-2xl mx-auto space-y-6">
+        {message && (
+          <div className={`px-4 py-3 rounded-lg text-sm font-medium border ${message.ok ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'}`}>{message.text}</div>
+        )}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Change Password</h1>
           <Button variant="secondary" onClick={() => router.push('/settings')}>

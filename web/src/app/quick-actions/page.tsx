@@ -24,7 +24,7 @@ export default function QuickActionsPage() {
 
   const loadStats = async () => {
     try {
-      const response = await api.get('/frontdesk/dashboard/stats/');
+      const response = await api.get('/api/v1/frontdesk/dashboard-stats/');
       setStats([
         { label: 'Check-ins Today', value: response.data.check_ins_today || 0, color: 'green' },
         { label: 'Check-outs Today', value: response.data.check_outs_today || 0, color: 'blue' },

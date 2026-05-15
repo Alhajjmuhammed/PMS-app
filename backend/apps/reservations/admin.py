@@ -1,5 +1,5 @@
 from django.contrib import admin
-from .models import Reservation, ReservationRoom, ReservationRateDetail, GroupBooking, ReservationLog
+from .models import Reservation, ReservationRoom, GroupBooking, ReservationLog
 
 
 class ReservationRoomInline(admin.TabularInline):

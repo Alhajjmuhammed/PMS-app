@@ -13,6 +13,7 @@ export default function TaskDetailPage() {
   const router = useRouter();
   const [task, setTask] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (params.id) {
@@ -25,7 +26,7 @@ export default function TaskDetailPage() {
       const response = await api.get(`/api/v1/housekeeping/tasks/${params.id}/`);
       setTask(response.data);
     } catch (error) {
-      alert('Failed to load task');
+      setError('Failed to load task. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -36,7 +37,7 @@ export default function TaskDetailPage() {
       await api.patch(`/api/v1/housekeeping/tasks/${params.id}/`, { status: newStatus });
       await loadTask();
     } catch (error) {
-      alert('Failed to update status');
+      setError('Failed to update status. Please try again.');
     }
   };
 
@@ -69,6 +70,9 @@ export default function TaskDetailPage() {
   return (
     <Layout>
       <div className="space-y-6">
+        {error && (
+          <div className="px-4 py-3 rounded-lg bg-red-50 text-red-800 border border-red-200 text-sm font-medium">{error}</div>
+        )}
         <div className="flex justify-between items-center">
           <h1 className="text-3xl font-bold text-gray-900">Task #{task?.id}</h1>
           <Button variant="secondary" onClick={() => router.back()}>

@@ -2,10 +2,9 @@ from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.views import View
-from django.views.generic import ListView, DetailView, CreateView
-from django.urls import reverse_lazy
+from django.views.generic import ListView, DetailView
 from django.utils import timezone
-from .models import Outlet, MenuCategory, MenuItem, POSOrder, POSOrderItem
+from .models import Outlet, MenuItem, POSOrder
 
 
 class POSDashboardView(LoginRequiredMixin, View):
@@ -78,7 +77,7 @@ class OrderCreateView(LoginRequiredMixin, View):
 
 class PostToRoomView(LoginRequiredMixin, View):
     def post(self, request, pk):
-        from apps.billing.models import Folio, FolioCharge, ChargeCode
+        from apps.billing.models import FolioCharge, ChargeCode
         from apps.frontdesk.models import CheckIn
         
         order = get_object_or_404(POSOrder, pk=pk)

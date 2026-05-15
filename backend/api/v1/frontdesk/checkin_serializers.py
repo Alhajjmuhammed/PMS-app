@@ -2,10 +2,7 @@
 Serializers for Front Desk operations
 """
 from rest_framework import serializers
-from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn, GuestMessage
-from apps.guests.models import Guest
-from apps.rooms.models import Room
-from apps.reservations.models import Reservation
+from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
 
 
 class CheckInSerializer(serializers.ModelSerializer):
@@ -94,8 +91,8 @@ class CheckOutSerializer(serializers.ModelSerializer):
     
     def get_nights_stayed(self, obj):
         """Calculate nights stayed."""
-        if obj.actual_check_out and obj.check_in.check_in_time:
-            delta = obj.actual_check_out.date() - obj.check_in.check_in_time.date()
+        if obj.check_out_time and obj.check_in.check_in_time:
+            delta = obj.check_out_time.date() - obj.check_in.check_in_time.date()
             return delta.days
         return 0
     
@@ -214,7 +211,7 @@ class WalkInSerializer(serializers.ModelSerializer):
 
 class CheckInDashboardSerializer(serializers.Serializer):
     """Serializer for check-in dashboard statistics."""
-    
+
     total_check_ins_today = serializers.IntegerField()
     total_check_outs_today = serializers.IntegerField()
     expected_arrivals = serializers.IntegerField()
@@ -225,3 +222,12 @@ class CheckInDashboardSerializer(serializers.Serializer):
     dirty_rooms = serializers.IntegerField()
     walk_ins_today = serializers.IntegerField()
     room_moves_today = serializers.IntegerField()
+    # Frontend DashboardStats alias fields
+    total_rooms = serializers.IntegerField()
+    check_ins_today = serializers.IntegerField()
+    check_outs_today = serializers.IntegerField()
+    total_reservations_today = serializers.IntegerField()
+    occupancy_rate = serializers.FloatField()
+    revenue_today = serializers.IntegerField()
+    pending_maintenance = serializers.IntegerField()
+    housekeeping_pending = serializers.IntegerField()

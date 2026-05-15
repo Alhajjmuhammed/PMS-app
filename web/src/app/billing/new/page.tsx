@@ -6,7 +6,7 @@ import Layout from '@/components/Layout';
 import api from '@/lib/api';
 import clsx from 'clsx';
 import {
-  HomeIcon, ChevronRightIcon, CheckCircleIcon, DocumentPlusIcon, ArrowLeftIcon,
+  HomeIcon, ChevronRightIcon, CheckCircleIcon, ExclamationTriangleIcon, DocumentPlusIcon, ArrowLeftIcon,
 } from '@heroicons/react/24/outline';
 
 interface Guest {
@@ -14,6 +14,16 @@ interface Guest {
   first_name: string;
   last_name: string;
   email: string;
+}
+
+interface Reservation {
+  id: number;
+  confirmation_number: string;
+  check_in_date: string;
+  check_out_date: string;
+  status: string;
+  rooms: { room_number: string | null }[];
+  assigned_room_number?: string | null;
 }
 
 const FOLIO_TYPES = [
@@ -26,11 +36,14 @@ const FOLIO_TYPES = [
 export default function NewFolioPage() {
   const router = useRouter();
   const [guests, setGuests] = useState<Guest[]>([]);
+  const [reservations, setReservations] = useState<Reservation[]>([]);
+  const [loadingRes, setLoadingRes] = useState(false);
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
   const [form, setForm] = useState({
     folio_type: 'GUEST',
     guest: '',
+    reservation: '',
     billing_address: '',
     notes: '',
   });
@@ -46,17 +59,35 @@ export default function NewFolioPage() {
       .catch(() => showToast('Failed to load guests', false));
   }, []);
 
+  const handleGuestChange = async (guestId: string) => {
+    setForm(f => ({ ...f, guest: guestId, reservation: '' }));
+    setReservations([]);
+    if (!guestId) return;
+    setLoadingRes(true);
+    try {
+      const resp = await api.get(`/api/v1/reservations/?guest=${guestId}&page_size=50`);
+      const items: Reservation[] = resp.data.results ?? resp.data;
+      setReservations(items);
+    } catch {
+      // silently ignore — reservation is optional
+    } finally {
+      setLoadingRes(false);
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.guest) { showToast('Select a guest', false); return; }
     setLoading(true);
     try {
-      const resp = await api.post('/api/v1/billing/folios/', {
+      const body: any = {
         folio_type: form.folio_type,
         guest: parseInt(form.guest),
         billing_address: form.billing_address || '',
         notes: form.notes || '',
-      });
+      };
+      if (form.reservation) body.reservation = parseInt(form.reservation);
+      const resp = await api.post('/api/v1/billing/folios/', body);
       showToast('Folio created');
       setTimeout(() => router.push(`/billing/${resp.data.id}`), 1000);
     } catch (e: any) {
@@ -80,7 +111,7 @@ export default function NewFolioPage() {
             'fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
             toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white'
           )}>
-            <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            {toast.ok ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" /> : <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
             {toast.msg}
           </div>
         )}
@@ -115,7 +146,7 @@ export default function NewFolioPage() {
             <div>
               <label className="block text-sm font-semibold text-slate-700 mb-1.5">Guest *</label>
               <select value={form.guest} required
-                onChange={e => setForm(f => ({ ...f, guest: e.target.value }))}
+                onChange={e => handleGuestChange(e.target.value)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300">
                 <option value="">Select a guest...</option>
                 {guests.map(g => (
@@ -134,6 +165,27 @@ export default function NewFolioPage() {
               </select>
             </div>
           </div>
+
+          {form.guest && (
+            <div>
+              <label className="block text-sm font-semibold text-slate-700 mb-1.5">
+                Link to Reservation
+                <span className="text-slate-400 font-normal ml-1">(optional — links room number)</span>
+              </label>
+              <select value={form.reservation}
+                onChange={e => setForm(f => ({ ...f, reservation: e.target.value }))}
+                disabled={loadingRes}
+                className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-blue-300 disabled:opacity-50">
+                <option value="">{loadingRes ? 'Loading reservations…' : reservations.length === 0 ? 'No open reservations' : 'No reservation (standalone folio)'}</option>
+                {reservations.map(r => (
+                  <option key={r.id} value={r.id}>
+                    {r.confirmation_number} · {r.check_in_date} → {r.check_out_date}
+                    {(r.assigned_room_number ?? r.rooms?.[0]?.room_number) ? ` · Room ${r.assigned_room_number ?? r.rooms[0].room_number}` : ''}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
 
           <div>
             <label className="block text-sm font-semibold text-slate-700 mb-1.5">Billing Address</label>

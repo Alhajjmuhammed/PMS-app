@@ -4,9 +4,7 @@ Webhook signature validation utilities for secure OTA integration
 
 import hmac
 import hashlib
-import json
 from typing import Dict, Any, Optional
-from django.conf import settings
 
 
 def generate_hmac_signature(payload: bytes, secret: str, algorithm: str = 'sha256') -> str:

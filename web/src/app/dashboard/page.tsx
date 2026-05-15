@@ -310,10 +310,17 @@ function HousekeepingDashboard({ stats }: { stats: DashboardStats | null }) {
 /* --- MAINTENANCE ------------------------------------------- */
 function MaintenanceDashboard() {
   const [mStats, setMStats] = useState<{
+    pending_requests: number;
     assigned_requests: number;
     in_progress_requests: number;
     completed_today: number;
+    emergency_requests: number;
     overdue_requests: number;
+    pool_requests: number;
+    total_assets: number;
+    assets_due_maintenance: number;
+    assets_under_warranty: number;
+    avg_resolution_hours: number;
   } | null>(null);
 
   useEffect(() => {
@@ -586,7 +593,7 @@ export default function DashboardPage() {
           .catch(() => {})
           .finally(() => setLoading(false));
       } else {
-        api.get<DashboardStats>('/api/v1/frontdesk/dashboard/stats/')
+        api.get<DashboardStats>('/api/v1/frontdesk/dashboard-stats/')
           .then((r) => setStats(r.data))
           .catch(() => {})
           .finally(() => setLoading(false));

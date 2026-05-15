@@ -9,6 +9,7 @@ import clsx from 'clsx';
 import {
   PlusIcon, XMarkIcon, EyeIcon, PencilSquareIcon, TrashIcon,
   CheckCircleIcon, HomeModernIcon, ChevronLeftIcon, ChevronRightIcon,
+  HomeIcon,
 } from '@heroicons/react/24/outline';
 
 /* ── Constants ── */
@@ -129,8 +130,10 @@ export default function RoomsPage() {
       setRooms(roomsData.results || roomsData);
       setRoomTypes(typesData.results || typesData);
       setFloors((floorsData as any).results || floorsData || []);
-    } catch {
-      showToast('Failed to load rooms', false);
+    } catch (err: any) {
+      const detail = err?.response?.data?.detail || err?.response?.data?.error || err?.message;
+      const status = err?.response?.status;
+      showToast(detail ? `Failed to load rooms: ${detail}` : status ? `Failed to load rooms (${status})` : 'Failed to load rooms — check connection', false);
     } finally {
       setLoading(false);
     }
@@ -227,11 +230,24 @@ export default function RoomsPage() {
           </div>
         )}
 
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Rooms</span>
+        </nav>
+
         {/* Header */}
-        <div className="flex items-center justify-between flex-wrap gap-3">
-          <div>
-            <h1 className="text-2xl font-bold text-slate-900">Rooms</h1>
-            <p className="text-slate-500 text-sm mt-0.5">{filtered.length} room{filtered.length !== 1 ? 's' : ''}{statusFilter !== 'all' ? ` · ${statusFilter}` : ''}</p>
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-blue-100 flex items-center justify-center flex-shrink-0">
+              <HomeModernIcon className="w-5 h-5 text-blue-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Rooms</h1>
+              <p className="text-slate-500 text-sm mt-0.5">{filtered.length} room{filtered.length !== 1 ? 's' : ''}{statusFilter !== 'all' ? ` · ${statusFilter}` : ''}</p>
+            </div>
           </div>
           <div className="flex items-center gap-2 flex-wrap">
             {!isHousekeeping && (
@@ -249,13 +265,45 @@ export default function RoomsPage() {
           </div>
         </div>
 
-        {/* Status filters */}
-        <div className="flex gap-2 flex-wrap">
-          {['all', 'VC', 'VD', 'OC', 'OD', 'OOO', 'OOS'].map((s) => (
-            <button key={s} onClick={() => setStatusFilter(s)}
-              className={clsx('px-4 py-2 text-sm font-semibold rounded-xl transition-colors',
-                statusFilter === s ? 'bg-blue-600 text-white shadow-sm' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50')}>
-              {s.toUpperCase()}
+        {/* Stats cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Total Rooms</p>
+            <p className="text-2xl font-bold text-slate-800 mt-1">{rooms.length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Vacant Clean</p>
+            <p className="text-2xl font-bold text-emerald-600 mt-1">{rooms.filter(r => r.status === 'VC').length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Occupied</p>
+            <p className="text-2xl font-bold text-blue-600 mt-1">{rooms.filter(r => ['OC', 'OD'].includes(r.status)).length}</p>
+          </div>
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+            <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">Out of Order</p>
+            <p className="text-2xl font-bold text-red-600 mt-1">{rooms.filter(r => r.status === 'OOO').length}</p>
+          </div>
+        </div>
+
+        {/* Status tabs */}
+        <div className="flex gap-1 border-b border-slate-200">
+          {([
+            { id: 'all',  label: 'All' },
+            { id: 'VC',   label: 'VC — Vacant Clean' },
+            { id: 'VD',   label: 'VD — Vacant Dirty' },
+            { id: 'OC',   label: 'OC — Occupied Clean' },
+            { id: 'OD',   label: 'OD — Occupied Dirty' },
+            { id: 'OOO',  label: 'OOO — Out of Order' },
+            { id: 'OOS',  label: 'OOS — Out of Service' },
+          ]).map((t) => (
+            <button key={t.id} onClick={() => setStatusFilter(t.id)}
+              className={clsx(
+                'px-4 py-2.5 text-sm font-semibold border-b-2 -mb-px transition-colors whitespace-nowrap',
+                statusFilter === t.id
+                  ? 'border-blue-600 text-blue-600'
+                  : 'border-transparent text-slate-500 hover:text-slate-700',
+              )}>
+              {t.label}
             </button>
           ))}
         </div>
@@ -332,28 +380,38 @@ export default function RoomsPage() {
           </>
         )}
 
+      </div>
+
         {/* ── Create / Edit slide-over ── */}
         {editingId !== null && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={closePanel} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
-                <h2 className="font-bold text-slate-800 text-lg">{editingId === 'new' ? 'Add New Room' : 'Edit Room'}</h2>
-                <button onClick={closePanel} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
-                  <XMarkIcon className="w-5 h-5" />
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center">
+                    <HomeModernIcon className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h2 className="font-semibold text-gray-900">{editingId === 'new' ? 'Add New Room' : 'Edit Room'}</h2>
+                    <p className="text-xs text-gray-500">{editingId === 'new' ? 'Fill in the details below' : 'Update room details'}</p>
+                  </div>
+                </div>
+                <button onClick={closePanel} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <form onSubmit={handleSave} className="flex-1 overflow-y-auto p-6 space-y-5">
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Room Details</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Room Details</p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Room Number *</label>
-                      <input {...inp('room_number')} required placeholder="101" className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300" />
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Room Number *</label>
+                      <input {...inp('room_number')} required placeholder="101" className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Room Type {editingId === 'new' && '*'}</label>
-                      <select {...inp('room_type')} required={editingId === 'new'} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Room Type {editingId === 'new' && '*'}</label>
+                      <select {...inp('room_type')} required={editingId === 'new'} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                         <option value="">Select a room type…</option>
                         {roomTypes.map((rt) => (
                           <option key={rt.id} value={rt.id}>{rt.name} — ${rt.base_rate}/night · {rt.max_occupancy} guests</option>
@@ -366,11 +424,11 @@ export default function RoomsPage() {
                   </div>
                 </section>
                 <section>
-                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3">Location & Status</p>
+                  <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-3">Location & Status</p>
                   <div className="space-y-3">
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Floor <span className="text-slate-400 font-normal">(optional)</span></label>
-                      <select {...inp('floor')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Floor <span className="text-gray-400 font-normal">(optional)</span></label>
+                      <select {...inp('floor')} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                         <option value="">— No floor assigned —</option>
                         {floors.map((f: any) => (
                           <option key={f.id} value={f.id}>Floor {f.number}{f.name ? ` — ${f.name}` : ''}</option>
@@ -378,23 +436,23 @@ export default function RoomsPage() {
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Status</label>
-                      <select {...inp('status')} className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 bg-white">
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
+                      <select {...inp('status')} className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400">
                         {STATUS_OPTIONS.map((s) => <option key={s.value} value={s.value}>{s.value} — {s.label}</option>)}
                       </select>
                     </div>
                     <div>
-                      <label className="block text-xs font-semibold text-slate-600 mb-1">Notes</label>
+                      <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
                       <textarea {...inp('notes')} rows={3} placeholder="Optional notes…"
-                        className="w-full px-3 py-2.5 rounded-xl border border-slate-200 text-sm text-slate-800 focus:outline-none focus:ring-2 focus:ring-blue-300 resize-none" />
+                        className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none" />
                     </div>
                   </div>
                 </section>
               </form>
-              <div className="px-6 py-4 border-t border-slate-100 flex items-center justify-end gap-3">
-                <button onClick={closePanel} className="px-4 py-2.5 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors">Cancel</button>
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex items-center justify-end gap-3">
+                <button onClick={closePanel} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">Cancel</button>
                 <button onClick={handleSave} disabled={saving}
-                  className="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
+                  className="px-5 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold transition-colors shadow-sm disabled:opacity-60">
                   {saving ? 'Saving…' : editingId === 'new' ? 'Create Room' : 'Save Changes'}
                 </button>
               </div>
@@ -406,19 +464,19 @@ export default function RoomsPage() {
         {viewingRoom && (
           <div className="fixed inset-0 z-50 flex">
             <div className="flex-1 bg-black/40 backdrop-blur-sm" onClick={() => setViewingRoom(null)} />
-            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden">
-              <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+            <aside className="w-full max-w-lg bg-white shadow-2xl flex flex-col overflow-hidden h-screen">
+              <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
+                  <div className="w-10 h-10 rounded-full bg-gradient-to-br from-blue-500 to-blue-600 flex items-center justify-center text-white font-bold text-sm flex-shrink-0">
                     {viewingRoom.room_number}
                   </div>
                   <div>
-                    <h2 className="font-bold text-slate-800 text-base leading-tight">Room {viewingRoom.room_number}</h2>
-                    <p className="text-xs text-slate-400">{viewingRoom.room_type_name || 'No room type'}</p>
+                    <h2 className="font-semibold text-gray-900">Room {viewingRoom.room_number}</h2>
+                    <p className="text-xs text-gray-500">{viewingRoom.room_type_name || 'No room type'}</p>
                   </div>
                 </div>
-                <button onClick={() => setViewingRoom(null)} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100 transition-colors">
-                  <XMarkIcon className="w-5 h-5" />
+                <button onClick={() => setViewingRoom(null)} className="p-2 rounded-full hover:bg-gray-200 transition-colors">
+                  <XMarkIcon className="w-5 h-5 text-gray-500" />
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto p-6 space-y-5">
@@ -457,20 +515,20 @@ export default function RoomsPage() {
                   </section>
                 )}
               </div>
-              <div className="px-6 py-4 border-t border-slate-100 flex justify-end gap-2">
+              <div className="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-2">
                 {canManage && (
                   <>
                     <button onClick={() => { setViewingRoom(null); openEdit(viewingRoom); }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-blue-600 border border-blue-200 hover:bg-blue-50 transition-colors">
                       <PencilSquareIcon className="w-4 h-4" /> Edit
                     </button>
                     <button onClick={() => { setDeleteConfirm(viewingRoom); setViewingRoom(null); }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
+                      className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold text-red-600 border border-red-200 hover:bg-red-50 transition-colors">
                       <TrashIcon className="w-4 h-4" /> Delete
                     </button>
                   </>
                 )}
-                <button onClick={() => setViewingRoom(null)} className="px-4 py-2 rounded-xl text-sm font-semibold text-slate-600 hover:bg-slate-100 transition-colors">
+                <button onClick={() => setViewingRoom(null)} className="px-4 py-2 rounded-lg text-sm font-semibold text-gray-600 hover:bg-gray-100 transition-colors">
                   Close
                 </button>
               </div>
@@ -499,8 +557,6 @@ export default function RoomsPage() {
             </div>
           </div>
         )}
-
-      </div>
     </Layout>
   );
 }

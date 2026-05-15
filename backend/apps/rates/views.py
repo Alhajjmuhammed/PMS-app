@@ -1,8 +1,8 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.views import View
 from django.views.generic import ListView, DetailView
-from .models import Season, RatePlan, RoomRate, DateRate, Package, Discount, YieldRule
+from .models import Season, RatePlan, Package, Discount, YieldRule
 
 
 class RateDashboardView(LoginRequiredMixin, View):
@@ -73,7 +73,7 @@ class RateCalendarView(LoginRequiredMixin, View):
         
         room_types = RoomType.objects.filter(is_active=True)
         if request.user.assigned_property:
-            room_types = room_types.filter(property=request.user.assigned_property)
+            room_types = room_types.filter(hotel=request.user.assigned_property)
         
         context = {
             'room_types': room_types,

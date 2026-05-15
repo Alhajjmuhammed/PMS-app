@@ -6,6 +6,7 @@ from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
+from django.db import transaction
 from django.utils.decorators import method_decorator
 from django.core.exceptions import ValidationError
 from django_ratelimit.decorators import ratelimit
@@ -15,6 +16,7 @@ import logging
 from apps.reservations.models import Reservation, ReservationRoom, GroupBooking
 from apps.reservations.services import AvailabilityService
 from apps.rates.services import PricingService
+from apps.rates.models import RoomRate
 from apps.guests.models import Guest
 from apps.rooms.models import RoomType
 from api.permissions import IsFrontDeskOrAbove
@@ -83,11 +85,21 @@ class ReservationListView(generics.ListCreateAPIView):
         return ReservationSerializer
     
     def get_queryset(self):
-        qs = Reservation.objects.select_related('guest', 'hotel').prefetch_related('rooms')
+        qs = Reservation.objects.select_related('guest', 'hotel').prefetch_related(
+            'rooms',
+            'check_in__checked_in_by',
+            'check_in__room',
+            'check_in__check_out__checked_out_by',
+        )
 
         # Filter by property to enforce data isolation
         if self.request.user.assigned_property:
             qs = qs.filter(hotel=self.request.user.assigned_property)
+
+        # Filter by guest id (used by new-folio reservation picker)
+        guest_id = self.request.query_params.get('guest')
+        if guest_id:
+            qs = qs.filter(guest__id=guest_id)
 
         # Date range filter
         start_date = self.request.query_params.get('start_date')
@@ -109,7 +121,10 @@ class ReservationDetailView(generics.RetrieveUpdateAPIView):
         qs = Reservation.objects.select_related(
             'guest', 'hotel', 'created_by'
         ).prefetch_related(
-            'rooms__room__room_type'
+            'rooms__room__room_type',
+            'check_in__checked_in_by',
+            'check_in__room',
+            'check_in__check_out__checked_out_by',
         )
         if self.request.user.assigned_property:
             qs = qs.filter(hotel=self.request.user.assigned_property)
@@ -119,6 +134,7 @@ class ReservationDetailView(generics.RetrieveUpdateAPIView):
 class ReservationCreateView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
+    @transaction.atomic
     def post(self, request):
         serializer = ReservationCreateSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -149,12 +165,32 @@ class ReservationCreateView(APIView):
         prop = request.user.assigned_property
         room_type = get_object_or_404(RoomType, pk=data['room_type_id'])
 
-        nightly_rate = data.get('room_rate') or room_type.base_rate
+        # Use explicitly supplied rate, or look up an active RatePlan/RoomRate, or fall back to base_rate
+        nightly_rate = data.get('room_rate')
+        if not nightly_rate:
+            rate_plan_id = data.get('rate_plan_id')
+            if rate_plan_id:
+                room_rate = RoomRate.objects.filter(
+                    rate_plan_id=rate_plan_id,
+                    room_type=room_type,
+                    is_active=True,
+                ).first()
+                if room_rate:
+                    nightly_rate = room_rate.single_rate
+            if not nightly_rate:
+                # Fall back to first active rate plan for this property/room type
+                room_rate = RoomRate.objects.filter(
+                    room_type=room_type,
+                    is_active=True,
+                    rate_plan__property=prop,
+                    rate_plan__is_active=True,
+                ).order_by('rate_plan__rate_type').first()
+                nightly_rate = room_rate.single_rate if room_rate else room_type.base_rate
         total = nightly_rate * nights
         
-        # Create reservation
+        # Create reservation — always use the user's assigned property, never trust client-supplied hotel
         reservation = Reservation.objects.create(
-            hotel=data.get('hotel') or prop,
+            hotel=prop,
             guest=guest,
             check_in_date=check_in,
             check_out_date=check_out,
@@ -299,6 +335,7 @@ class ReservationCheckoutView(APIView):
     """
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
 
+    @transaction.atomic
     def post(self, request, pk):
         from apps.frontdesk.models import CheckIn, CheckOut
 
@@ -321,7 +358,7 @@ class ReservationCheckoutView(APIView):
             return Response({'error': 'No check-in record found for this reservation'}, status=status.HTTP_400_BAD_REQUEST)
 
         # Create check-out record
-        check_out = CheckOut.objects.create(
+        CheckOut.objects.create(
             check_in=check_in,
             checked_out_by=request.user,
         )

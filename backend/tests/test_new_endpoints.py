@@ -84,7 +84,6 @@ def setup_test_data(db):
     
     # Create folio directly (without complex reservation)
     folio = Folio.objects.create(
-        hotel=property_obj,
         guest=guest,
         folio_number='F-001',
         status='OPEN'
@@ -255,27 +254,30 @@ class TestFolioCloseAPI:
         """Test cannot close folio with outstanding balance."""
         data = setup_test_data
         api_client.force_authenticate(user=data['user'])
-        
+
         # Add a charge to create non-zero balance
         from apps.billing.models import ChargeCode, FolioCharge
+        from decimal import Decimal
         charge_code = ChargeCode.objects.create(
-            hotel=data['property'],
-            code='ROOM',
-            description='Room Charge',
-            amount=100.00
+            code='ROOM2',
+            name='Room Charge',
+            category='ROOM',
+            is_taxable=False
         )
         FolioCharge.objects.create(
             folio=data['folio'],
             charge_code=charge_code,
-            amount=100.00,
-            description='Test charge'
+            description='Test charge',
+            quantity=1,
+            unit_price=Decimal('100.00'),
+            tax_amount=Decimal('0.00')
         )
         data['folio'].recalculate_totals()
-        
+
         response = api_client.patch(f'/api/v1/billing/folios/{data["folio"].id}/close/')
         assert response.status_code == status.HTTP_400_BAD_REQUEST
         assert 'outstanding balance' in response.data['error'].lower()
-        
+
         # Verify folio was not closed
         data['folio'].refresh_from_db()
         assert data['folio'].status == 'OPEN'

@@ -1,4 +1,5 @@
 from rest_framework import serializers
+from django.db import transaction
 from apps.rooms.models import Room, RoomType, RoomAmenity, RoomImage, RoomTypeAmenity
 
 
@@ -129,6 +130,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError("Max occupancy must be between 1 and 20.")
         return value
     
+    @transaction.atomic
     def create(self, validated_data):
         """Create room type with amenities."""
         amenity_ids = validated_data.pop('amenity_ids', [])
@@ -140,6 +142,7 @@ class RoomTypeSerializer(serializers.ModelSerializer):
         
         return room_type
     
+    @transaction.atomic
     def update(self, instance, validated_data):
         """Update room type with amenities."""
         amenity_ids = validated_data.pop('amenity_ids', None)

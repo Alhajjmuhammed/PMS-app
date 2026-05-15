@@ -7,7 +7,6 @@ import logging
 from typing import List, Dict, Any, Optional
 from django.conf import settings
 from django.core.mail import send_mail, EmailMultiAlternatives
-from django.template.loader import render_to_string
 
 logger = logging.getLogger(__name__)
 
@@ -176,26 +175,20 @@ class EmailService:
     
     def send_reservation_confirmation(self, reservation) -> bool:
         """Send reservation confirmation email"""
-        subject = f"Reservation Confirmation - {reservation.property.name}"
-        
-        context = {
-            'reservation': reservation,
-            'guest': reservation.guest,
-            'property': reservation.property,
-        }
+        subject = f"Reservation Confirmation - {reservation.hotel.name}"
         
         message = f"""
 Dear {reservation.guest.first_name},
 
 Your reservation has been confirmed!
 
-Confirmation Code: {reservation.confirmation_code}
+Confirmation Code: {reservation.confirmation_number}
 Check-in: {reservation.check_in_date}
 Check-out: {reservation.check_out_date}
 Guests: {reservation.adults} adults, {reservation.children} children
 
-Property: {reservation.property.name}
-Address: {reservation.property.address}
+Property: {reservation.hotel.name}
+Address: {reservation.hotel.address}
 
 Thank you for choosing us!
         """.strip()
@@ -210,15 +203,15 @@ Thank you for choosing us!
     
     <h3>Reservation Details</h3>
     <ul>
-        <li><strong>Confirmation Code:</strong> {reservation.confirmation_code}</li>
+        <li><strong>Confirmation Code:</strong> {reservation.confirmation_number}</li>
         <li><strong>Check-in:</strong> {reservation.check_in_date}</li>
         <li><strong>Check-out:</strong> {reservation.check_out_date}</li>
         <li><strong>Guests:</strong> {reservation.adults} adults, {reservation.children} children</li>
     </ul>
     
     <h3>Property Information</h3>
-    <p><strong>{reservation.property.name}</strong><br>
-    {reservation.property.address}</p>
+    <p><strong>{reservation.hotel.name}</strong><br>
+    {reservation.hotel.address}</p>
     
     <p>Thank you for choosing us!</p>
 </body>
@@ -234,16 +227,16 @@ Thank you for choosing us!
     
     def send_check_in_reminder(self, reservation) -> bool:
         """Send check-in reminder email"""
-        subject = f"Check-in Reminder - {reservation.property.name}"
+        subject = f"Check-in Reminder - {reservation.hotel.name}"
         
         message = f"""
 Dear {reservation.guest.first_name},
 
 This is a reminder that your check-in is tomorrow!
 
-Confirmation Code: {reservation.confirmation_code}
+Confirmation Code: {reservation.confirmation_number}
 Check-in Date: {reservation.check_in_date}
-Check-in Time: {reservation.property.check_in_time}
+Check-in Time: {reservation.hotel.check_in_time}
 
 We look forward to welcoming you!
         """.strip()
@@ -304,8 +297,8 @@ class SMSService:
             return False
         
         message = f"""
-{reservation.property.name} - Reservation Confirmed!
-Code: {reservation.confirmation_code}
+{reservation.hotel.name} - Reservation Confirmed!
+Code: {reservation.confirmation_number}
 Check-in: {reservation.check_in_date}
         """.strip()
         

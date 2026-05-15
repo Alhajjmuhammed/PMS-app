@@ -9,8 +9,8 @@ from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
 from django.db.models import Q, Count
-from django.core.exceptions import ValidationError, ObjectDoesNotExist
-from django.db import DatabaseError
+from django.core.exceptions import ValidationError
+from django.db import transaction, DatabaseError
 from datetime import date
 import logging
 
@@ -31,7 +31,6 @@ from .housekeeping_serializers import (
     AmenityInventorySerializer,
     HousekeepingScheduleSerializer,
     StockMovementSerializer,
-    HousekeepingDashboardSerializer,
     TaskAssignmentSerializer
 )
 from api.permissions import IsAdminOrManager, IsHousekeepingStaff
@@ -145,7 +144,8 @@ class StartTaskView(APIView):
 class CompleteTaskView(APIView):
     """Mark task as completed."""
     permission_classes = [IsAuthenticated, IsHousekeepingStaff]
-    
+
+    @transaction.atomic
     def post(self, request, pk):
         try:
             task = HousekeepingTask.objects.get(
@@ -162,10 +162,14 @@ class CompleteTaskView(APIView):
             task.status = 'COMPLETED'
             task.completed_at = timezone.now()
 
-            # Update room status to CLEAN when a cleaning task completes
+            # Update room status to Clean when a cleaning task completes
             if task.task_type == 'CLEANING':
-                task.room.status = 'CLEAN'
-                task.room.save()
+                if task.room.status == 'VD':
+                    task.room.status = 'VC'
+                    task.room.save()
+                elif task.room.status == 'OD':
+                    task.room.status = 'OC'
+                    task.room.save()
 
             task.save()
             
@@ -194,20 +198,30 @@ class BulkTaskAssignView(APIView):
             hotel=request.user.assigned_property
         )
         
-        assigned_to = User.objects.get(id=data['assigned_to'])
+        try:
+            assigned_to = User.objects.get(
+                id=data['assigned_to'],
+                assigned_property=request.user.assigned_property
+            )
+        except User.DoesNotExist:
+            return Response(
+                {'error': 'User not found in your property'},
+                status=status.HTTP_404_NOT_FOUND
+            )
         
         created_tasks = []
-        for room in rooms:
-            task = HousekeepingTask.objects.create(
-                room=room,
-                task_type=data['task_type'],
-                assigned_to=assigned_to,
-                scheduled_date=data['scheduled_date'],
-                priority=data['priority'],
-                notes=data.get('description', ''),
-                created_by=request.user
-            )
-            created_tasks.append(task)
+        with transaction.atomic():
+            for room in rooms:
+                task = HousekeepingTask.objects.create(
+                    room=room,
+                    task_type=data['task_type'],
+                    assigned_to=assigned_to,
+                    scheduled_date=data['scheduled_date'],
+                    priority=data['priority'],
+                    notes=data.get('description', ''),
+                    created_by=request.user
+                )
+                created_tasks.append(task)
         
         response_serializer = HousekeepingTaskSerializer(created_tasks, many=True)
         return Response({
@@ -395,9 +409,9 @@ class HousekeepingScheduleListCreateView(generics.ListCreateAPIView):
         end_date = self.request.query_params.get('end_date')
         
         if start_date:
-            queryset = queryset.filter(shift_date__gte=start_date)
+            queryset = queryset.filter(date__gte=start_date)
         if end_date:
-            queryset = queryset.filter(shift_date__lte=end_date)
+            queryset = queryset.filter(date__lte=end_date)
         
         return queryset
 
@@ -443,6 +457,7 @@ class StockMovementListCreateView(generics.ListCreateAPIView):
 
         return queryset
     
+    @transaction.atomic
     def perform_create(self, serializer):
         movement_type = serializer.validated_data.get('movement_type')
         # User always submits a positive number; we store it signed so the log
@@ -532,7 +547,6 @@ class HousekeepingDashboardView(APIView):
     permission_classes = [IsAuthenticated, IsHousekeepingStaff]
     
     def get(self, request):
-        from django.db import models
         today = date.today()
         property_obj = request.user.assigned_property
         

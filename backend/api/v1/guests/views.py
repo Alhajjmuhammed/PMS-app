@@ -1,4 +1,4 @@
-from rest_framework import generics, status
+from rest_framework import generics
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
@@ -103,7 +103,10 @@ class GuestDocumentListView(generics.ListCreateAPIView):
     
     def get_queryset(self):
         guest_id = self.kwargs.get('guest_id')
-        return GuestDocument.objects.filter(guest_id=guest_id)
+        qs = GuestDocument.objects.filter(guest_id=guest_id)
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__home_property=self.request.user.assigned_property)
+        return qs
     
     def perform_create(self, serializer):
         guest_id = self.kwargs.get('guest_id')
@@ -113,7 +116,7 @@ class GuestDocumentListView(generics.ListCreateAPIView):
         else:
             guest_qs = Guest.objects.all()
         guest = get_object_or_404(guest_qs, pk=guest_id)
-        serializer.save(guest=guest, uploaded_by=self.request.user)
+        serializer.save(guest=guest)
 
 
 class GuestDocumentDetailView(generics.RetrieveDestroyAPIView):
@@ -291,6 +294,7 @@ class GuestLoyaltyBalanceView(APIView):
         tier = None
         if balance > 0:
             tier_obj = LoyaltyTier.objects.filter(
+                program__property=guest.home_property,
                 min_points__lte=balance
             ).order_by('-min_points').first()
             
@@ -341,8 +345,13 @@ class GuestPreferenceListCreateView(generics.ListCreateAPIView):
 class GuestPreferenceDetailView(generics.RetrieveUpdateDestroyAPIView):
     """Retrieve, update or delete a guest preference."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
-    queryset = GuestPreference.objects.select_related('guest')
-    
+
+    def get_queryset(self):
+        qs = GuestPreference.objects.select_related('guest')
+        if self.request.user.assigned_property:
+            qs = qs.filter(guest__home_property=self.request.user.assigned_property)
+        return qs
+
     def get_serializer_class(self):
         if self.request.method in ['PUT', 'PATCH']:
             return GuestPreferenceCreateSerializer

@@ -179,7 +179,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
         'api.authentication.ExpiringTokenAuthentication',  # Custom expiring tokens
-        'rest_framework.authentication.TokenAuthentication',  # Fallback
         'rest_framework.authentication.SessionAuthentication',
     ],
     'DEFAULT_PERMISSION_CLASSES': [

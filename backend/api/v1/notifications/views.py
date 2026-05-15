@@ -5,6 +5,7 @@ from rest_framework.views import APIView
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django.utils import timezone
+from django.db import transaction
 from apps.notifications.models import (
     Notification, PushDeviceToken, NotificationTemplate,
     EmailLog, SMSLog
@@ -74,11 +75,12 @@ class RegisterDeviceView(APIView):
         if serializer.is_valid():
             token = serializer.validated_data['token']
             
-            # Update or create device token
+            # Update or create device token — scope lookup to (user, token) so that
+            # a different user cannot overwrite/claim a token registered by someone else.
             device, created = PushDeviceToken.objects.update_or_create(
                 token=token,
+                user=request.user,
                 defaults={
-                    'user': request.user,
                     'platform': serializer.validated_data['platform'],
                     'device_name': serializer.validated_data.get('device_name', ''),
                     'is_active': True
@@ -260,20 +262,21 @@ class SendPushNotificationView(APIView):
         # Create in-app notifications and collect device tokens
         notifications_created = 0
         all_device_tokens = []
-        for user in target_users:
-            Notification.objects.create(
-                user=user,
-                title=title,
-                message=message,
-                priority=priority
-            )
-            notifications_created += 1
-            # Collect active device tokens for this user
-            tokens = list(
-                PushDeviceToken.objects.filter(user=user, is_active=True)
-                .values_list('token', flat=True)
-            )
-            all_device_tokens.extend(tokens)
+        with transaction.atomic():
+            for user in target_users:
+                Notification.objects.create(
+                    user=user,
+                    title=title,
+                    message=message,
+                    priority=priority
+                )
+                notifications_created += 1
+                # Collect active device tokens for this user
+                tokens = list(
+                    PushDeviceToken.objects.filter(user=user, is_active=True)
+                    .values_list('token', flat=True)
+                )
+                all_device_tokens.extend(tokens)
 
         # Send push notification via FCM if tokens available
         push_result = {'success': False, 'error': 'No device tokens registered'}

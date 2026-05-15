@@ -94,6 +94,7 @@ class DateRateSerializer(serializers.ModelSerializer):
 
 class RatePlanSerializer(serializers.ModelSerializer):
     property_name = serializers.CharField(source='property.name', read_only=True)
+    property = serializers.PrimaryKeyRelatedField(read_only=True)
     room_rates = RoomRateSerializer(many=True, read_only=True)
     
     class Meta:
@@ -171,11 +172,14 @@ class PackageCreateSerializer(serializers.ModelSerializer):
                     "Discount percent must be between 0 and 100"
                 )
         
-        # Check for duplicate code
-        if Package.objects.filter(
+        # Check for duplicate code (exclude self when updating)
+        qs = Package.objects.filter(
             property=data['property'],
             code=data['code']
-        ).exists():
+        )
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError(
                 "Package with this code already exists for this property"
             )
@@ -251,8 +255,11 @@ class DiscountCreateSerializer(serializers.ModelSerializer):
                 "Percentage discount cannot exceed 100%"
             )
         
-        # Check for duplicate code
-        if Discount.objects.filter(code=data['code']).exists():
+        # Check for duplicate code (exclude self when updating)
+        qs = Discount.objects.filter(code=data['code'])
+        if self.instance:
+            qs = qs.exclude(pk=self.instance.pk)
+        if qs.exists():
             raise serializers.ValidationError(
                 "Discount code already exists"
             )

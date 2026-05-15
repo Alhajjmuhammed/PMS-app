@@ -1,225 +1,175 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import Layout from '@/components/Layout';
-import Card from '@/components/Card';
-import Input from '@/components/Input';
-import Button from '@/components/Button';
 import api from '@/lib/api';
-import { format } from 'date-fns';
+import { format, subDays } from 'date-fns';
+import clsx from 'clsx';
+import {
+  HomeIcon, ChevronRightIcon, CheckCircleIcon, UsersIcon, ArrowLeftIcon,
+} from '@heroicons/react/24/outline';
 
-interface GuestStats {
-  totalGuests: number;
-  newGuestsThisPeriod: number;
-  returningGuests: number;
-  averageStayDuration: number;
-  topNationalities: { country: string; count: number }[];
-  guestsByMonth: { month: string; count: number }[];
-  averageSpending: number;
+interface GuestData {
+  total_guests: number;
+  new_guests: number;
+  returning_guests: number;
+  avg_stay_duration: number;
+  total_reservations: number;
+  top_nationalities: { country: string; count: number }[];
+  by_type: { type: string; count: number }[];
 }
 
 export default function GuestReportsPage() {
+  const router = useRouter();
   const [loading, setLoading] = useState(false);
-  const [dateRange, setDateRange] = useState({
-    start_date: format(new Date(new Date().setMonth(new Date().getMonth() - 1)), 'yyyy-MM-dd'),
+  const [hasGenerated, setHasGenerated] = useState(false);
+  const [data, setData] = useState<GuestData | null>(null);
+  const [toast, setToast] = useState<{ msg: string; ok: boolean } | null>(null);
+  const [dates, setDates] = useState({
+    start_date: format(subDays(new Date(), 30), 'yyyy-MM-dd'),
     end_date: format(new Date(), 'yyyy-MM-dd'),
   });
-  const [stats, setStats] = useState<GuestStats>({
-    totalGuests: 0,
-    newGuestsThisPeriod: 0,
-    returningGuests: 0,
-    averageStayDuration: 0,
-    topNationalities: [],
-    guestsByMonth: [],
-    averageSpending: 0,
-  });
 
-  const handleGenerateReport = async () => {
+  const showToast = (msg: string, ok = true) => {
+    setToast({ msg, ok });
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  const generate = async () => {
     setLoading(true);
     try {
-      const response = await api.get('/reports/guests/', {
-        params: dateRange,
+      const resp = await api.get('/api/v1/reports/guests/', {
+        params: dates,
       });
-
-      const data = response.data;
-      setStats({
-        totalGuests: data.total_guests || 0,
-        newGuestsThisPeriod: data.new_guests || 0,
-        returningGuests: data.returning_guests || 0,
-        averageStayDuration: data.avg_stay_duration || 0,
-        topNationalities: data.top_nationalities || [],
-        guestsByMonth: data.guests_by_month || [],
-        averageSpending: data.avg_spending || 0,
-      });
-    } catch (error) {
-      console.error('Failed to generate guest report:', error);
-      alert('Failed to generate report');
+      setData(resp.data);
+    } catch {
+      showToast('Failed to generate guest report', false);
     } finally {
       setLoading(false);
+      setHasGenerated(true);
     }
   };
 
   return (
     <Layout>
-      <div className="space-y-6">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Guest Analytics Reports</h1>
-          <p className="text-gray-500">Analyze guest behavior and demographics</p>
-        </div>
+      <div className="p-5 lg:p-6 space-y-5">
 
-        {/* Filters */}
-        <Card>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <Input
-              label="Start Date"
-              type="date"
-              value={dateRange.start_date}
-              onChange={(e) => setDateRange({ ...dateRange, start_date: e.target.value })}
-            />
-            <Input
-              label="End Date"
-              type="date"
-              value={dateRange.end_date}
-              onChange={(e) => setDateRange({ ...dateRange, end_date: e.target.value })}
-            />
-            <div className="flex items-end">
-              <Button onClick={handleGenerateReport} disabled={loading} className="w-full">
-                {loading ? 'Generating...' : 'Generate Report'}
-              </Button>
-            </div>
+        {toast && (
+          <div className={clsx('fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
+            toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white')}>
+            <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            {toast.msg}
           </div>
-        </Card>
+        )}
 
-        {/* Summary Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-          <Card>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500">Total Guests</p>
-              <p className="text-3xl font-bold text-gray-900">{stats.totalGuests}</p>
-            </div>
-          </Card>
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <button onClick={() => router.push('/reports')} className="hover:text-slate-700">Reports</button>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Guests</span>
+        </nav>
 
-          <Card>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500">New Guests</p>
-              <p className="text-3xl font-bold text-green-600">{stats.newGuestsThisPeriod}</p>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500">Returning Guests</p>
-              <p className="text-3xl font-bold text-blue-600">{stats.returningGuests}</p>
-            </div>
-          </Card>
-
-          <Card>
-            <div className="space-y-2">
-              <p className="text-sm text-gray-500">Avg Stay Duration</p>
-              <p className="text-3xl font-bold text-purple-600">{stats.averageStayDuration.toFixed(1)} days</p>
-            </div>
-          </Card>
-        </div>
-
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Top Nationalities */}
-          <Card>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Top Guest Nationalities</h3>
-            <div className="space-y-3">
-              {stats.topNationalities.length > 0 ? (
-                stats.topNationalities.map((item, index) => (
-                  <div key={index} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-700">{item.country}</span>
-                      <span className="font-medium text-gray-900">{item.count} guests</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-blue-600 h-2 rounded-full"
-                        style={{
-                          width: `${stats.topNationalities.length > 0 ? (item.count / stats.topNationalities[0].count) * 100 : 0}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-center py-4">No data available</p>
-              )}
-            </div>
-          </Card>
-
-          {/* Guests by Month */}
-          <Card>
-            <h3 className="text-lg font-semibold text-gray-900 mb-4">Guest Arrivals by Month</h3>
-            <div className="space-y-3">
-              {stats.guestsByMonth.length > 0 ? (
-                stats.guestsByMonth.map((item, index) => (
-                  <div key={index} className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <span className="text-gray-700">{item.month}</span>
-                      <span className="font-medium text-gray-900">{item.count} guests</span>
-                    </div>
-                    <div className="w-full bg-gray-200 rounded-full h-2">
-                      <div
-                        className="bg-purple-600 h-2 rounded-full"
-                        style={{
-                          width: `${stats.guestsByMonth.length > 0 ? (item.count / Math.max(...stats.guestsByMonth.map((g) => g.count))) * 100 : 0}%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p className="text-gray-500 text-center py-4">No data available</p>
-              )}
-            </div>
-          </Card>
-        </div>
-
-        {/* Additional Metrics */}
-        <Card>
-          <h3 className="text-lg font-semibold text-gray-900 mb-4">Additional Metrics</h3>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            <div className="border-l-4 border-green-500 pl-4">
-              <p className="text-sm text-gray-500">Average Spending per Guest</p>
-              <p className="text-2xl font-bold text-gray-900">${stats.averageSpending.toFixed(2)}</p>
-            </div>
-
-            <div className="border-l-4 border-blue-500 pl-4">
-              <p className="text-sm text-gray-500">Return Rate</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {stats.totalGuests > 0 ? ((stats.returningGuests / stats.totalGuests) * 100).toFixed(1) : 0}%
-              </p>
-            </div>
-
-            <div className="border-l-4 border-purple-500 pl-4">
-              <p className="text-sm text-gray-500">New Guest Rate</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {stats.totalGuests > 0 ? ((stats.newGuestsThisPeriod / stats.totalGuests) * 100).toFixed(1) : 0}%
-              </p>
-            </div>
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push('/reports')} className="p-2 rounded-xl text-slate-400 hover:bg-slate-100">
+            <ArrowLeftIcon className="w-5 h-5" />
+          </button>
+          <div className="w-10 h-10 rounded-xl bg-emerald-100 flex items-center justify-center">
+            <UsersIcon className="w-5 h-5 text-emerald-600" />
           </div>
-        </Card>
+          <div>
+            <h1 className="text-2xl font-bold text-slate-900">Guest Report</h1>
+            <p className="text-slate-500 text-sm">Guest analytics and stay patterns</p>
+          </div>
+        </div>
 
-        {/* Export Options */}
-        <Card>
-          <div className="flex items-center justify-between">
+        <div className="bg-white rounded-2xl border border-slate-100 shadow-sm p-5">
+          <div className="flex flex-wrap gap-3 items-end">
             <div>
-              <h3 className="text-lg font-semibold text-gray-900">Export Report</h3>
-              <p className="text-sm text-gray-500">Download this report in various formats</p>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">From</label>
+              <input type="date" value={dates.start_date}
+                onChange={e => setDates(d => ({ ...d, start_date: e.target.value }))}
+                className="px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
             </div>
-            <div className="flex gap-2">
-              <Button variant="outline" size="sm">
-                Export CSV
-              </Button>
-              <Button variant="outline" size="sm">
-                Export PDF
-              </Button>
+            <div>
+              <label className="block text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1.5">To</label>
+              <input type="date" value={dates.end_date}
+                onChange={e => setDates(d => ({ ...d, end_date: e.target.value }))}
+                className="px-3 py-2.5 rounded-xl border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-300" />
             </div>
+            <button onClick={generate} disabled={loading}
+              className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-semibold disabled:opacity-50">
+              {loading ? 'Loading…' : 'Generate Report'}
+            </button>
           </div>
-        </Card>
+        </div>
+
+        {data && (
+          <>
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+              {[
+                { label: 'Total Guests',       value: data.total_guests,       color: 'text-slate-800' },
+                { label: 'New Guests',          value: data.new_guests,         color: 'text-emerald-600' },
+                { label: 'Returning',           value: data.returning_guests,   color: 'text-blue-600' },
+                { label: 'Reservations',        value: data.total_reservations, color: 'text-violet-600' },
+                { label: 'Avg Stay (nights)',   value: Number(data.avg_stay_duration).toFixed(1), color: 'text-amber-600' },
+              ].map(({ label, value, color }) => (
+                <div key={label} className="bg-white rounded-2xl border border-slate-100 shadow-sm px-5 py-4">
+                  <p className="text-xs font-semibold text-slate-400 uppercase tracking-wider">{label}</p>
+                  <p className={clsx('text-2xl font-bold mt-1', color)}>{value}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+
+              {data.top_nationalities.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100">
+                    <h2 className="font-semibold text-slate-800">Top Nationalities</h2>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {data.top_nationalities.map((n, i) => (
+                      <div key={i} className="flex items-center justify-between px-6 py-3">
+                        <span className="text-slate-700">{n.country || 'Unknown'}</span>
+                        <span className="text-sm font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">{n.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {data.by_type.length > 0 && (
+                <div className="bg-white rounded-2xl border border-slate-100 shadow-sm overflow-hidden">
+                  <div className="px-6 py-4 border-b border-slate-100">
+                    <h2 className="font-semibold text-slate-800">By Guest Type</h2>
+                  </div>
+                  <div className="divide-y divide-slate-50">
+                    {data.by_type.map((t, i) => (
+                      <div key={i} className="flex items-center justify-between px-6 py-3">
+                        <span className="text-slate-700 capitalize">{t.type.toLowerCase()}</span>
+                        <span className="text-sm font-semibold text-slate-500 bg-slate-100 px-2.5 py-0.5 rounded-full">{t.count}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+            </div>
+          </>
+        )}
+
+        {!loading && !data && (
+          <div className="bg-white rounded-2xl border border-slate-100 shadow-sm py-16 text-center text-slate-400">
+            <UsersIcon className="w-12 h-12 mx-auto mb-3 opacity-30" />
+            <p className="font-medium">
+              {hasGenerated ? 'No guest data for this period' : 'Select a date range and click Generate Report'}
+            </p>
+          </div>
+        )}
+
       </div>
     </Layout>
   );

@@ -4,7 +4,6 @@ POS Models for Hotel PMS
 
 from django.db import models
 from django.utils.translation import gettext_lazy as _
-from django.utils import timezone
 import uuid
 
 
@@ -150,6 +149,9 @@ class POSOrderItem(models.Model):
     class Meta:
         verbose_name = _('POS order item')
         verbose_name_plural = _('POS order items')
+
+    def __str__(self):
+        return f"{self.quantity}x {self.menu_item} (Order #{self.order_id})"
     
     def save(self, *args, **kwargs):
         self.amount = self.quantity * self.unit_price

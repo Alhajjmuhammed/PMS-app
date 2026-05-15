@@ -1,6 +1,5 @@
 from rest_framework import serializers
-from django.utils import timezone
-from datetime import date, timedelta
+from datetime import date
 from apps.reservations.models import Reservation, ReservationRoom, GroupBooking
 from apps.reservations.services import AvailabilityService
 from apps.guests.models import Guest
@@ -67,21 +66,21 @@ class ReservationSerializer(serializers.ModelSerializer):
         return self._user_name(obj.cancelled_by)
 
     def get_checked_in_by_name(self, obj):
-        from apps.frontdesk.models import CheckIn
-        ci = CheckIn.objects.filter(reservation=obj).first()
+        # Uses prefetched check_in — no extra DB query
+        ci = getattr(obj, 'check_in', None)
+        self._cached_checkin = ci
         return self._user_name(ci.checked_in_by) if ci else None
 
     def get_checked_out_by_name(self, obj):
-        from apps.frontdesk.models import CheckIn, CheckOut
-        ci = CheckIn.objects.filter(reservation=obj).first()
+        ci = getattr(self, '_cached_checkin', getattr(obj, 'check_in', None))
         if not ci:
             return None
-        co = CheckOut.objects.filter(check_in=ci).first()
+        # Uses prefetched check_out — no extra DB query
+        co = getattr(ci, 'check_out', None)
         return self._user_name(co.checked_out_by) if co else None
 
     def get_assigned_room_number(self, obj):
-        from apps.frontdesk.models import CheckIn
-        ci = CheckIn.objects.filter(reservation=obj).select_related('room').first()
+        ci = getattr(self, '_cached_checkin', getattr(obj, 'check_in', None))
         if ci and ci.room:
             return ci.room.room_number
         return None
@@ -275,13 +274,17 @@ class GroupBookingCreateSerializer(serializers.ModelSerializer):
         return data
     
     def create(self, validated_data):
-        # Generate unique group code
+        # Generate unique group code with collision-safe retry loop
         import random
         import string
         hotel = validated_data['hotel']
         prefix = hotel.code if hasattr(hotel, 'code') else 'GRP'
-        suffix = ''.join(random.choices(string.digits, k=6))
-        validated_data['code'] = f"{prefix}{suffix}"
+        for _ in range(10):
+            suffix = ''.join(random.choices(string.digits, k=6))
+            code = f"{prefix}{suffix}"
+            if not GroupBooking.objects.filter(code=code).exists():
+                break
+        validated_data['code'] = code
         
         return super().create(validated_data)
 

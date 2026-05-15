@@ -8,6 +8,9 @@ import Button from '@/components/Button';
 import Input from '@/components/Input';
 import Modal from '@/components/Modal';
 import { authService } from '@/lib/auth';
+import {
+  HomeIcon, ChevronRightIcon, Cog6ToothIcon,
+} from '@heroicons/react/24/outline';
 
 export default function SettingsPage() {
   const { user, refreshUser } = useAuth();
@@ -18,6 +21,14 @@ export default function SettingsPage() {
   const [verificationCode, setVerificationCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [mfaEnabled, setMfaEnabled] = useState(false);
+  const [mfaMessage, setMfaMessage] = useState<{ text: string; ok: boolean } | null>(null);
+  const [showDisableMFA, setShowDisableMFA] = useState(false);
+  const [disableCode, setDisableCode] = useState('');
+
+  const showMfaMsg = (text: string, ok = true) => {
+    setMfaMessage({ text, ok });
+    setTimeout(() => setMfaMessage(null), 3500);
+  };
 
   const handleSetupMFA = async () => {
     setLoading(true);
@@ -29,7 +40,7 @@ export default function SettingsPage() {
       setBackupCodes(response.backup_codes);
       setShowMFASetup(true);
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to setup MFA');
+      showMfaMsg(error.response?.data?.error || 'Failed to setup MFA', false);
     } finally {
       setLoading(false);
     }
@@ -37,42 +48,66 @@ export default function SettingsPage() {
 
   const handleEnableMFA = async () => {
     if (!verificationCode) {
-      alert('Please enter the verification code');
+      showMfaMsg('Please enter the verification code', false);
       return;
     }
 
     setLoading(true);
     try {
       await authService.enableMFA(verificationCode, mfaMethod);
-      alert('MFA enabled successfully!');
+      showMfaMsg('MFA enabled successfully!');
       setMfaEnabled(true);
       setShowMFASetup(false);
       await refreshUser();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to enable MFA');
+      showMfaMsg(error.response?.data?.error || 'Failed to enable MFA', false);
     } finally {
       setLoading(false);
     }
   };
 
   const handleDisableMFA = async () => {
-    const code = prompt('Enter verification code to disable MFA:');
-    if (!code) return;
-
+    if (!disableCode) {
+      showMfaMsg('Please enter the verification code', false);
+      return;
+    }
     try {
-      await authService.disableMFA(code);
-      alert('MFA disabled successfully');
+      await authService.disableMFA(disableCode);
+      showMfaMsg('MFA disabled successfully');
       setMfaEnabled(false);
+      setShowDisableMFA(false);
+      setDisableCode('');
       await refreshUser();
     } catch (error: any) {
-      alert(error.response?.data?.error || 'Failed to disable MFA');
+      showMfaMsg(error.response?.data?.error || 'Failed to disable MFA', false);
     }
   };
 
   return (
     <Layout>
-      <div className="max-w-4xl space-y-6">
-        <h1 className="text-3xl font-bold text-gray-900">Settings</h1>
+      <div className="p-5 lg:p-6 space-y-5">
+        {mfaMessage && (
+          <div className={`px-4 py-3 rounded-lg text-sm font-medium border ${mfaMessage.ok ? 'bg-green-50 text-green-800 border-green-200' : 'bg-red-50 text-red-800 border-red-200'}`}>{mfaMessage.text}</div>
+        )}
+        {/* Breadcrumb */}
+        <nav className="flex items-center gap-1.5 text-sm text-slate-400">
+          <HomeIcon className="w-4 h-4" />
+          <span>Home</span>
+          <ChevronRightIcon className="w-3.5 h-3.5" />
+          <span className="text-slate-700 font-medium">Settings</span>
+        </nav>
+
+        {/* Header */}
+        <div className="flex items-start justify-between flex-wrap gap-4">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-slate-100 flex items-center justify-center flex-shrink-0">
+              <Cog6ToothIcon className="w-5 h-5 text-slate-600" />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-900">Settings</h1>
+            </div>
+          </div>
+        </div>
 
         {/* Profile Information */}
         <Card title="Profile Information">
@@ -123,7 +158,7 @@ export default function SettingsPage() {
                 </p>
               </div>
               {mfaEnabled || user?.mfa_enabled ? (
-                <Button variant="danger" onClick={handleDisableMFA}>
+                <Button variant="danger" onClick={() => setShowDisableMFA(true)}>
                   Disable MFA
                 </Button>
               ) : (
@@ -222,6 +257,28 @@ export default function SettingsPage() {
               <Button onClick={handleEnableMFA} isLoading={loading}>
                 Enable MFA
               </Button>
+            </div>
+          </div>
+        </Modal>
+
+        {/* Disable MFA Modal */}
+        <Modal
+          isOpen={showDisableMFA}
+          onClose={() => { setShowDisableMFA(false); setDisableCode(''); }}
+          title="Disable MFA"
+        >
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600">Enter your verification code to disable multi-factor authentication.</p>
+            <input
+              type="text"
+              value={disableCode}
+              onChange={(e) => setDisableCode(e.target.value)}
+              placeholder="Verification code"
+              className="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-500"
+            />
+            <div className="flex gap-2 justify-end">
+              <Button variant="secondary" onClick={() => { setShowDisableMFA(false); setDisableCode(''); }}>Cancel</Button>
+              <Button variant="danger" onClick={handleDisableMFA} isLoading={loading}>Disable MFA</Button>
             </div>
           </div>
         </Modal>

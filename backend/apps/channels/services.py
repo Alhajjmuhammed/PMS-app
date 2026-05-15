@@ -7,26 +7,23 @@ from typing import Dict, List, Any, Optional
 from decimal import Decimal
 from datetime import datetime, date, timedelta
 import logging
-import requests
 from django.db import transaction
 from django.utils import timezone
 
 from apps.channels.models import (
-    Channel, PropertyChannel, RoomTypeMapping, RatePlanMapping,
-    AvailabilityUpdate, RateUpdate, ChannelReservation, SyncLog
+    PropertyChannel, RoomTypeMapping, AvailabilityUpdate, RateUpdate,
+    ChannelReservation, SyncLog
 )
-from apps.rates.models import RatePlan, RoomRate
+from apps.rates.models import DateRate
 from apps.rooms.models import Room, RoomType
 from apps.reservations.models import Reservation, ReservationRoom
 from apps.guests.models import Guest
-from apps.properties.models import Property
 
 logger = logging.getLogger(__name__)
 
 
 class ChannelSyncError(Exception):
     """Custom exception for channel sync errors"""
-    pass
 
 
 class BaseChannelService:
@@ -92,7 +89,7 @@ class RateSyncService(BaseChannelService):
         """
         try:
             # Get room types to sync
-            room_type_qs = RoomType.objects.filter(property=self.property)
+            room_type_qs = RoomType.objects.filter(hotel=self.property)
             if room_types:
                 room_type_qs = room_type_qs.filter(id__in=room_types)
             
@@ -111,8 +108,8 @@ class RateSyncService(BaseChannelService):
                         logger.warning(f"No mapping found for {room_type.name} on {self.channel.name}")
                         continue
                     
-                    # Get rates for date range
-                    rates = RoomRate.objects.filter(
+                    # Get date-specific rate overrides for the date range
+                    rates = DateRate.objects.filter(
                         room_type=room_type,
                         date__gte=start_date,
                         date__lte=end_date
@@ -125,12 +122,13 @@ class RateSyncService(BaseChannelService):
                     response = self._push_rates(rate_data)
                     
                     # Record sync
+                    rate_plan = self.property_channel.rate_plan
                     for rate in rates:
                         RateUpdate.objects.update_or_create(
                             property_channel=self.property_channel,
                             room_type=room_type,
                             date=rate.date,
-                            rate_plan=rate.rate_plan if hasattr(rate, 'rate_plan') else self.property_channel.rate_plan,
+                            rate_plan=rate.rate_plan or rate_plan,
                             defaults={
                                 'rate': rate.rate,
                                 'status': 'SENT' if response.get('success') else 'FAILED',
@@ -168,17 +166,16 @@ class RateSyncService(BaseChannelService):
     def _build_rate_payload(
         self,
         mapping: RoomTypeMapping,
-        rates: List[RoomRate]
+        rates: List[DateRate]
     ) -> Dict[str, Any]:
         """Build API payload for rate sync"""
         return {
             'property_code': self.property_code,
-            'room_type_code': mapping.channel_room_type_code,
+            'room_type_code': mapping.channel_room_code,
             'rates': [
                 {
                     'date': rate.date.isoformat(),
                     'rate': float(rate.rate),
-                    'extra_person_rate': float(rate.extra_person_rate) if rate.extra_person_rate else None,
                     'currency': 'USD',
                 }
                 for rate in rates
@@ -206,7 +203,7 @@ class AvailabilitySyncService(BaseChannelService):
         Sync availability for specified date range and room types
         """
         try:
-            room_type_qs = RoomType.objects.filter(property=self.property)
+            room_type_qs = RoomType.objects.filter(hotel=self.property)
             if room_types:
                 room_type_qs = room_type_qs.filter(id__in=room_types)
             
@@ -223,33 +220,40 @@ class AvailabilitySyncService(BaseChannelService):
                     if not mapping:
                         continue
                     
+                    # total_rooms is static for the room_type (not date-dependent) — compute once
+                    total_rooms = Room.objects.filter(
+                        room_type=room_type,
+                        status__in=['VC', 'VD']
+                    ).count()
+
+                    # Pre-fetch all overlapping reservations for the date range in one query
+                    res_rooms = list(ReservationRoom.objects.filter(
+                        room__room_type=room_type,
+                        reservation__check_in_date__lte=end_date,
+                        reservation__check_out_date__gt=start_date,
+                        reservation__status__in=['CONFIRMED', 'CHECKED_IN']
+                    ).values('reservation__check_in_date', 'reservation__check_out_date'))
+
                     # Calculate availability for each date
                     current_date = start_date
                     availability_data = []
-                    
+
                     while current_date <= end_date:
-                        # Count total rooms
-                        total_rooms = Room.objects.filter(
-                            room_type=room_type,
-                            status='available'
-                        ).count()
-                        
-                        # Count occupied/reserved rooms
-                        occupied = ReservationRoom.objects.filter(
-                            room__room_type=room_type,
-                            reservation__check_in_date__lte=current_date,
-                            reservation__check_out_date__gt=current_date,
-                            reservation__status__in=['CONFIRMED', 'CHECKED_IN']
-                        ).count()
-                        
+                        # Count occupied rooms in Python from pre-fetched data
+                        occupied = sum(
+                            1 for rr in res_rooms
+                            if rr['reservation__check_in_date'] <= current_date
+                            and rr['reservation__check_out_date'] > current_date
+                        )
+
                         available = total_rooms - occupied
-                        
+
                         availability_data.append({
                             'date': current_date,
                             'available': max(0, available),
                             'total': total_rooms
                         })
-                        
+
                         # Create/update sync record
                         AvailabilityUpdate.objects.update_or_create(
                             property_channel=self.property_channel,
@@ -261,12 +265,12 @@ class AvailabilitySyncService(BaseChannelService):
                                 'sent_at': timezone.now()
                             }
                         )
-                        
+
                         current_date += timedelta(days=1)
                     
                     # Push to channel
                     payload = self._build_availability_payload(mapping, availability_data)
-                    response = self._push_availability(payload)
+                    self._push_availability(payload)
                     
                     total_synced += len(availability_data)
                     
@@ -303,7 +307,7 @@ class AvailabilitySyncService(BaseChannelService):
         """Build API payload for availability sync"""
         return {
             'property_code': self.property_code,
-            'room_type_code': mapping.channel_room_type_code,
+            'room_type_code': mapping.channel_room_code,
             'availability': [
                 {
                     'date': item['date'].isoformat(),
@@ -347,9 +351,8 @@ class ReservationWebhookService(BaseChannelService):
             
             # Create reservation
             reservation = Reservation.objects.create(
-                property=self.property,
+                hotel=self.property,
                 guest=guest,
-                channel_confirmation_code=reservation_data.get('confirmation_code'),
                 check_in_date=datetime.fromisoformat(reservation_data['check_in']).date(),
                 check_out_date=datetime.fromisoformat(reservation_data['check_out']).date(),
                 adults=reservation_data.get('adults', 1),
@@ -359,10 +362,10 @@ class ReservationWebhookService(BaseChannelService):
                 special_requests=reservation_data.get('special_requests', ''),
             )
             
-            # Assign room if available
+            # Assign vacant room if available
             available_room = Room.objects.filter(
                 room_type=mapping.room_type,
-                status='available'
+                status__in=['VC', 'VD']
             ).first()
             
             if available_room:
@@ -371,7 +374,7 @@ class ReservationWebhookService(BaseChannelService):
                     room=available_room,
                     rate_per_night=Decimal(reservation_data.get('rate_per_night', 0)),
                     total_rate=Decimal(reservation_data.get('total_amount', 0)),
-                    guest_name=guest.get_full_name()
+                    guest_name=guest.full_name
                 )
             
             # Record sync - create ChannelReservation record
@@ -379,7 +382,7 @@ class ReservationWebhookService(BaseChannelService):
                 property_channel=self.property_channel,
                 reservation=reservation,
                 channel_booking_id=reservation_data.get('id'),
-                guest_name=guest.get_full_name(),
+                guest_name=guest.full_name,
                 check_in_date=reservation.check_in_date,
                 check_out_date=reservation.check_out_date,
                 room_type_code=channel_room_code,
@@ -393,7 +396,7 @@ class ReservationWebhookService(BaseChannelService):
             self._log_sync(
                 'reservations',
                 'success',
-                f'Created reservation from {self.channel.name}: {reservation.confirmation_code}',
+                f'Created reservation from {self.channel.name}: {reservation.confirmation_number}',
                 records_synced=1
             )
             

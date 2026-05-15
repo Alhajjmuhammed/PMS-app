@@ -4,10 +4,11 @@ Core Celery tasks for Hotel PMS.
 
 from celery import shared_task
 from django.utils import timezone
-from django.core.mail import send_mail, EmailMultiAlternatives
+from django.db import transaction
+from django.core.mail import send_mail
 from django.conf import settings
-from django.db.models import Sum, Count, F, Q
 from datetime import timedelta, date
+from decimal import Decimal
 import logging
 
 logger = logging.getLogger(__name__)
@@ -105,117 +106,252 @@ def cleanup_old_activity_logs(days=90):
 def generate_night_audit_task(property_id=None):
     """
     Generate night audit for properties.
-    
+
     Runs nightly to:
-    - Close business day
-    - Generate reports
-    - Update room rates
-    - Process no-shows
+    - Post nightly room rate charges to every open guest folio
+    - Process no-shows (CONFIRMED reservations that never checked in)
+    - Flag overdue departures
+    - Verify folio settlement for today's check-outs
+    - Capture DailyStatistics snapshot (occupancy, ADR, RevPAR)
     """
     from apps.properties.models import Property
     from apps.reports.models import NightAudit, DailyStatistics
     from apps.reservations.models import Reservation
     from apps.rooms.models import Room
-    
+    from apps.billing.models import FolioCharge, ChargeCode
+
     audit_date = date.today()
     properties = Property.objects.filter(is_active=True)
-    
+
     if property_id:
         properties = properties.filter(id=property_id)
-    
+
     results = []
-    
+
     for prop in properties:
+        audit = None
         try:
-            # Check if audit already exists
-            if NightAudit.objects.filter(property=prop, audit_date=audit_date).exists():
-                logger.warning(f"Night audit already exists for {prop.name} on {audit_date}")
-                continue
-            
-            # Get statistics
-            total_rooms = Room.objects.filter(hotel=prop).count()
-            occupied_rooms = Reservation.objects.filter(
-                hotel=prop,
-                check_in_date__lte=audit_date,
-                check_out_date__gt=audit_date,
-                status='CHECKED_IN'
-            ).count()
-            
-            arrivals = Reservation.objects.filter(
-                hotel=prop,
-                check_in_date=audit_date,
-                status__in=['CONFIRMED', 'CHECKED_IN']
-            ).count()
-            
-            departures = Reservation.objects.filter(
-                hotel=prop,
-                check_out_date=audit_date,
-                status__in=['CHECKED_IN', 'CHECKED_OUT']
-            ).count()
-            
-            revenue = Reservation.objects.filter(
-                hotel=prop,
-                check_in_date__lte=audit_date,
-                check_out_date__gt=audit_date,
-                status='CHECKED_IN'
-            ).aggregate(total=Sum('total_amount'))['total'] or 0
-            
-            # Create night audit
-            audit = NightAudit.objects.create(
-                property=prop,
-                audit_date=audit_date,
-                total_rooms=total_rooms,
-                occupied_rooms=occupied_rooms,
-                available_rooms=total_rooms - occupied_rooms,
-                arrivals=arrivals,
-                departures=departures,
-                revenue=revenue,
-                occupancy_rate=(occupied_rooms / total_rooms * 100) if total_rooms > 0 else 0,
-                status='COMPLETED',
-                completed_at=timezone.now(),
-            )
-            
-            # Create daily statistics
-            DailyStatistics.objects.create(
-                property=prop,
-                date=audit_date,
-                total_rooms=total_rooms,
-                occupied_rooms=occupied_rooms,
-                available_rooms=total_rooms - occupied_rooms,
-                occupancy_rate=audit.occupancy_rate,
-                revenue=revenue,
-                arrivals=arrivals,
-                departures=departures,
-            )
-            
-            # Process no-shows
-            no_shows = Reservation.objects.filter(
-                hotel=prop,
-                check_in_date=audit_date,
-                status='CONFIRMED'
-            )
-            no_show_count = no_shows.update(status='NO_SHOW')
-            
-            audit.notes = f"Processed {no_show_count} no-shows"
-            audit.save()
-            
-            results.append({
-                'property': prop.name,
-                'status': 'success',
-                'occupancy': audit.occupancy_rate,
-                'revenue': float(revenue),
-            })
-            
-            logger.info(f"Night audit completed for {prop.name}")
-        
+            with transaction.atomic():
+                # Skip if audit already completed for this date
+                if NightAudit.objects.filter(
+                    property=prop, business_date=audit_date, status='COMPLETED'
+                ).exists():
+                    logger.warning(f"Night audit already completed for {prop.name} on {audit_date}")
+                    continue
+
+                # Create (or re-use a stuck PENDING/IN_PROGRESS) audit record
+                audit, _ = NightAudit.objects.get_or_create(
+                    property=prop,
+                    business_date=audit_date,
+                    defaults={
+                        'status': 'IN_PROGRESS',
+                        'started_at': timezone.now(),
+                    },
+                )
+                if audit.status not in ('IN_PROGRESS', 'PENDING'):
+                    # Already rolled back — reset for retry
+                    audit.status = 'IN_PROGRESS'
+                    audit.started_at = timezone.now()
+                    audit.save(update_fields=['status', 'started_at'])
+
+                # ----------------------------------------------------------------
+                # Room counts
+                # ----------------------------------------------------------------
+                total_rooms = Room.objects.filter(hotel=prop).count()
+
+                occupied_reservations = Reservation.objects.filter(
+                    hotel=prop,
+                    check_in_date__lte=audit_date,
+                    check_out_date__gt=audit_date,
+                    status='CHECKED_IN',
+                ).prefetch_related('rooms__room', 'rooms__room_type')
+
+                occupied_rooms = occupied_reservations.count()
+
+                arrivals = Reservation.objects.filter(
+                    hotel=prop,
+                    check_in_date=audit_date,
+                    status__in=['CONFIRMED', 'CHECKED_IN'],
+                ).count()
+
+                departures = Reservation.objects.filter(
+                    hotel=prop,
+                    check_out_date=audit_date,
+                    status__in=['CHECKED_IN', 'CHECKED_OUT'],
+                ).count()
+
+                # ----------------------------------------------------------------
+                # Step 1 — Post nightly room rate charges to every open folio
+                # ----------------------------------------------------------------
+                room_charge_code, _ = ChargeCode.objects.get_or_create(
+                    code='ROOM',
+                    defaults={
+                        'name': 'Room Rate',
+                        'category': 'ROOM',
+                        'default_amount': Decimal('0'),
+                    },
+                )
+
+                room_revenue = Decimal('0')
+                for reservation in occupied_reservations:
+                    try:
+                        folio = reservation.folio
+                    except Exception:
+                        # No folio attached to this reservation — skip
+                        continue
+
+                    if folio.status == 'CLOSED':
+                        continue
+
+                    for res_room in reservation.rooms.all():
+                        # Idempotency guard: skip if a ROOM charge already exists
+                        # for this folio on today's date
+                        already_posted = FolioCharge.objects.filter(
+                            folio=folio,
+                            charge_code=room_charge_code,
+                            charge_date=audit_date,
+                        ).exists()
+
+                        rate = res_room.rate_per_night or Decimal('0')
+                        room_revenue += rate
+
+                        if already_posted:
+                            continue
+
+                        room_label = (
+                            res_room.room.room_number
+                            if res_room.room
+                            else (res_room.room_type.name if res_room.room_type else 'Room')
+                        )
+                        FolioCharge.objects.create(
+                            folio=folio,
+                            charge_code=room_charge_code,
+                            description=f'Room rate for {audit_date} - Room {room_label}',
+                            unit_price=rate,
+                            quantity=1,
+                            charge_date=audit_date,
+                        )
+
+                audit.room_rates_posted = True
+                audit.save(update_fields=['room_rates_posted'])
+
+                # ----------------------------------------------------------------
+                # Step 2 — Flag overdue departures (checked-in past check-out date)
+                # ----------------------------------------------------------------
+                overdue_count = Reservation.objects.filter(
+                    hotel=prop,
+                    check_out_date__lt=audit_date,
+                    status='CHECKED_IN',
+                ).count()
+                audit.departures_checked = True
+                audit.save(update_fields=['departures_checked'])
+
+                # ----------------------------------------------------------------
+                # Step 3 — Process no-shows
+                # ----------------------------------------------------------------
+                no_show_count = Reservation.objects.filter(
+                    hotel=prop,
+                    check_in_date=audit_date,
+                    status='CONFIRMED',
+                ).update(status='NO_SHOW')
+                audit.no_shows_processed = True
+                audit.save(update_fields=['no_shows_processed'])
+
+                # ----------------------------------------------------------------
+                # Step 4 — Check folio settlement for today's check-outs
+                # ----------------------------------------------------------------
+                unsettled_count = 0
+                for res in Reservation.objects.filter(
+                    hotel=prop,
+                    check_out_date=audit_date,
+                    status='CHECKED_OUT',
+                ):
+                    try:
+                        if res.folio.balance > 0:
+                            unsettled_count += 1
+                    except Exception:
+                        pass
+                audit.folios_settled = (unsettled_count == 0)
+                audit.save(update_fields=['folios_settled'])
+
+                # ----------------------------------------------------------------
+                # Compute key metrics
+                # ----------------------------------------------------------------
+                occupancy_rate = (
+                    Decimal(occupied_rooms) / Decimal(total_rooms) * 100
+                    if total_rooms > 0
+                    else Decimal('0')
+                )
+                adr = room_revenue / occupied_rooms if occupied_rooms > 0 else Decimal('0')
+                revpar = room_revenue / total_rooms if total_rooms > 0 else Decimal('0')
+
+                # ----------------------------------------------------------------
+                # Finalise NightAudit record
+                # ----------------------------------------------------------------
+                notes_parts = [f"Processed {no_show_count} no-shows."]
+                if overdue_count:
+                    notes_parts.append(f"{overdue_count} overdue departure(s).")
+                if unsettled_count:
+                    notes_parts.append(f"{unsettled_count} unsettled folio(s).")
+
+                audit.status = 'COMPLETED'
+                audit.rooms_sold = occupied_rooms
+                audit.arrivals_count = arrivals
+                audit.departures_count = departures
+                audit.room_revenue = room_revenue
+                audit.total_revenue = room_revenue
+                audit.completed_at = timezone.now()
+                audit.notes = ' '.join(notes_parts)
+                audit.save()
+
+                # ----------------------------------------------------------------
+                # Create / update DailyStatistics snapshot
+                # ----------------------------------------------------------------
+                DailyStatistics.objects.update_or_create(
+                    property=prop,
+                    date=audit_date,
+                    defaults={
+                        'total_rooms': total_rooms,
+                        'rooms_sold': occupied_rooms,
+                        'available_rooms': max(total_rooms - occupied_rooms, 0),
+                        'occupancy_percent': occupancy_rate,
+                        'room_revenue': room_revenue,
+                        'total_revenue': room_revenue,
+                        'arrivals': arrivals,
+                        'departures': departures,
+                        'in_house': occupied_rooms,
+                        'adr': adr,
+                        'revpar': revpar,
+                    },
+                )
+
+                results.append({
+                    'property': prop.name,
+                    'status': 'success',
+                    'occupancy': float(occupancy_rate),
+                    'revenue': float(room_revenue),
+                    'no_shows': no_show_count,
+                    'overdue_departures': overdue_count,
+                    'unsettled_folios': unsettled_count,
+                })
+
+                logger.info(f"Night audit completed for {prop.name}: {occupied_rooms} rooms sold, revenue {room_revenue}")
+
         except Exception as e:
             logger.error(f"Night audit failed for {prop.name}: {str(e)}")
+            if audit is not None:
+                try:
+                    audit.status = 'ROLLED_BACK'
+                    audit.notes = f"Failed: {str(e)}"
+                    audit.save(update_fields=['status', 'notes'])
+                except Exception:
+                    pass
             results.append({
                 'property': prop.name,
                 'status': 'failed',
                 'error': str(e),
             })
-    
+
     return results
 
 
@@ -223,7 +359,6 @@ def generate_night_audit_task(property_id=None):
 def send_reservation_reminder_task():
     """Send reminder emails for upcoming check-ins."""
     from apps.reservations.models import Reservation
-    from apps.guests.models import Guest
     
     tomorrow = date.today() + timedelta(days=1)
     
@@ -239,12 +374,12 @@ def send_reservation_reminder_task():
             try:
                 subject = f"Reminder: Check-in Tomorrow at {reservation.hotel.name}"
                 message = f"""
-Dear {reservation.guest.get_full_name()},
+Dear {reservation.guest.full_name},
 
 This is a reminder that your check-in is tomorrow ({tomorrow}).
 
 Reservation Details:
-- Confirmation Number: {reservation.confirmation_code}
+- Confirmation Number: {reservation.confirmation_number}
 - Hotel: {reservation.hotel.name}
 - Check-in: {reservation.check_in_date}
 - Check-out: {reservation.check_out_date}

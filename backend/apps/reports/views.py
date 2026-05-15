@@ -126,10 +126,10 @@ class ArrivalsReportView(LoginRequiredMixin, View):
         arrivals = Reservation.objects.filter(
             check_in_date=report_date,
             status__in=['CONFIRMED', 'CHECKED_IN']
-        ).select_related('guest', 'source')
+        ).select_related('guest')
         
         if request.user.assigned_property:
-            arrivals = arrivals.filter(property=request.user.assigned_property)
+            arrivals = arrivals.filter(hotel=request.user.assigned_property)
         
         context = {
             'report_date': report_date,
@@ -153,7 +153,7 @@ class DeparturesReportView(LoginRequiredMixin, View):
         ).select_related('guest')
         
         if request.user.assigned_property:
-            departures = departures.filter(property=request.user.assigned_property)
+            departures = departures.filter(hotel=request.user.assigned_property)
         
         context = {
             'report_date': report_date,
@@ -173,7 +173,7 @@ class InHouseReportView(LoginRequiredMixin, View):
         ).select_related('guest')
         
         if request.user.assigned_property:
-            in_house = in_house.filter(property=request.user.assigned_property)
+            in_house = in_house.filter(hotel=request.user.assigned_property)
         
         context = {
             'in_house': in_house,
@@ -187,7 +187,6 @@ class ProductionReportView(LoginRequiredMixin, View):
     
     def get(self, request):
         from apps.reservations.models import Reservation
-        from django.db.models.functions import TruncDate
         
         start_date = request.GET.get('start', (date.today() - timedelta(days=30)).isoformat())
         end_date = request.GET.get('end', date.today().isoformat())
@@ -202,10 +201,10 @@ class ProductionReportView(LoginRequiredMixin, View):
         )
         
         if request.user.assigned_property:
-            reservations = reservations.filter(property=request.user.assigned_property)
+            reservations = reservations.filter(hotel=request.user.assigned_property)
         
         # Group by booking source
-        by_source = reservations.values('source__name').annotate(
+        by_source = reservations.values('source').annotate(
             count=Count('id'),
             revenue=Sum('total_amount')
         ).order_by('-count')
@@ -241,8 +240,8 @@ class ForecastReportView(LoginRequiredMixin, View):
             )
             
             if request.user.assigned_property:
-                reservations = reservations.filter(property=request.user.assigned_property)
-                total_rooms = Room.objects.filter(property=request.user.assigned_property, is_active=True).count()
+                reservations = reservations.filter(hotel=request.user.assigned_property)
+                total_rooms = Room.objects.filter(hotel=request.user.assigned_property, is_active=True).count()
             else:
                 total_rooms = Room.objects.filter(is_active=True).count()
             
@@ -278,7 +277,6 @@ class NightAuditDetailView(LoginRequiredMixin, DetailView):
 class RunNightAuditView(LoginRequiredMixin, View):
     def post(self, request):
         from apps.reservations.models import Reservation
-        from apps.billing.models import FolioCharge
         
         property_obj = request.user.assigned_property
         business_date = date.today() - timedelta(days=1)

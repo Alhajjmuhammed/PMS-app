@@ -7,7 +7,13 @@ import Input from '@/components/Input';
 import Button from '@/components/Button';
 import Table from '@/components/Table';
 import Modal from '@/components/Modal';
-import api from '@/lib/api';
+
+const STORAGE_KEY = 'pms_email_templates';
+
+const DEFAULT_TEMPLATES: EmailTemplate[] = [
+  { id: 1, name: 'Reservation Confirmation', subject: 'Your reservation is confirmed', body: 'Dear {{guest_name}},\n\nYour reservation has been confirmed...', category: 'confirmation', active: true, created_at: new Date().toISOString() },
+  { id: 2, name: 'Check-in Reminder', subject: 'Your check-in is tomorrow', body: 'Dear {{guest_name}},\n\nThis is a reminder that your check-in is scheduled for tomorrow...', category: 'reminder', active: true, created_at: new Date().toISOString() },
+];
 
 interface EmailTemplate {
   id: number;
@@ -17,6 +23,18 @@ interface EmailTemplate {
   category: string;
   active: boolean;
   created_at: string;
+}
+
+function loadFromStorage(): EmailTemplate[] {
+  if (typeof window === 'undefined') return DEFAULT_TEMPLATES;
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_TEMPLATES;
+  } catch { return DEFAULT_TEMPLATES; }
+}
+
+function saveToStorage(templates: EmailTemplate[]) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(templates));
 }
 
 export default function EmailTemplatesPage() {
@@ -33,19 +51,9 @@ export default function EmailTemplatesPage() {
   });
 
   useEffect(() => {
-    loadTemplates();
+    setTemplates(loadFromStorage());
+    setLoading(false);
   }, []);
-
-  const loadTemplates = async () => {
-    try {
-      const response = await api.get('/settings/email-templates/');
-      setTemplates(response.data.results || response.data);
-    } catch (error) {
-      console.error('Failed to load templates:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
 
   const handleCreate = () => {
     setEditingTemplate(null);
@@ -72,30 +80,29 @@ export default function EmailTemplatesPage() {
   };
 
   const handleSave = async () => {
-    try {
-      if (editingTemplate) {
-        await api.patch(`/settings/email-templates/${editingTemplate.id}/`, formData);
-      } else {
-        await api.post('/settings/email-templates/', formData);
-      }
-      setShowModal(false);
-      loadTemplates();
-    } catch (error) {
-      console.error('Failed to save template:', error);
-      alert('Failed to save template');
+    let updated: EmailTemplate[];
+    if (editingTemplate) {
+      updated = templates.map((t) =>
+        t.id === editingTemplate.id ? { ...t, ...formData } : t
+      );
+    } else {
+      const newTpl: EmailTemplate = {
+        ...formData,
+        id: Date.now(),
+        created_at: new Date().toISOString(),
+      };
+      updated = [...templates, newTpl];
     }
+    saveToStorage(updated);
+    setTemplates(updated);
+    setShowModal(false);
   };
 
   const handleDelete = async (id: number) => {
     if (!confirm('Are you sure you want to delete this template?')) return;
-
-    try {
-      await api.delete(`/settings/email-templates/${id}/`);
-      loadTemplates();
-    } catch (error) {
-      console.error('Failed to delete template:', error);
-      alert('Failed to delete template');
-    }
+    const updated = templates.filter((t) => t.id !== id);
+    saveToStorage(updated);
+    setTemplates(updated);
   };
 
   const categories = [

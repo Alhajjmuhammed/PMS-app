@@ -5,7 +5,7 @@ from rest_framework.permissions import IsAuthenticated
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
-from django.db.models import Sum, Q
+from django.db.models import Sum
 
 from apps.billing.models import CashierShift, Payment
 from .cashier_shift_serializers import (
@@ -14,7 +14,7 @@ from .cashier_shift_serializers import (
     CashierShiftCloseSerializer,
     CashierShiftReconcileSerializer
 )
-from api.permissions import IsAdminOrManager, IsAccountantOrAbove, IsAccountantOrPOS
+from api.permissions import IsAccountantOrAbove, IsAccountantOrPOS
 
 
 class CashierShiftListView(generics.ListAPIView):
@@ -161,15 +161,15 @@ class ReconcileCashierShiftView(APIView):
         # Calculate actual totals from payments
         cash_payments = Payment.objects.filter(
             payment_method='CASH',
-            created_at__gte=shift.shift_start,
-            created_at__lte=shift.shift_end if shift.shift_end else timezone.now(),
+            payment_date__gte=shift.shift_start,
+            payment_date__lte=shift.shift_end if shift.shift_end else timezone.now(),
             folio__guest__home_property=request.user.assigned_property
         ).aggregate(total=Sum('amount'))['total'] or 0
         
         card_payments = Payment.objects.filter(
             payment_method__in=['CREDIT_CARD', 'DEBIT_CARD'],
-            created_at__gte=shift.shift_start,
-            created_at__lte=shift.shift_end if shift.shift_end else timezone.now(),
+            payment_date__gte=shift.shift_start,
+            payment_date__lte=shift.shift_end if shift.shift_end else timezone.now(),
             folio__guest__home_property=request.user.assigned_property
         ).aggregate(total=Sum('amount'))['total'] or 0
         
@@ -243,8 +243,8 @@ class CashierShiftSummaryView(APIView):
         end_time = shift.shift_end if shift.shift_end else timezone.now()
         
         payments = Payment.objects.filter(
-            created_at__gte=shift.shift_start,
-            created_at__lte=end_time,
+            payment_date__gte=shift.shift_start,
+            payment_date__lte=end_time,
             folio__guest__home_property=request.user.assigned_property
         )
         

@@ -12,9 +12,7 @@ from base64 import b64encode
 from smtplib import SMTPException
 from django.core.mail import send_mail
 from django.conf import settings
-from django.utils import timezone
 from django.core.cache import cache
-from datetime import timedelta
 
 
 class MFAManager:
@@ -119,27 +117,22 @@ class MFAManager:
         Returns:
             bool: True if valid and consumed
         """
-        if not user.mfa_backup_codes:
+        if not user.backup_codes:
             return False
         
         # Convert to list if it's a string (JSON field might return string)
-        backup_codes = user.mfa_backup_codes if isinstance(user.mfa_backup_codes, list) else []
+        backup_codes = user.backup_codes if isinstance(user.backup_codes, list) else []
         
         if code.upper() in backup_codes:
             backup_codes.remove(code.upper())
-            user.mfa_backup_codes = backup_codes
+            user.backup_codes = backup_codes
             # Note: Caller should save the user model
             return True
         return False
     
     @staticmethod
-    def generate_email_code(email):
-        """Generate and store email MFA code."""
-        return EmailMFA.generate_email_code()
-    
-    @staticmethod
-    def send_email_code(email, code):
-        """Send email MFA code."""
+    def send_email_code(email):
+        """Generate and send email MFA code."""
         from django.contrib.auth import get_user_model
         User = get_user_model()
         try:
@@ -160,13 +153,8 @@ class MFAManager:
             return False
     
     @staticmethod
-    def generate_sms_code(phone):
-        """Generate and store SMS MFA code."""
-        return SMSMFA.generate_sms_code()
-    
-    @staticmethod
-    def send_sms_code(phone, code):
-        """Send SMS MFA code."""
+    def send_sms_code(phone):
+        """Generate and send SMS MFA code."""
         from django.contrib.auth import get_user_model
         User = get_user_model()
         try:
@@ -258,7 +246,7 @@ class EmailMFA:
             return False
         
         # Check code match
-        if stored_code == code:
+        if secrets.compare_digest(stored_code, code):
             # Delete code after successful verification (one-time use)
             cache.delete(cache_key)
             return True
@@ -312,6 +300,16 @@ class SMSMFA:
         logger = logging.getLogger(__name__)
         logger.info(f"SMS verification code sent to user {user.id} (phone: {user.phone[-4:]}***)")
         
+        # In development (no Twilio configured), log the code as a warning so developers
+        # can complete MFA flows without a real SMS provider
+        from django.conf import settings as _settings
+        twilio_configured = bool(getattr(_settings, 'TWILIO_ACCOUNT_SID', None))
+        if not twilio_configured:
+            logger.warning(
+                "SMS not configured — MFA code for user %s: %s (dev-only, never log in production)",
+                user.id, code
+            )
+        
         # Uncomment when Twilio is configured:
         # try:
         #     from twilio.rest import Client
@@ -350,7 +348,7 @@ class SMSMFA:
             return False
         
         # Check code match
-        if stored_code == code:
+        if secrets.compare_digest(stored_code, code):
             # Delete code after successful verification (one-time use)
             cache.delete(cache_key)
             return True

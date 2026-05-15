@@ -1,6 +1,6 @@
 from django import forms
 from apps.rooms.models import Room
-from .models import CheckIn, CheckOut, RoomMove, WalkIn, GuestMessage
+from .models import CheckIn, CheckOut, WalkIn, GuestMessage
 
 
 class CheckInForm(forms.ModelForm):

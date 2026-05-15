@@ -98,6 +98,10 @@ class RoomBlockCreateSerializer(serializers.ModelSerializer):
                 end_date__gte=start_date
             )
             
+            # Exclude current instance if updating
+            if self.instance:
+                overlapping = overlapping.exclude(pk=self.instance.pk)
+            
             if overlapping.exists():
                 raise serializers.ValidationError({
                     'room': 'This room is already blocked during the selected period.'

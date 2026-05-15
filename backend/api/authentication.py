@@ -22,7 +22,7 @@ class ExpiringTokenAuthentication(TokenAuthentication):
         model = self.get_model()
         
         try:
-            token = model.objects.select_related('user').get(key=key)
+            token = model.objects.select_related('user', 'user__assigned_property').get(key=key)
         except model.DoesNotExist:
             raise AuthenticationFailed('Invalid token.')
 

@@ -4,17 +4,14 @@ from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.filters import SearchFilter, OrderingFilter
 from django_filters.rest_framework import DjangoFilterBackend
-from django.db.models import Count
-from django.db import IntegrityError
+from django.db import IntegrityError, transaction
 from django.shortcuts import get_object_or_404
 from django.core.cache import cache
 from django.utils.decorators import method_decorator
-from django.views.decorators.cache import cache_page
 from django_ratelimit.decorators import ratelimit
 from datetime import date, timedelta
 from apps.rooms.models import Room, RoomType, RoomStatusLog, RoomImage, RoomAmenity, RoomTypeAmenity
-from apps.reservations.models import Reservation
-from apps.core.cache_utils import CacheManager
+from apps.reservations.models import Reservation, ReservationRoom
 from api.permissions import IsHousekeepingStaff, IsAdminOrManager, IsFrontDeskOrAbove, IsFrontDeskOrHousekeeping
 from .serializers import (
     RoomSerializer, RoomTypeSerializer, RoomStatusUpdateSerializer, 
@@ -112,16 +109,16 @@ class UpdateRoomStatusView(APIView):
         if 'notes' in serializer.validated_data:
             room.notes = serializer.validated_data['notes']
         
-        room.save()
-        
-        # Log the status change
-        RoomStatusLog.objects.create(
-            room=room,
-            previous_status=old_status,
-            new_status=room.status,
-            changed_by=request.user,
-            notes=serializer.validated_data.get('notes', '')
-        )
+        # Log the status change — atomic so log entry always matches room state
+        with transaction.atomic():
+            room.save()
+            RoomStatusLog.objects.create(
+                room=room,
+                previous_status=old_status,
+                new_status=room.status,
+                changed_by=request.user,
+                notes=serializer.validated_data.get('notes', '')
+            )
         
         return Response(RoomSerializer(room).data)
 
@@ -206,9 +203,9 @@ class AvailabilityView(APIView):
         else:
             try:
                 check_in = date.fromisoformat(str(check_in_str))
-            except (ValueError, AttributeError) as e:
+            except (ValueError, AttributeError):
                 return Response(
-                    {'error': f'Invalid check_in date format. Use ISO format (YYYY-MM-DD)'},
+                    {'error': 'Invalid check_in date format. Use ISO format (YYYY-MM-DD)'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         
@@ -217,9 +214,9 @@ class AvailabilityView(APIView):
         else:
             try:
                 check_out = date.fromisoformat(str(check_out_str))
-            except (ValueError, AttributeError) as e:
+            except (ValueError, AttributeError):
                 return Response(
-                    {'error': f'Invalid check_out date format. Use ISO format (YYYY-MM-DD)'},
+                    {'error': 'Invalid check_out date format. Use ISO format (YYYY-MM-DD)'},
                     status=status.HTTP_400_BAD_REQUEST
                 )
         
@@ -241,28 +238,40 @@ class AvailabilityView(APIView):
         room_types = RoomType.objects.filter(is_active=True)
         if request.user.assigned_property:
             room_types = room_types.filter(hotel=request.user.assigned_property)
-        
-        availability = []
-        for room_type in room_types:
-            total_rooms = Room.objects.filter(
-                room_type=room_type,
+
+        room_type_ids = list(room_types.values_list('id', flat=True))
+
+        # Batch query: total available rooms per room_type
+        from django.db.models import Count as _Count
+        total_by_rt = {
+            row['room_type_id']: row['cnt']
+            for row in Room.objects.filter(
+                room_type_id__in=room_type_ids,
                 is_active=True,
                 status__in=['VC', 'VD']
-            ).count()
-            
-            # Count occupied rooms for the period
-            occupied = Reservation.objects.filter(
-                rooms__room_type=room_type,
+            ).values('room_type_id').annotate(cnt=_Count('id'))
+        }
+
+        # Batch query: occupied rooms per room_type for the date range
+        occupied_by_rt = {
+            row['rooms__room_type_id']: row['cnt']
+            for row in Reservation.objects.filter(
+                rooms__room_type_id__in=room_type_ids,
                 check_in_date__lt=check_out,
                 check_out_date__gt=check_in,
                 status__in=['CONFIRMED', 'CHECKED_IN']
-            ).count()
-            
+            ).values('rooms__room_type_id').annotate(cnt=_Count('id'))
+        }
+
+        availability = []
+        for room_type in room_types:
+            total = total_by_rt.get(room_type.id, 0)
+            occupied = occupied_by_rt.get(room_type.id, 0)
             availability.append({
                 'room_type': RoomTypeSerializer(room_type).data,
-                'total': total_rooms,
+                'total': total,
                 'occupied': occupied,
-                'available': max(0, total_rooms - occupied)
+                'available': max(0, total - occupied)
             })
         
         result = {
@@ -279,8 +288,13 @@ class AvailabilityView(APIView):
 
 class RoomImageListView(generics.ListCreateAPIView):
     """List and upload room images."""
-    permission_classes = [IsAuthenticated, IsAdminOrManager]
     serializer_class = RoomImageSerializer
+    pagination_class = None
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsAdminOrManager()]
+        return [IsAuthenticated(), IsFrontDeskOrAbove()]
     
     def get_queryset(self):
         room_id = self.kwargs.get('room_id')
@@ -318,11 +332,28 @@ class AvailableRoomsView(generics.ListAPIView):
     def get_queryset(self):
         check_in = self.request.query_params.get('check_in')
         check_out = self.request.query_params.get('check_out')
-        
-        qs = Room.objects.filter(is_active=True, status__in=['CLEAN', 'INSPECTED'])
+
+        qs = Room.objects.filter(is_active=True, status__in=['VC', 'VD'])
         if self.request.user.assigned_property:
             qs = qs.filter(hotel=self.request.user.assigned_property)
-        
+
+        if check_in and check_out:
+            try:
+                ci = date.fromisoformat(check_in)
+                co = date.fromisoformat(check_out)
+                booked_ids = ReservationRoom.objects.filter(
+                    room__isnull=False,
+                    reservation__check_in_date__lt=co,
+                    reservation__check_out_date__gt=ci,
+                    reservation__status__in=[
+                        Reservation.Status.CONFIRMED,
+                        Reservation.Status.CHECKED_IN,
+                    ],
+                ).values_list('room_id', flat=True)
+                qs = qs.exclude(id__in=booked_ids)
+            except (ValueError, TypeError):
+                pass
+
         return qs
 
 

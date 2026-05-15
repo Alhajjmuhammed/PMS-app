@@ -6,7 +6,7 @@ import api from '@/lib/api';
 import { format, subMonths } from 'date-fns';
 import clsx from 'clsx';
 import {
-  HomeIcon, ChevronRightIcon, CheckCircleIcon, ChartBarIcon,
+  HomeIcon, ChevronRightIcon, CheckCircleIcon, ExclamationTriangleIcon, ChartBarIcon,
 } from '@heroicons/react/24/outline';
 
 interface RevenueDay {
@@ -57,7 +57,7 @@ export default function BillingReportsPage() {
         {toast && (
           <div className={clsx('fixed top-5 right-5 z-50 flex items-center gap-3 px-4 py-3 rounded-xl shadow-lg text-sm font-medium',
             toast.ok ? 'bg-emerald-600 text-white' : 'bg-red-600 text-white')}>
-            <CheckCircleIcon className="w-5 h-5 flex-shrink-0" />
+            {toast.ok ? <CheckCircleIcon className="w-5 h-5 flex-shrink-0" /> : <ExclamationTriangleIcon className="w-5 h-5 flex-shrink-0" />}
             {toast.msg}
           </div>
         )}

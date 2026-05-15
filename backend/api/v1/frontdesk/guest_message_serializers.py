@@ -1,6 +1,5 @@
 from rest_framework import serializers
 from apps.frontdesk.models import GuestMessage
-from django.utils import timezone
 
 
 class GuestMessageSerializer(serializers.ModelSerializer):
@@ -30,7 +29,7 @@ class GuestMessageSerializer(serializers.ModelSerializer):
         read_only_fields = ['id', 'created_at', 'delivered_at']
     
     def get_guest_name(self, obj):
-        return obj.check_in.guest.get_full_name()
+        return obj.check_in.guest.full_name if obj.check_in.guest else ''
     
     def get_taken_by_name(self, obj):
         return obj.taken_by.get_full_name() if obj.taken_by else None

@@ -5,10 +5,11 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
 from django.utils import timezone
-from django.db.models import Q, Count, Sum, Avg
+from django.db.models import Count, Sum
 from datetime import date
 from decimal import Decimal
 
@@ -22,10 +23,9 @@ from .pos_serializers import (
     POSOrderItemSerializer,
     POSDashboardSerializer,
     POSOrderCreateSerializer,
-    POSOrderUpdateSerializer,
     OutletSerializer
 )
-from api.permissions import IsAdminOrManager, IsPOSStaff
+from api.permissions import IsAdminOrManager, IsPOSStaff, IsFrontDeskOrPOS
 
 
 def _get_pos_tax_rate(property_obj):
@@ -44,6 +44,7 @@ def _get_pos_tax_rate(property_obj):
 class MenuCategoryListCreateView(generics.ListCreateAPIView):
     """List all menu categories or create new category."""
     serializer_class = MenuCategorySerializer
+    pagination_class = None
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['outlet', 'is_active']
     search_fields = ['name', 'description']
@@ -52,13 +53,39 @@ class MenuCategoryListCreateView(generics.ListCreateAPIView):
 
     def get_permissions(self):
         if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
-            return [IsAuthenticated(), IsAdminOrManager()]
-        return [IsAuthenticated(), IsPOSStaff()]
-    
+            return [IsAuthenticated(), IsFrontDeskOrPOS()]
+        return [IsAuthenticated(), IsFrontDeskOrPOS()]
+
     def get_queryset(self):
-        return MenuCategory.objects.filter(
+        qs = MenuCategory.objects.filter(
             outlet__property=self.request.user.assigned_property
         ).select_related('outlet').prefetch_related('items')
+        # Support nested URL /outlets/<outlet_id>/categories/
+        outlet_id = self.kwargs.get('outlet_id')
+        if outlet_id:
+            qs = qs.filter(outlet_id=outlet_id)
+        return qs
+
+    def get_serializer(self, *args, **kwargs):
+        # Inject outlet from nested URL into POST data so serializer validates correctly
+        outlet_id = self.kwargs.get('outlet_id')
+        if outlet_id and 'data' in kwargs and isinstance(kwargs['data'], dict):
+            data = kwargs['data'].copy()
+            data.setdefault('outlet', outlet_id)
+            kwargs['data'] = data
+        return super().get_serializer(*args, **kwargs)
+
+    def perform_create(self, serializer):
+        outlet_id = self.kwargs.get('outlet_id')
+        if outlet_id:
+            from apps.pos.models import Outlet
+            from django.shortcuts import get_object_or_404
+            prop = self.request.user.assigned_property
+            outlet_qs = Outlet.objects.filter(property=prop) if prop else Outlet.objects.all()
+            outlet = get_object_or_404(outlet_qs, pk=outlet_id)
+            serializer.save(outlet=outlet)
+        else:
+            serializer.save()
 
 
 class MenuCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
@@ -77,6 +104,7 @@ class MenuCategoryDetailView(generics.RetrieveUpdateDestroyAPIView):
 class MenuItemListCreateView(generics.ListCreateAPIView):
     """List all menu items or create new item."""
     serializer_class = MenuItemSerializer
+    pagination_class = None
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
     filterset_fields = ['category', 'is_available', 'is_taxable']
     search_fields = ['name', 'description']
@@ -86,7 +114,7 @@ class MenuItemListCreateView(generics.ListCreateAPIView):
     def get_permissions(self):
         if self.request.method in ('POST', 'PUT', 'PATCH', 'DELETE'):
             return [IsAuthenticated(), IsAdminOrManager()]
-        return [IsAuthenticated(), IsPOSStaff()]
+        return [IsAuthenticated(), IsFrontDeskOrPOS()]
     
     def get_queryset(self):
         return MenuItem.objects.filter(
@@ -137,8 +165,12 @@ class AvailableMenuItemsView(generics.ListAPIView):
 
 class POSOrderListCreateView(generics.ListCreateAPIView):
     """List all POS orders or create new order."""
-    permission_classes = [IsAuthenticated, IsPOSStaff]
     filter_backends = [DjangoFilterBackend, filters.SearchFilter, filters.OrderingFilter]
+
+    def get_permissions(self):
+        if self.request.method == 'POST':
+            return [IsAuthenticated(), IsPOSStaff()]
+        return [IsAuthenticated(), IsFrontDeskOrPOS()]
     filterset_fields = ['outlet', 'status', 'is_posted_to_room']
     search_fields = ['order_number', 'guest_name', 'room_number']
     ordering_fields = ['created_at', 'total']
@@ -183,59 +215,60 @@ class POSOrderListCreateView(generics.ListCreateAPIView):
                 status=status.HTTP_404_NOT_FOUND
             )
         
-        # Create order
-        order = POSOrder.objects.create(
-            outlet=outlet,
-            check_in_id=data.get('check_in'),
-            room_number=data.get('room_number', ''),
-            guest_name=data.get('guest_name', ''),
-            table_number=data.get('table_number', ''),
-            covers=data.get('covers', 1),
-            notes=data.get('notes', ''),
-            server=request.user
-        )
-        
-        # Create order items and calculate totals
-        tax_rate = _get_pos_tax_rate(outlet.property)
-        subtotal = Decimal('0')
-        taxable_subtotal = Decimal('0')
-
-        for item_data in data['items']:
-            try:
-                menu_item = MenuItem.objects.get(
-                    id=item_data['menu_item'],
-                    category__outlet__property=request.user.assigned_property
-                )
-            except MenuItem.DoesNotExist:
-                order.delete()
-                return Response(
-                    {'error': f"Menu item {item_data['menu_item']} not found in your property"},
-                    status=status.HTTP_404_NOT_FOUND
-                )
-            quantity = item_data['quantity']
-            unit_price = menu_item.price
-            item_amount = unit_price * quantity
-
-            POSOrderItem.objects.create(
-                order=order,
-                menu_item=menu_item,
-                quantity=quantity,
-                unit_price=unit_price,
-                notes=item_data.get('notes', '')
+        with transaction.atomic():
+            # Create order
+            order = POSOrder.objects.create(
+                outlet=outlet,
+                check_in_id=data.get('check_in'),
+                room_number=data.get('room_number', ''),
+                guest_name=data.get('guest_name', ''),
+                table_number=data.get('table_number', ''),
+                covers=data.get('covers', 1),
+                notes=data.get('notes', ''),
+                server=request.user
             )
-
-            subtotal += item_amount
-            if menu_item.is_taxable:
-                taxable_subtotal += item_amount
-
-        # Calculate tax and total
-        tax_amount = taxable_subtotal * tax_rate
-        total = subtotal + tax_amount
         
-        order.subtotal = subtotal
-        order.tax_amount = tax_amount
-        order.total = total
-        order.save()
+            # Create order items and calculate totals
+            tax_rate = _get_pos_tax_rate(outlet.property)
+            subtotal = Decimal('0')
+            taxable_subtotal = Decimal('0')
+
+            for item_data in data['items']:
+                try:
+                    menu_item = MenuItem.objects.get(
+                        id=item_data['menu_item'],
+                        category__outlet__property=request.user.assigned_property
+                    )
+                except MenuItem.DoesNotExist:
+                    order.delete()
+                    return Response(
+                        {'error': f"Menu item {item_data['menu_item']} not found in your property"},
+                        status=status.HTTP_404_NOT_FOUND
+                    )
+                quantity = item_data['quantity']
+                unit_price = menu_item.price
+                item_amount = unit_price * quantity
+
+                POSOrderItem.objects.create(
+                    order=order,
+                    menu_item=menu_item,
+                    quantity=quantity,
+                    unit_price=unit_price,
+                    notes=item_data.get('notes', '')
+                )
+
+                subtotal += item_amount
+                if menu_item.is_taxable:
+                    taxable_subtotal += item_amount
+
+            # Calculate tax and total
+            tax_amount = taxable_subtotal * tax_rate
+            total = subtotal + tax_amount
+            
+            order.subtotal = subtotal
+            order.tax_amount = tax_amount
+            order.total = total
+            order.save()
         
         response_serializer = POSOrderSerializer(order)
         return Response(response_serializer.data, status=status.HTTP_201_CREATED)
@@ -248,7 +281,9 @@ class POSOrderDetailView(generics.RetrieveUpdateDestroyAPIView):
     def get_permissions(self):
         if self.request.method == 'DELETE':
             return [IsAuthenticated(), IsAdminOrManager()]
-        return [IsAuthenticated(), IsPOSStaff()]
+        if self.request.method in ('PUT', 'PATCH'):
+            return [IsAuthenticated(), IsPOSStaff()]
+        return [IsAuthenticated(), IsFrontDeskOrPOS()]
 
     def get_queryset(self):
         return POSOrder.objects.filter(
@@ -365,21 +400,22 @@ class PostToRoomView(APIView):
             )
 
             outlet_name = order.outlet.name
-            FolioCharge.objects.create(
-                folio=folio,
-                charge_code=charge_code,
-                description=f'POS Order #{order.pk} - {outlet_name}',
-                quantity=1,
-                unit_price=order.total,
-                tax_amount=order.tax_amount,
-                reference=str(order.pk),
-                posted_by=request.user,
-            )
+            with transaction.atomic():
+                FolioCharge.objects.create(
+                    folio=folio,
+                    charge_code=charge_code,
+                    description=f'POS Order #{order.pk} - {outlet_name}',
+                    quantity=1,
+                    unit_price=order.total,
+                    tax_amount=order.tax_amount,
+                    reference=str(order.pk),
+                    posted_by=request.user,
+                )
 
-            order.is_posted_to_room = True
-            order.posted_at = timezone.now()
-            order.status = 'CLOSED'
-            order.save()
+                order.is_posted_to_room = True
+                order.posted_at = timezone.now()
+                order.status = 'CLOSED'
+                order.save()
             
             serializer = POSOrderSerializer(order)
             return Response({
@@ -414,6 +450,7 @@ class POSOrderItemCreateView(generics.CreateAPIView):
     permission_classes = [IsAuthenticated, IsPOSStaff]
     serializer_class = POSOrderItemSerializer
 
+    @transaction.atomic
     def perform_create(self, serializer):
         # Ensure the order belongs to the user's property
         order = serializer.validated_data.get('order')
@@ -452,7 +489,7 @@ class POSOrderItemCreateView(generics.CreateAPIView):
 
 class OutletListView(generics.ListAPIView):
     """List all outlets."""
-    permission_classes = [IsAuthenticated, IsPOSStaff]
+    permission_classes = [IsAuthenticated, IsFrontDeskOrPOS]
     serializer_class = OutletSerializer
     filter_backends = [filters.SearchFilter, filters.OrderingFilter]
     search_fields = ['name', 'code']

@@ -1,4 +1,4 @@
-from django.shortcuts import render, redirect, get_object_or_404
+from django.shortcuts import render, get_object_or_404
 from django.contrib.auth.mixins import LoginRequiredMixin
 from django.contrib import messages
 from django.views import View
@@ -6,7 +6,7 @@ from django.views.generic import ListView, DetailView, CreateView, UpdateView
 from django.urls import reverse_lazy
 from django.db.models import Q
 from django.http import JsonResponse
-from .models import Guest, GuestPreference, GuestDocument, Company, LoyaltyTransaction
+from .models import Guest, GuestPreference, Company, LoyaltyTransaction
 from .forms import GuestForm, GuestPreferenceForm, CompanyForm
 
 

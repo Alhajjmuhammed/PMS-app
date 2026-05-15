@@ -7,18 +7,19 @@ from django_filters.rest_framework import DjangoFilterBackend
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.db.models import Count
+from django.db import transaction
 from django.core.exceptions import ValidationError
 from datetime import date
 from decimal import Decimal
 import logging
 
-from apps.reservations.models import Reservation
+from apps.reservations.models import Reservation, ReservationRoom
 from apps.rooms.models import Room
 from apps.frontdesk.models import CheckIn, CheckOut, RoomMove, WalkIn
-from apps.billing.models import Folio
+from apps.billing.models import Folio, FolioCharge, ChargeCode
+from apps.housekeeping.models import HousekeepingTask
 from apps.guests.models import Guest
 from api.permissions import IsFrontDeskOrAbove
-from api.v1.billing.serializers import FolioCreateSerializer
 from .serializers import (
     CheckInSerializer, CheckOutSerializer, 
     CheckInRequestSerializer, CheckOutRequestSerializer, RoomMoveSerializer,
@@ -79,7 +80,8 @@ class DashboardView(APIView):
 
 class CheckInView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
-    
+
+    @transaction.atomic
     def post(self, request):
         serializer = CheckInRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -96,7 +98,14 @@ class CheckInView(APIView):
             room = room_qs.get(pk=data['room_id'])
         except (Reservation.DoesNotExist, Room.DoesNotExist) as e:
             return Response({'error': str(e)}, status=status.HTTP_404_NOT_FOUND)
-        
+
+        # Validate reservation is in a checkable-in state
+        if reservation.status not in ['CONFIRMED', 'PENDING']:
+            return Response(
+                {'error': f'Cannot check in a reservation with status {reservation.status}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+
         # Validate room is available
         if room.status not in ['VC', 'VD']:
             return Response(
@@ -117,7 +126,7 @@ class CheckInView(APIView):
             import uuid as _uuid
             folio = Folio.objects.create(
                 folio_number=f"F-{_uuid.uuid4().hex[:8].upper()}",
-                folio_type='STANDARD',
+                folio_type='GUEST',
                 reservation=reservation,
                 guest=reservation.guest,
             )
@@ -142,6 +151,58 @@ class CheckInView(APIView):
         room.status = 'OC'
         room.fo_status = 'OCCUPIED'
         room.save()
+
+        # Assign the checked-in room to the ReservationRoom record,
+        # or create one if none exists (international standard: always track the physical room)
+        unassigned_rr = reservation.rooms.filter(room__isnull=True).first()
+        if unassigned_rr:
+            unassigned_rr.room = room
+            unassigned_rr.save(update_fields=['room'])
+        elif not reservation.rooms.exists():
+            room_type = room.room_type
+            rate = room_type.base_rate if room_type else Decimal('0')
+            nights_count = (reservation.check_out_date - reservation.check_in_date).days or 1
+            ReservationRoom.objects.create(
+                reservation=reservation,
+                room=room,
+                room_type=room_type,
+                rate_per_night=rate,
+                total_rate=rate * nights_count,
+                adults=reservation.adults,
+                children=reservation.children,
+            )
+
+        # Post first night's room rate charge immediately (international standard)
+        charge_date = check_in.check_in_time.date() if check_in.check_in_time else date.today()
+        charge_code, _ = ChargeCode.objects.get_or_create(
+            code='ROOM',
+            defaults={
+                'name': 'Room Rate',
+                'category': 'ROOM',
+                'default_amount': Decimal('0'),
+            }
+        )
+        for res_room in reservation.rooms.all():
+            already_posted = FolioCharge.objects.filter(
+                folio=folio,
+                charge_code=charge_code,
+                charge_date=charge_date,
+                description__contains=str(charge_date),
+            ).exists()
+            if already_posted:
+                continue
+            room_label = res_room.room.room_number if res_room.room else (
+                res_room.room_type.name if res_room.room_type else 'Room'
+            )
+            FolioCharge.objects.create(
+                folio=folio,
+                charge_code=charge_code,
+                description=f'Room rate for {charge_date} - Room {room_label}',
+                unit_price=res_room.rate_per_night,
+                quantity=1,
+                charge_date=charge_date,
+                posted_by=request.user,
+            )
         
         response_data = CheckInSerializer(check_in).data
         response_data['folio_id'] = folio.id
@@ -152,7 +213,8 @@ class CheckInView(APIView):
 
 class CheckOutView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
-    
+
+    @transaction.atomic
     def post(self, request):
         serializer = CheckOutRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -171,9 +233,7 @@ class CheckOutView(APIView):
         check_out = CheckOut.objects.create(
             check_in=check_in,
             checked_out_by=request.user,
-            key_cards_returned=data.get('key_cards_returned', 0),
-            late_check_out=data.get('late_check_out', False),
-            late_charge=data.get('late_charge', 0)
+            keys_returned=data.get('key_cards_returned', 0),
         )
         
         # Update reservation status
@@ -184,6 +244,25 @@ class CheckOutView(APIView):
         check_in.room.status = 'VD'
         check_in.room.fo_status = 'VACANT'
         check_in.room.save()
+
+        # Auto-close the guest folio if balance is zero (international standard)
+        folio = Folio.objects.filter(reservation=check_in.reservation, status='OPEN').first()
+        if folio:
+            folio.recalculate_totals()
+            if folio.balance == 0:
+                from django.utils import timezone as _tz
+                folio.status = Folio.Status.CLOSED
+                folio.close_date = _tz.now().date()
+                folio.save(update_fields=['status', 'close_date'])
+
+        # Create a housekeeping CLEANING task for the vacated room (international standard)
+        HousekeepingTask.objects.create(
+            room=check_in.room,
+            task_type=HousekeepingTask.TaskType.CLEANING,
+            priority=HousekeepingTask.Priority.HIGH,
+            status=HousekeepingTask.Status.PENDING,
+            notes=f'Post-checkout cleaning — {check_in.guest.first_name} {check_in.guest.last_name} checked out',
+        )
         
         return Response(CheckOutSerializer(check_out).data, status=status.HTTP_201_CREATED)
 
@@ -191,6 +270,7 @@ class CheckOutView(APIView):
 class RoomMoveView(APIView):
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
+    @transaction.atomic
     def post(self, request):
         serializer = RoomMoveSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
@@ -239,6 +319,7 @@ class CheckInWithIDView(APIView):
     """Check-in view with reservation ID in URL."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
+    @transaction.atomic
     def post(self, request, pk):
         prop = request.user.assigned_property
         try:
@@ -252,21 +333,41 @@ class CheckInWithIDView(APIView):
         if reservation.status != 'CONFIRMED':
             return Response({'error': 'Reservation must be confirmed'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Use CheckInView logic
         serializer = CheckInRequestSerializer(data=request.data)
         serializer.is_valid(raise_exception=True)
         
-        # Create check-in record
+        # Resolve room from room_id, scoped to the user's property
+        room_id = serializer.validated_data.get('room_id')
+        try:
+            room_qs = Room.objects.all()
+            if prop:
+                room_qs = room_qs.filter(hotel=prop)
+            room = room_qs.get(pk=room_id)
+        except Room.DoesNotExist:
+            return Response({'error': 'Room not found'}, status=status.HTTP_404_NOT_FOUND)
+        
+        if room.status not in ['VC', 'VD']:
+            return Response({'error': 'Room is not available for check-in'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        if CheckIn.objects.filter(reservation=reservation).exists():
+            return Response({'error': 'Reservation has already been checked in'}, status=status.HTTP_400_BAD_REQUEST)
+        
+        import uuid as _uuid
         check_in = CheckIn.objects.create(
             reservation=reservation,
-            room=serializer.validated_data.get('room'),
-            check_in_time=timezone.now(),
+            room=room,
+            guest=reservation.guest,
             checked_in_by=request.user,
-            notes=serializer.validated_data.get('notes', '')
+            expected_check_out=reservation.check_out_date,
+            registration_number=f"REG-{_uuid.uuid4().hex[:10].upper()}",
         )
         
         reservation.status = 'CHECKED_IN'
         reservation.save()
+        
+        room.status = 'OC'
+        room.fo_status = 'OCCUPIED'
+        room.save()
         
         return Response(CheckInSerializer(check_in).data, status=status.HTTP_201_CREATED)
 
@@ -275,6 +376,7 @@ class CheckOutWithIDView(APIView):
     """Check-out view with reservation ID in URL."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
+    @transaction.atomic
     def post(self, request, pk):
         prop = request.user.assigned_property
         try:
@@ -300,11 +402,16 @@ class CheckOutWithIDView(APIView):
             check_in=check_in,
             check_out_time=timezone.now(),
             checked_out_by=request.user,
-            notes=serializer.validated_data.get('notes', '')
+            keys_returned=serializer.validated_data.get('key_cards_returned', 0),
         )
         
         reservation.status = 'CHECKED_OUT'
         reservation.save()
+        
+        # Update room status to dirty for housekeeping
+        check_in.room.status = 'VD'
+        check_in.room.fo_status = 'VACANT'
+        check_in.room.save()
         
         return Response(CheckOutSerializer(check_out).data, status=status.HTTP_201_CREATED)
 
@@ -315,13 +422,24 @@ class ArrivalsView(APIView):
     
     def get(self, request):
         date_param = request.query_params.get('date')
-        target_date = date.fromisoformat(date_param) if date_param else date.today()
+        if date_param:
+            try:
+                target_date = date.fromisoformat(date_param)
+            except (ValueError, TypeError):
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            target_date = date.today()
         
         property_obj = request.user.assigned_property
         reservations = Reservation.objects.filter(
             check_in_date=target_date,
             status__in=['CONFIRMED', 'PENDING']
-        ).select_related('guest', 'hotel')
+        ).select_related(
+            'guest', 'hotel', 'created_by', 'check_in__check_out'
+        ).prefetch_related('rooms__room__room_type')
         
         if property_obj:
             reservations = reservations.filter(hotel=property_obj)
@@ -335,13 +453,24 @@ class DeparturesView(APIView):
     
     def get(self, request):
         date_param = request.query_params.get('date')
-        target_date = date.fromisoformat(date_param) if date_param else date.today()
+        if date_param:
+            try:
+                target_date = date.fromisoformat(date_param)
+            except (ValueError, TypeError):
+                return Response(
+                    {'error': 'Invalid date format. Use YYYY-MM-DD.'},
+                    status=status.HTTP_400_BAD_REQUEST
+                )
+        else:
+            target_date = date.today()
         
         property_obj = request.user.assigned_property
         reservations = Reservation.objects.filter(
             check_out_date=target_date,
             status='CHECKED_IN'
-        ).select_related('guest', 'hotel')
+        ).select_related(
+            'guest', 'hotel', 'created_by', 'check_in__check_out'
+        ).prefetch_related('rooms__room__room_type')
         
         if property_obj:
             reservations = reservations.filter(hotel=property_obj)
@@ -357,7 +486,9 @@ class InHouseView(APIView):
         property_obj = request.user.assigned_property
         reservations = Reservation.objects.filter(
             status='CHECKED_IN'
-        ).select_related('guest', 'hotel')
+        ).select_related(
+            'guest', 'hotel', 'created_by', 'check_in__check_out'
+        ).prefetch_related('rooms__room__room_type')
         
         if property_obj:
             reservations = reservations.filter(hotel=property_obj)
@@ -426,6 +557,7 @@ class ConvertWalkInView(APIView):
     """Convert a walk-in to a full reservation."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     
+    @transaction.atomic
     def post(self, request, pk):
         prop = request.user.assigned_property
         walkin_qs = WalkIn.objects.filter(property=prop) if prop else WalkIn.objects.all()
@@ -460,12 +592,8 @@ class ConvertWalkInView(APIView):
             nights = (walk_in.check_out_date - walk_in.check_in_date).days
             total_amount = walk_in.rate_per_night * nights
             
-            # Create reservation
-            import uuid
-            confirmation_number = f"WI{uuid.uuid4().hex[:8].upper()}"
-            
+            # Create reservation (model auto-generates a unique confirmation_number via save())
             reservation = Reservation.objects.create(
-                confirmation_number=confirmation_number,
                 hotel=walk_in.property,
                 guest=guest,
                 check_in_date=walk_in.check_in_date,
@@ -478,6 +606,17 @@ class ConvertWalkInView(APIView):
                 special_requests=walk_in.notes
             )
             
+            # Create reservation room record
+            ReservationRoom.objects.create(
+                reservation=reservation,
+                room_type=walk_in.room_type,
+                rate_per_night=walk_in.rate_per_night,
+                total_rate=total_amount,
+                adults=walk_in.adults,
+                children=walk_in.children,
+                guest_name=f"{walk_in.first_name} {walk_in.last_name}",
+            )
+
             # Link walk-in to reservation
             walk_in.is_converted = True
             walk_in.reservation = reservation
@@ -490,13 +629,13 @@ class ConvertWalkInView(APIView):
             })
             
         except ValidationError as e:
-            logger.error(f"Validation error converting walk-in {walk_in_id}: {str(e)}")
+            logger.error(f"Validation error converting walk-in {pk}: {str(e)}")
             return Response(
                 {'error': f'Failed to convert walk-in: {str(e)}'},
                 status=status.HTTP_400_BAD_REQUEST
             )
         except (ValueError, TypeError) as e:
-            logger.error(f"Data error converting walk-in {walk_in_id}: {str(e)}")
+            logger.error(f"Data error converting walk-in {pk}: {str(e)}")
             return Response(
                 {'error': f'Failed to convert walk-in: {str(e)}'},
                 status=status.HTTP_500_INTERNAL_SERVER_ERROR

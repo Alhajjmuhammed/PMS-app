@@ -99,8 +99,6 @@ class ReadinessCheckView(View):
                 cursor.fetchone()
             
             # Check if migrations are up to date
-            from django.core.management import execute_from_command_line
-            from django.db import transaction
             
             return JsonResponse({
                 'status': 'ready',

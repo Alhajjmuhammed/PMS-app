@@ -3,7 +3,6 @@ Serializers for POS Module
 """
 from rest_framework import serializers
 from apps.pos.models import MenuCategory, MenuItem, POSOrder, POSOrderItem, Outlet
-from django.utils import timezone
 
 
 class OutletSerializer(serializers.ModelSerializer):

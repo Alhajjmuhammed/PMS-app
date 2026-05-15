@@ -1,5 +1,5 @@
 from django import forms
-from .models import RoomType, Room, RoomBlock, RoomAmenity
+from .models import RoomType, Room, RoomBlock
 
 
 class RoomTypeForm(forms.ModelForm):

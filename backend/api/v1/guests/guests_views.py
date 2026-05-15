@@ -5,9 +5,10 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework import filters
-from django.db.models import Q, Count, Sum
+from django.db.models import Sum, F
 
 from apps.guests.models import (
     GuestPreference, GuestDocument, Company,
@@ -19,8 +20,7 @@ from .guests_serializers import (
     CompanySerializer,
     LoyaltyProgramSerializer,
     LoyaltyTierSerializer,
-    LoyaltyTransactionSerializer,
-    GuestLoyaltySerializer
+    LoyaltyTransactionSerializer
 )
 from api.permissions import IsAdminOrManager, IsFrontDeskOrAbove
 
@@ -102,6 +102,7 @@ class GuestDocumentsByGuestView(generics.ListAPIView):
     """Get documents for a specific guest."""
     permission_classes = [IsAuthenticated, IsFrontDeskOrAbove]
     serializer_class = GuestDocumentSerializer
+    pagination_class = None
     
     def get_queryset(self):
         guest_id = self.kwargs.get('guest_id')
@@ -303,21 +304,21 @@ class EarnLoyaltyPointsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            # Create transaction
-            transaction = LoyaltyTransaction.objects.create(
-                guest=guest,
-                transaction_type='EARN',
-                points=points,
-                description=description,
-                reference=reference,
-                balance_after=guest.loyalty_points + points
-            )
+            # Create transaction and update balance atomically (select_for_update prevents double-earn)
+            with transaction.atomic():
+                guest = guest_qs.select_for_update().get(id=guest_id)
+                tx = LoyaltyTransaction.objects.create(
+                    guest=guest,
+                    transaction_type='EARN',
+                    points=points,
+                    description=description,
+                    reference=reference,
+                    balance_after=guest.loyalty_points + points
+                )
+                guest.loyalty_points = F('loyalty_points') + points
+                guest.save(update_fields=['loyalty_points'])
             
-            # Update guest balance
-            guest.loyalty_points += points
-            guest.save()
-            
-            serializer = LoyaltyTransactionSerializer(transaction)
+            serializer = LoyaltyTransactionSerializer(tx)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
         except Guest.DoesNotExist:
@@ -347,27 +348,26 @@ class RedeemLoyaltyPointsView(APIView):
                     status=status.HTTP_400_BAD_REQUEST
                 )
             
-            if guest.loyalty_points < points:
-                return Response(
-                    {'error': 'Insufficient loyalty points'},
-                    status=status.HTTP_400_BAD_REQUEST
+            # Redeem atomically — select_for_update prevents double-spend race condition
+            with transaction.atomic():
+                guest = guest_qs.select_for_update().get(id=guest_id)
+                if guest.loyalty_points < points:
+                    return Response(
+                        {'error': 'Insufficient loyalty points'},
+                        status=status.HTTP_400_BAD_REQUEST
+                    )
+                tx = LoyaltyTransaction.objects.create(
+                    guest=guest,
+                    transaction_type='REDEEM',
+                    points=-points,
+                    description=description,
+                    reference=reference,
+                    balance_after=guest.loyalty_points - points
                 )
+                guest.loyalty_points = F('loyalty_points') - points
+                guest.save(update_fields=['loyalty_points'])
             
-            # Create transaction (negative points)
-            transaction = LoyaltyTransaction.objects.create(
-                guest=guest,
-                transaction_type='REDEEM',
-                points=-points,
-                description=description,
-                reference=reference,
-                balance_after=guest.loyalty_points - points
-            )
-            
-            # Update guest balance
-            guest.loyalty_points -= points
-            guest.save()
-            
-            serializer = LoyaltyTransactionSerializer(transaction)
+            serializer = LoyaltyTransactionSerializer(tx)
             return Response(serializer.data, status=status.HTTP_201_CREATED)
             
         except Guest.DoesNotExist:

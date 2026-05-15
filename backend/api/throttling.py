@@ -38,19 +38,9 @@ class MFAVerifyThrottle(AnonRateThrottle):
     
     def get_cache_key(self, request, view):
         """
-        Rate limit by IP address for anonymous attempts.
-        For authenticated users, rate limit by user ID.
+        Rate limit by IP address only. Never trust client-supplied identifiers.
         """
-        # Try to get user from token (if temp MFA token provided)
-        user_id = request.data.get('user_id') or request.user.id if request.user.is_authenticated else None
-        
-        if user_id:
-            # Rate limit by user ID
-            ident = f"user:{user_id}"
-        else:
-            # Rate limit by IP address
-            ident = self.get_ident(request)
-        
+        ident = self.get_ident(request)
         return self.cache_format % {
             'scope': self.scope,
             'ident': ident

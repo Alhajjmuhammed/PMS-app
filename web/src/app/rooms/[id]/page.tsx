@@ -39,6 +39,8 @@ export default function RoomDetailPage() {
   const [deleting, setDeleting] = useState(false);
   const [statusUpdating, setStatusUpdating] = useState(false);
   const [formData, setFormData] = useState<any>({});
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   useEffect(() => {
     if (params.id) {
@@ -64,7 +66,7 @@ export default function RoomDetailPage() {
         notes: data.notes || '',
       });
     } catch {
-      alert('Failed to load room details');
+      setPageError('Failed to load room details. Please refresh.');
     } finally {
       setLoading(false);
     }
@@ -90,7 +92,7 @@ export default function RoomDetailPage() {
 
   const handleSave = async () => {
     if (!formData.room_number.trim()) {
-      alert('Room number is required');
+      setSaveError('Room number is required');
       return;
     }
     try {
@@ -112,7 +114,7 @@ export default function RoomDetailPage() {
       setRoom(updated);
       setEditing(false);
     } catch (error: any) {
-      alert(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to save changes');
+      setSaveError(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to save changes');
     } finally {
       setSaving(false);
     }
@@ -125,7 +127,7 @@ export default function RoomDetailPage() {
       await roomService.updateStatus(parseInt(params.id as string), newStatus);
       setRoom({ ...room, status: newStatus });
     } catch (error: any) {
-      alert(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to update status');
+      setSaveError(error?.response?.data ? JSON.stringify(error.response.data) : 'Failed to update status');
     } finally {
       setStatusUpdating(false);
     }
@@ -138,7 +140,7 @@ export default function RoomDetailPage() {
       await roomService.delete(parseInt(params.id as string));
       router.push('/rooms');
     } catch {
-      alert('Failed to delete room');
+      setSaveError('Failed to delete room. Please try again.');
       setDeleting(false);
     }
   };
@@ -183,6 +185,12 @@ export default function RoomDetailPage() {
   return (
     <Layout>
       <div className="space-y-6">
+        {pageError && (
+          <div className="px-4 py-3 rounded-lg bg-red-50 text-red-800 border border-red-200 text-sm font-medium">{pageError}</div>
+        )}
+        {saveError && (
+          <div className="px-4 py-3 rounded-lg bg-red-50 text-red-800 border border-red-200 text-sm font-medium">{saveError}</div>
+        )}
 
         {/* ── Header ── */}
         <div className="flex justify-between items-center">

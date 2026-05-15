@@ -2,16 +2,17 @@ from rest_framework import generics, status
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework.permissions import IsAuthenticated
+from django.db import transaction
 from django.utils import timezone
 from django_filters.rest_framework import DjangoFilterBackend
 from rest_framework.filters import SearchFilter, OrderingFilter
 from datetime import date
 from apps.housekeeping.models import (
-    HousekeepingTask, RoomInspection, AmenityInventory,
-    LinenInventory, StockMovement
+    HousekeepingTask, AmenityInventory, LinenInventory,
+    StockMovement
 )
 from apps.rooms.models import Room
-from api.permissions import IsHousekeepingStaff, IsAdminOrManager
+from api.permissions import IsHousekeepingStaff
 from .serializers import (
     HousekeepingTaskSerializer, TaskUpdateSerializer,
     AmenityInventorySerializer, AmenityInventoryCreateSerializer,
@@ -125,15 +126,16 @@ class CompleteTaskView(APIView):
         if 'notes' in serializer.validated_data:
             task.notes = serializer.validated_data['notes']
         
-        task.save()
-        
-        # Update room status to clean
-        room = task.room
-        if room.status == 'VD':
-            room.status = 'VC'
-        elif room.status == 'OD':
-            room.status = 'OC'
-        room.save()
+        with transaction.atomic():
+            task.save()
+            
+            # Update room status to clean
+            room = task.room
+            if room.status == 'VD':
+                room.status = 'VC'
+            elif room.status == 'OD':
+                room.status = 'OC'
+            room.save()
         
         return Response(HousekeepingTaskSerializer(task).data)
 
@@ -151,15 +153,22 @@ class RoomStatusView(APIView):
         if floor:
             rooms = rooms.filter(floor_id=floor)
         
+        rooms = rooms.select_related('room_type', 'floor')
+        room_ids = [r.id for r in rooms]
+        
+        # Pre-fetch all today's pending/in-progress tasks in one query
+        today = date.today()
+        tasks_by_room = {}
+        for task in HousekeepingTask.objects.filter(
+            room_id__in=room_ids,
+            scheduled_date=today,
+            status__in=['PENDING', 'IN_PROGRESS']
+        ):
+            tasks_by_room[task.room_id] = task
+        
         room_data = []
-        for room in rooms.select_related('room_type', 'floor'):
-            # Check for pending tasks
-            pending_task = HousekeepingTask.objects.filter(
-                room=room,
-                scheduled_date=date.today(),
-                status__in=['PENDING', 'IN_PROGRESS']
-            ).first()
-            
+        for room in rooms:
+            pending_task = tasks_by_room.get(room.id)
             room_data.append({
                 'id': room.id,
                 'room_number': room.room_number,
@@ -192,10 +201,13 @@ class UpdateRoomStatusView(APIView):
         if not new_status:
             return Response({'error': 'Status is required'}, status=status.HTTP_400_BAD_REQUEST)
         
-        # Validate status
-        valid_statuses = ['CLEAN', 'DIRTY', 'INSPECTED', 'OUT_OF_ORDER']
+        # Validate status — must match Room.RoomStatus choices (2-3 char codes)
+        valid_statuses = ['VC', 'VD', 'OC', 'OD', 'OOO', 'OOS']
         if new_status not in valid_statuses:
-            return Response({'error': 'Invalid status'}, status=status.HTTP_400_BAD_REQUEST)
+            return Response(
+                {'error': f'Invalid status. Must be one of: {", ".join(valid_statuses)}'},
+                status=status.HTTP_400_BAD_REQUEST
+            )
         
         room.status = new_status
         room.save()
@@ -218,10 +230,11 @@ class AmenityInventoryListCreateView(generics.ListCreateAPIView):
         if self.request.user.assigned_property:
             queryset = queryset.filter(hotel=self.request.user.assigned_property)
         
-        # Filter by low stock
+        # Filter by low stock (annotate to keep it a QuerySet)
         low_stock = self.request.query_params.get('low_stock')
         if low_stock == 'true':
-            queryset = [item for item in queryset if item.quantity <= item.reorder_level]
+            from django.db.models import F
+            queryset = queryset.filter(quantity__lte=F('reorder_level'))
         
         return queryset
     
@@ -267,10 +280,16 @@ class LinenInventoryListCreateView(generics.ListCreateAPIView):
         if self.request.user.assigned_property:
             queryset = queryset.filter(hotel=self.request.user.assigned_property)
         
-        # Filter by low stock
+        # Filter by low stock (annotate to keep it a QuerySet)
         low_stock = self.request.query_params.get('low_stock')
         if low_stock == 'true':
-            queryset = [item for item in queryset if item.quantity_available <= item.reorder_level]
+            from django.db.models import F, ExpressionWrapper, IntegerField
+            queryset = queryset.annotate(
+                qty_available=ExpressionWrapper(
+                    F('quantity_total') - F('quantity_in_use') - F('quantity_in_laundry') - F('quantity_damaged'),
+                    output_field=IntegerField()
+                )
+            ).filter(qty_available__lte=F('reorder_level'))
         
         return queryset
     
